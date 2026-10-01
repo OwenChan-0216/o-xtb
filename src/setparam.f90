@@ -206,6 +206,7 @@ module xtb_setparam
    integer, parameter :: p_run_lopt   =   9
    integer, parameter :: p_run_path   =  10
    integer, parameter :: p_run_screen =  11
+   integer, parameter :: p_run_lscan  =  12
    integer, parameter :: p_run_modef  =  13
    integer, parameter :: p_run_mdopt  =  14
    integer, parameter :: p_run_metaopt=  15

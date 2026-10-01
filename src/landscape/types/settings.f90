@@ -33,12 +33,14 @@
 !>   - Engine control defaults are copied from xtb (`src/setparam.f90:221-287`,
 !>     `src/type/setvar.f90:156-158`).
 module xtb_landscape_settings
+   use, intrinsic :: ieee_arithmetic, only : ieee_value, ieee_quiet_nan
    use xtb_mctc_accuracy, only : wp
    use xtb_type_environment, only : TEnvironment
    implicit none(type, external)
    private
 
    public :: landscape_settings, landscape_sp_settings, landscape_opt_settings
+   public :: landscape_scan_settings, landscape_scan_coord_settings
    public :: landscape_engine_control
    public :: p_landscape_opt_sd, p_landscape_opt_cg, p_landscape_opt_lbfgs
    public :: p_landscape_opt_bfgs
@@ -51,6 +53,12 @@ module xtb_landscape_settings
    public :: landscape_hessian_update_name
    public :: landscape_restart_name, landscape_conv_level_known
    public :: landscape_convergence_measures, landscape_log_failed
+   public :: landscape_missing_value, landscape_value_present
+   public :: p_landscape_scan_coord_distance, p_landscape_scan_coord_angle
+   public :: p_landscape_scan_coord_dihedral
+   public :: landscape_scan_coord_name, landscape_scan_coord_from_name
+   public :: landscape_scan_coord_natoms, landscape_scan_coord_known
+   public :: landscape_scan_mode_known
 
    !> Minimisation algorithm identifiers (`landscape_opt_settings%algorithm`)
    integer, parameter :: p_landscape_opt_sd = 1
@@ -71,6 +79,11 @@ module xtb_landscape_settings
    integer, parameter :: p_landscape_restart_off = 0
    integer, parameter :: p_landscape_restart_pin = 1
    integer, parameter :: p_landscape_restart_warm = 2
+
+   !> Scanned internal coordinate types (`landscape_scan_coord_settings%ctype`)
+   integer, parameter :: p_landscape_scan_coord_distance = 1
+   integer, parameter :: p_landscape_scan_coord_angle = 2
+   integer, parameter :: p_landscape_scan_coord_dihedral = 3
 
    !> Immutable run-time control of one landscape engine instance.
    !>
@@ -237,6 +250,73 @@ module xtb_landscape_settings
       !> This type implements the geometry minimisation task
       procedure :: task => landscape_opt_settings_task
    end type landscape_opt_settings
+
+   !> Definition of one scanned internal coordinate.
+   !>
+   !> Atom indices are **1-based** (`TMolecule%at`/`xyz` indexing); the MAPLE
+   !> reference converts its 1-based input with `a-1` internally
+   !> (`scan.py:83`), this suite keeps the Fortran convention throughout.
+   !> Only the first `landscape_scan_coord_natoms(ctype)` entries of `atoms`
+   !> are used: two for a distance, three for an angle and four for a
+   !> dihedral.
+   type :: landscape_scan_coord_settings
+      !> Coordinate type, one of `p_landscape_scan_coord_*`
+      integer :: ctype = p_landscape_scan_coord_distance
+      !> 1-based atom indices, unused entries are ignored
+      integer :: atoms(4) = 0
+      !> Step size: bohr for a distance, radian for an angle/dihedral.
+      !> The command line accepts angstrom/degree and converts at the
+      !> boundary, the settings object always stores atomic units.
+      real(wp) :: step = 0.0_wp
+      !> Number of steps of one sweep direction
+      integer :: nstep = 0
+   end type landscape_scan_coord_settings
+
+   !> Settings of a relaxed or rigid scan (`scan` task, PLAN section 5.3.5).
+   !>
+   !> `ndim` is restricted to 1 and 2: the 3D scan of the MAPLE reference has
+   !> no practical value and is deliberately not implemented.  The scan grid is
+   !> anchored at the coordinate value of the input geometry: a sweep visits
+   !> `q0 + k*step` for `k = 0..nstep`, and with `bidirectional` the same values
+   !> are visited again in reverse order (see
+   !> `xtb_landscape_scan1d::landscape_scan1d`).
+   !>
+   !> `spring_expo` and `constraint_fc` are explicit parameters of the bias
+   !> potential `E_bias = fc * (q - q0)^spring_expo`; they are deliberately
+   !> **not** taken from the xtb globals `xtb_scanparam::fcconstr`/`springexpo`,
+   !> which would make the scan result depend on hidden module state (PLAN N14).
+   type, extends(landscape_settings) :: landscape_scan_settings
+      !> Scan mode, `relaxed` (constraint relaxation per point) or `rigid`
+      !> (pure geometry construction followed by a single point)
+      character(len=16) :: mode = 'relaxed'
+      !> Inner minimiser of a relaxed scan, name of a `p_landscape_opt_*`
+      !> algorithm; unknown names are rejected by the task
+      character(len=16) :: method = 'lbfgs'
+      !> Number of scanned coordinates, 1 or 2
+      integer :: ndim = 1
+      !> Scanned coordinates; entry `i > ndim` is ignored
+      type(landscape_scan_coord_settings) :: coord(2)
+      !> Scan the grid forwards and backwards and report the hysteresis
+      logical :: bidirectional = .true.
+      !> Sequential semantics for `ndim = 1`; `ndim = 2` always uses the
+      !> Cartesian product grid
+      logical :: sequential = .true.
+      !> Warm start every point from the geometry of the previous point
+      !> (only the geometry is reused, the wavefunction policy stays with the
+      !> engine restart mode, see `landscape_engine_control%restart_mode`)
+      logical :: warm_start = .true.
+      !> Exponent of the constraint bias potential
+      real(wp) :: spring_expo = 2.0_wp
+      !> Force constant of the constraint bias potential (hartree/bohr^2)
+      real(wp) :: constraint_fc = 0.5_wp
+      !> Write the scan log and the profile to disk
+      logical :: write_files = .true.
+      !> File name prefix of the secondary output files
+      character(len=64) :: output_prefix = 'xtb'
+   contains
+      !> This type implements the scan task
+      procedure :: task => landscape_scan_settings_task
+   end type landscape_scan_settings
 
 contains
 
@@ -444,6 +524,111 @@ function landscape_opt_settings_task(self) result(name)
 
 end function landscape_opt_settings_task
 
+!> Name of the task implemented by the scan settings.
+function landscape_scan_settings_task(self) result(name)
+   !> Settings instance
+   class(landscape_scan_settings), intent(in) :: self
+   !> Task name
+   character(len=:), allocatable :: name
+
+   name = 'scan'
+
+end function landscape_scan_settings_task
+
+!> Name of an internal coordinate type identifier.
+pure function landscape_scan_coord_name(ctype) result(name)
+   !> Coordinate type identifier
+   integer, intent(in) :: ctype
+   !> Lower case coordinate name
+   character(len=:), allocatable :: name
+
+   select case (ctype)
+   case (p_landscape_scan_coord_distance)
+      name = 'distance'
+   case (p_landscape_scan_coord_angle)
+      name = 'angle'
+   case (p_landscape_scan_coord_dihedral)
+      name = 'dihedral'
+   case default
+      name = 'unknown'
+   end select
+
+end function landscape_scan_coord_name
+
+!> Internal coordinate type identifier from its name.
+!>
+!> Returns 0 for an unknown name, which is not a valid coordinate type; the
+!> caller is responsible for reporting the error.
+pure function landscape_scan_coord_from_name(name) result(ctype)
+   !> Lower case coordinate name
+   character(len=*), intent(in) :: name
+   !> Coordinate type identifier, 0 for an unknown name
+   integer :: ctype
+
+   select case (trim(name))
+   case ('distance')
+      ctype = p_landscape_scan_coord_distance
+   case ('angle')
+      ctype = p_landscape_scan_coord_angle
+   case ('dihedral')
+      ctype = p_landscape_scan_coord_dihedral
+   case default
+      ctype = 0
+   end select
+
+end function landscape_scan_coord_from_name
+
+!> Number of atoms that define an internal coordinate (2/3/4), 0 if unknown.
+pure function landscape_scan_coord_natoms(ctype) result(natoms)
+   !> Coordinate type identifier
+   integer, intent(in) :: ctype
+   !> Number of defining atoms
+   integer :: natoms
+
+   select case (ctype)
+   case (p_landscape_scan_coord_distance)
+      natoms = 2
+   case (p_landscape_scan_coord_angle)
+      natoms = 3
+   case (p_landscape_scan_coord_dihedral)
+      natoms = 4
+   case default
+      natoms = 0
+   end select
+
+end function landscape_scan_coord_natoms
+
+!> True if `ctype` names one of the supported internal coordinates.
+pure function landscape_scan_coord_known(ctype) result(known)
+   !> Coordinate type identifier
+   integer, intent(in) :: ctype
+   !> True if the type is supported
+   logical :: known
+
+   known = landscape_scan_coord_natoms(ctype) > 0
+
+end function landscape_scan_coord_known
+
+!> True if `mode` names one of the scan modes.
+!>
+!> The check is duplicated in `xtb_landscape_scan_relax::landscape_scan_check`
+!> for the library entry point; keeping the predicate here makes it usable
+!> from the command line parser without pulling in the scan kernel.
+pure function landscape_scan_mode_known(mode) result(known)
+   !> Scan mode name
+   character(len=*), intent(in) :: mode
+   !> True if the mode is supported
+   logical :: known
+
+   select case (trim(mode))
+   case ('relaxed', 'rigid')
+      known = .true.
+   case default
+      known = .false.
+   end select
+
+end function landscape_scan_mode_known
+
 !> True if `level` names one of the convergence levels understood by
 !> `landscape_settings_set_conv_level`.
 function landscape_conv_level_known(level) result(known)
@@ -502,6 +687,41 @@ pure function landscape_log_failed(env, nlog_before) result(failed)
    end if
 
 end function landscape_log_failed
+
+!> Value reported for a quantity that does not exist.
+!>
+!> A quantity is missing - never zero - when the evaluation that would produce
+!> it was discarded: an unconverged SCC yields neither energy nor gradient, and
+!> a scan point built on it has no energy.  Writing `0.0` for such a point
+!> fabricates a perfectly plausible energy (a scan reading `0.0` at one grid
+!> point while its neighbours are at `-5 Eh` is silently broken, see
+!> `docs/_landscape-recon/14-m2-validation-experiments.md` section 5.3), so the
+!> suite reports a quiet NaN instead and callers have to test for it.
+!>
+!> The IEEE intrinsic is used instead of a `0/0` division so that the function
+!> is safe in debug builds, where `-ffpe-trap=invalid` is active
+!> (`cmake/CMakeLists.txt:51`).
+pure function landscape_missing_value() result(value)
+   !> NaN
+   real(wp) :: value
+
+   value = ieee_value(0.0_wp, ieee_quiet_nan)
+
+end function landscape_missing_value
+
+!> True if a real value is present, i.e. neither NaN nor +/- Inf.
+!>
+!> `NaN <= huge` and `Inf <= huge` are both false, so one comparison rejects
+!> every non-finite value.  Elemental, so it also tests a whole array.
+elemental function landscape_value_present(value) result(present)
+   !> Value to test
+   real(wp), intent(in) :: value
+   !> True if the value is finite
+   logical :: present
+
+   present = abs(value) <= huge(1.0_wp)
+
+end function landscape_value_present
 
 !> Human readable name of a Hessian update formula identifier
 pure function landscape_hessian_update_name(update) result(name)

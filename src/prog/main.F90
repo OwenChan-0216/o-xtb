@@ -18,6 +18,7 @@
 
 module xtb_prog_main
    use xtb_mctc_accuracy, only: wp
+   use xtb_mctc_constants, only: pi
    use xtb_mctc_io, only: stderr
    use xtb_mctc_timings
    use xtb_mctc_systools
@@ -103,7 +104,13 @@ module xtb_prog_main
    !> landscape task suite
    use xtb_landscape, only: run_landscape
    use xtb_landscape_settings, only: landscape_opt_settings, &
-      & landscape_opt_algorithm_from_name, landscape_conv_level_known
+      & landscape_scan_settings, &
+      & landscape_opt_algorithm_from_name, landscape_conv_level_known, &
+      & landscape_scan_coord_from_name, landscape_scan_coord_known, &
+      & landscape_scan_coord_natoms, landscape_scan_mode_known, &
+      & p_landscape_scan_coord_distance, p_landscape_restart_off, &
+      & p_landscape_restart_pin, p_landscape_restart_warm
+   use xtb_landscape_hessian, only: landscape_hessian_source_known
    use xtb_landscape_results, only: landscape_result
 
    implicit none
@@ -136,6 +143,7 @@ contains
       type(TCpcmx) :: cpx
       type(TTBLiteInput) :: tblite
       type(landscape_opt_settings) :: lset
+      type(landscape_scan_settings) :: lsset
       type(landscape_result) :: lres
 !  store important names and stuff like that in FORTRAN strings
       character(len=:), allocatable :: fname    ! geometry input file
@@ -231,7 +239,8 @@ contains
       ! ------------------------------------------------------------------------
       ! read the command line arguments
       call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
-         & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset)
+         & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
+         & lsset)
 
 
       ! No solvation available for PTB!
@@ -574,7 +583,7 @@ contains
             call env%terminate('This is an internal error, please define your runtypes!')
          case (p_run_prescc,p_run_scc, p_run_grad, p_run_opt, p_run_hess, p_run_ohess, p_run_bhess, &
                p_run_md, p_run_omd, p_run_path, p_run_screen, &
-               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt)
+               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt, p_run_lscan)
             if (set%mode_extrun == p_ext_gfnff) then
                fnv = xfind(p_fname_param_gfnff)
             elseif (set%mode_extrun .eq. p_ext_ptb) then
@@ -931,6 +940,21 @@ contains
          ! (`write_energy`) and xtbout.json, while `xtbopt.xyz` is written by
          ! the landscape task from `lres%energy`.  Without this write-back the
          ! reported energy is the one of the starting geometry.
+         res%e_total = lres%energy
+         res%gnorm = lres%gnorm
+         call env%checkpoint("Landscape task terminated")
+      end if
+
+      ! ------------------------------------------------------------------------
+      ! landscape suite (scan with the algorithms of src/landscape)
+      if (set%runtyp == p_run_lscan) then
+         lsset%engine%acc = set%acc
+         call start_timing(3)
+         call run_landscape(env, mol, chk, calc, lsset, lres)
+         call stop_timing(3)
+         ! Report the lowest scan point: `res` feeds the TOTAL ENERGY line and
+         ! xtbout.json, while `xtbscan.log` is written by the scan task from
+         ! the de-biased energies of all scan points.
          res%e_total = lres%energy
          res%gnorm = lres%gnorm
          call env%checkpoint("Landscape task terminated")
@@ -1322,7 +1346,8 @@ contains
 
 !> Parse command line arguments and forward them to settings
    subroutine parseArguments(env, args, inputFile, paramFile, lgrad, &
-         & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset)
+         & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
+         & lsset)
 
       use xtb_mctc_global, only: persistentEnv
 
@@ -1380,6 +1405,9 @@ contains
       !> Landscape task settings (`--lopt`, `--lopt-engine`, `--lopt-level`)
       type(landscape_opt_settings), intent(inout) :: lset
 
+      !> Landscape scan settings (`--lscan`, `--lscan-coord`, ...)
+      type(landscape_scan_settings), intent(inout) :: lsset
+
 !$    integer :: omp_get_num_threads, nproc
       integer :: nFlags
       integer :: idum, ndum
@@ -1388,6 +1416,9 @@ contains
       character(len=:), allocatable :: flag, sec
       logical :: exist
       integer :: landscape_algorithm
+      integer :: iscan, idum2
+      real(wp) :: scan_step_user(2)
+      logical :: scan_step_given(2)
 
       set%gfn_method = 2
       dipro%diprocalc = .false.
@@ -1398,6 +1429,8 @@ contains
       lgrad = .false.
       gsolvstate = solutionState%gsolv
       tblite%color = get_xtb_feature('color')
+      scan_step_user = 0.0_wp
+      scan_step_given = .false.
 
       nFlags = args%countFlags()
       call args%nextFlag(flag)
@@ -2093,6 +2126,260 @@ contains
                call env%error("The --lopt-level flag requires a level name", source)
             end if
 
+         case ('--lopt-hessian')
+            ! Hessian backend of the landscape suite.  `numerical` is the
+            ! self-built central-difference Hessian, `model` the cheap
+            ! Lindh-D2 model Hessian (`src/landscape/types/hessian.f90`).
+            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_hessian_source_known(sec)) then
+                  lset%hessian_source = sec
+               else
+                  call env%error("Unknown landscape Hessian source '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lopt-hessian flag requires a source name", source)
+            end if
+
+         case ('--lscan')
+            ! Landscape suite: relaxed or rigid scan (PLAN section 12).  The
+            ! flag takes no positional argument; the scanned coordinates and
+            ! the grid are set by the dedicated `--lscan-*` flags below.
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+
+         case ('--lscan-mode')
+            ! Scan mode: relaxed or rigid
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_scan_mode_known(sec)) then
+                  lsset%mode = sec
+               else
+                  call env%error("Unknown landscape scan mode '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lscan-mode flag requires 'relaxed' or 'rigid'", source)
+            end if
+
+         case ('--lscan-method')
+            ! Inner minimiser of a relaxed scan
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_opt_algorithm_from_name(sec) == 0) then
+                  call env%error("Unknown landscape scan minimiser '"//sec//"'", source)
+               else
+                  lsset%method = sec
+               end if
+            else
+               call env%error("The --lscan-method flag requires an algorithm name", source)
+            end if
+
+         case ('--lscan-level')
+            ! Convergence level of the inflated minimisation (ORCA naming)
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_conv_level_known(sec)) then
+                  call lsset%set_conv_level(sec)
+               else
+                  call env%error("Unknown landscape convergence level '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lscan-level flag requires a level name", source)
+            end if
+
+         case ('--lscan-restart')
+            ! Wavefunction restart policy of the scan point evaluations
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               select case (sec)
+               case ('off')
+                  lsset%engine%restart_mode = p_landscape_restart_off
+               case ('pin')
+                  lsset%engine%restart_mode = p_landscape_restart_pin
+               case ('warm')
+                  lsset%engine%restart_mode = p_landscape_restart_warm
+               case default
+                  call env%error("Unknown landscape restart policy '"//sec//"'", source)
+               end select
+            else
+               call env%error("The --lscan-restart flag requires off, pin or warm", source)
+            end if
+
+         case ('--lscan-ndim')
+            ! Number of scanned coordinates (1 or 2)
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lsset%ndim = idum2
+               else
+                  call env%error("The --lscan-ndim flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lscan-ndim flag requires 1 or 2", source)
+            end if
+
+         case ('--lscan-oneway')
+            ! Scan only the forward branch (no hysteresis report)
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            lsset%bidirectional = .false.
+
+         case ('--lscan-cold-start')
+            ! Start every scan point from the input geometry
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            lsset%warm_start = .false.
+
+         case ('--lscan-fc')
+            ! Force constant of the constraint bias (hartree/bohr^2)
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lsset%constraint_fc = ddum
+               else
+                  call env%error("The --lscan-fc flag requires a number", source)
+               end if
+            else
+               call env%error("The --lscan-fc flag requires a number", source)
+            end if
+
+         case ('--lscan-expo')
+            ! Exponent of the constraint bias potential
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lsset%spring_expo = ddum
+               else
+                  call env%error("The --lscan-expo flag requires a number", source)
+               end if
+            else
+               call env%error("The --lscan-expo flag requires a number", source)
+            end if
+
+         case ('--lscan-coord')
+            ! Coordinate type of the first scanned coordinate
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               iscan = landscape_scan_coord_from_name(sec)
+               if (iscan == 0) then
+                  call env%error("Unknown landscape scan coordinate '"//sec//"'", source)
+               else
+                  lsset%coord(1)%ctype = iscan
+               end if
+            else
+               call env%error("The --lscan-coord flag requires distance, angle or dihedral", source)
+            end if
+
+         case ('--lscan-atoms')
+            ! 1-based atom indices of the first scanned coordinate
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               call read_scan_atoms(env, sec, lsset%coord(1)%atoms, source)
+            else
+               call env%error("The --lscan-atoms flag requires a list of atom indices", source)
+            end if
+
+         case ('--lscan-step')
+            ! Step of the first coordinate in angstrom (distance) or degree
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  scan_step_user(1) = ddum
+                  scan_step_given(1) = .true.
+               else
+                  call env%error("The --lscan-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lscan-step flag requires a number", source)
+            end if
+
+         case ('--lscan-nstep')
+            ! Number of steps of the first coordinate
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lsset%coord(1)%nstep = idum2
+               else
+                  call env%error("The --lscan-nstep flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lscan-nstep flag requires an integer", source)
+            end if
+
+         case ('--lscan-coord2')
+            ! Coordinate type of the second scanned coordinate (sets ndim=2)
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            lsset%ndim = 2
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               iscan = landscape_scan_coord_from_name(sec)
+               if (iscan == 0) then
+                  call env%error("Unknown landscape scan coordinate '"//sec//"'", source)
+               else
+                  lsset%coord(2)%ctype = iscan
+               end if
+            else
+               call env%error("The --lscan-coord2 flag requires distance, angle or dihedral", source)
+            end if
+
+         case ('--lscan-atoms2')
+            ! 1-based atom indices of the second scanned coordinate
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            lsset%ndim = 2
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               call read_scan_atoms(env, sec, lsset%coord(2)%atoms, source)
+            else
+               call env%error("The --lscan-atoms2 flag requires a list of atom indices", source)
+            end if
+
+         case ('--lscan-step2')
+            ! Step of the second coordinate in angstrom (distance) or degree
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            lsset%ndim = 2
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  scan_step_user(2) = ddum
+                  scan_step_given(2) = .true.
+               else
+                  call env%error("The --lscan-step2 flag requires a number", source)
+               end if
+            else
+               call env%error("The --lscan-step2 flag requires a number", source)
+            end if
+
+         case ('--lscan-nstep2')
+            ! Number of steps of the second coordinate
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            lsset%ndim = 2
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lsset%coord(2)%nstep = idum2
+               else
+                  call env%error("The --lscan-nstep2 flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lscan-nstep2 flag requires an integer", source)
+            end if
+
          case ('--metadyn')
             call set_runtyp('md')
             call args%nextArg(sec)
@@ -2138,7 +2425,69 @@ contains
          call args%nextFlag(flag)
       end do
 
+      ! The step sizes are given on the command line in angstrom (distance) or
+      ! degree (angle/dihedral) and converted once, after every flag has been
+      ! parsed: this removes the dependency on the order of `--lscan-coord`
+      ! and `--lscan-step`.
+      do iscan = 1, 2
+         if (.not. scan_step_given(iscan)) cycle
+         if (lsset%coord(iscan)%ctype == p_landscape_scan_coord_distance) then
+            lsset%coord(iscan)%step = scan_step_user(iscan)*aatoau
+         else
+            lsset%coord(iscan)%step = scan_step_user(iscan)*pi/180.0_wp
+         end if
+      end do
+
    end subroutine parseArguments
+
+!> Read up to four 1-based atom indices from a comma or blank separated list.
+!>
+!> Used by the `--lscan-atoms` and `--lscan-atoms2` flags.  The remaining
+!> entries of `atoms` are zero; the scan task rejects a coordinate whose atom
+!> list is incomplete (`xtb_landscape_scan_relax::landscape_scan_check`).
+   subroutine read_scan_atoms(env, spec, atoms, source)
+      !> Computational environment for the error report
+      type(TEnvironment), intent(inout) :: env
+      !> Atom index list
+      character(len=*), intent(in) :: spec
+      !> Parsed indices, unused entries are zero
+      integer, intent(out) :: atoms(4)
+      !> Source of the error report
+      character(len=*), intent(in) :: source
+
+      character(len=32) :: token
+      integer :: nfound, pos, stop, ierr, value, last
+
+      atoms = 0
+      nfound = 0
+      last = len_trim(spec)
+      pos = 1
+      do while (pos <= last .and. nfound < size(atoms))
+         do while (pos <= last)
+            if (spec(pos:pos) == ',' .or. spec(pos:pos) == ' ') then
+               pos = pos + 1
+            else
+               exit
+            end if
+         end do
+         if (pos > last) exit
+         stop = pos
+         do while (stop <= last)
+            if (spec(stop:stop) == ',' .or. spec(stop:stop) == ' ') exit
+            stop = stop + 1
+         end do
+         token = spec(pos:stop - 1)
+         read(token, *, iostat=ierr) value
+         if (ierr /= 0) then
+            call env%error("cannot read the atom index '"//trim(token)//"'", source)
+            return
+         end if
+         nfound = nfound + 1
+         atoms(nfound) = value
+         pos = stop
+      end do
+
+   end subroutine read_scan_atoms
 
 !> kronecker delta
    function kron(i, j) result(res_kronij)
@@ -2269,6 +2618,9 @@ contains
       end if
       if (set%runtyp == p_run_lopt) then
          call prtiming(3, 'landscape optimizer')
+      end if
+      if (set%runtyp == p_run_lscan) then
+         call prtiming(3, 'landscape scan')
       end if
       if (set%runtyp == p_run_path) then
          call prtiming(4, 'path finder')

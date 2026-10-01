@@ -56,6 +56,7 @@ tests = [
   'landscape-hessian',
   'landscape-optimize-xtb',
   'landscape-failure',
+  'landscape-scan',
   'latticepoint',
   'molecule',
   'model-hessian',
@@ -98,9 +99,10 @@ tester = executable(
 )
 
 foreach t : tests
-  if t == 'landscape-optimize-xtb'
+  if t == 'landscape-optimize-xtb' or t == 'landscape-scan'
     # bitwise reproducibility of the `off` restart policy needs a fixed thread
-    # count (OpenMP reduction ordering changes the last bits)
+    # count (OpenMP reduction ordering changes the last bits); the scan suite
+    # additionally runs 340x faster and therefore uses one thread as well
     test(t, tester, args: t, suite: 'unit', env: xtbenv + ['OMP_NUM_THREADS=1'])
   else
     test(t, tester, args: t, suite: 'unit', env: xtbenv)
@@ -127,6 +129,12 @@ if host_machine.system() != 'windows'
   ])
 endif
 
+# Every landscape check that runs the engine uses one thread: with the default
+# thread count the 340x OpenMP anti-scaling of AGENTS.md section 6.8 dominates
+# their runtime (PLAN appendix A).  The error branches keep the plain
+# environment, they never reach a calculation.
+landscape_env = xtbenv + ['OMP_NUM_THREADS=1']
+
 # CLI level smoke test of the new `--lopt` run type.  The water input is
 # generated in the build directory with the Python interpreter meson always
 # provides (see the root meson.build); the test fails if the minimisation does
@@ -139,7 +147,94 @@ run_command(
   h2o_xyz,
   check: true,
 )
-test('landscape opt', xtb_exe, env: xtbenv, args: [
+test('landscape opt', xtb_exe, env: landscape_env, args: [
   h2o_xyz, '--gfn', '2', '--lopt', '--lopt-engine', 'lbfgs',
   '--lopt-level', 'normal', '--norestart', '--namespace', 'landscape1',
+])
+
+# CLI level smoke test of the `--lscan` run type: a bidirectional scan of an
+# internal coordinate must complete and write its scan log.
+test('landscape scan cli', xtb_exe, env: landscape_env, args: [
+  h2o_xyz, '--gfn', '2', '--lscan', '--lscan-coord', 'angle',
+  '--lscan-atoms', '2,1,3', '--lscan-step', '3', '--lscan-nstep', '3',
+  '--lscan-level', 'loose', '--norestart', '--namespace', 'landscape2',
+])
+
+# CLI level checks of the landscape suite, mirroring the `cmake -P` scripts of
+# test/unit/CMakeLists.txt.  Meson cannot inspect the output of a test, so the
+# checks run through `landscape_cli_check.py`, which implements exactly the same
+# conditions as the CMake scripts (see the docstring of that file).
+landscape_cli_check = files('landscape_cli_check.py')
+landscape_cli_dir = meson.current_build_dir()
+
+# the reported TOTAL ENERGY must be the energy of the converged geometry, i.e.
+# exactly the value written to xtbopt.xyz
+test('landscape opt energy', python, env: landscape_env, args: [
+  landscape_cli_check, 'energy', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-energy',
+])
+
+# the CLI accuracy (`--acc`) must reach the engine control and change the result
+test('landscape opt acc', python, env: landscape_env, args: [
+  landscape_cli_check, 'acc', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-acc',
+])
+
+# the `--lopt-hessian` selector must reach the engine for every algorithm that
+# uses a Hessian, and both backends must converge to the same energy
+test('landscape opt hessian', python, env: landscape_env, args: [
+  landscape_cli_check, 'hessian', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-hessian',
+])
+
+# an unconverged SCC must abort the run with a non-zero status
+test('landscape scf failure', python, env: xtbenv, args: [
+  landscape_cli_check, 'scf', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-scf',
+])
+
+# a scan point whose single point fails must be reported with a non-zero
+# status, must not be written as a fabricated zero energy and must not produce
+# one frame per requested point (mirrors `xtb/landscape-scan-failed-point`)
+# the 340x OpenMP anti-scaling of AGENTS.md section 6.8 applies to this scan
+test('landscape scan failed point', python, env: landscape_env, args: [
+  landscape_cli_check, 'scanfail', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-scan-fail',
+])
+
+# the `--lopt-engine` / `--lopt-level` / `--lopt-hessian` error branches; a
+# missing or unknown value must abort with the documented message
+test('landscape engine missing', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'requires an algorithm name', '--gfn', '2', '--lopt', '--lopt-engine',
+])
+test('landscape engine unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'Unknown landscape minimisation algorithm', '--gfn', '2', '--lopt', '--lopt-engine', 'bogus',
+])
+test('landscape level missing', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'requires a level name', '--gfn', '2', '--lopt', '--lopt-level',
+])
+test('landscape level unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'Unknown landscape convergence level', '--gfn', '2', '--lopt', '--lopt-level', 'bogus',
+])
+test('landscape hessian unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'Unknown landscape Hessian source', '--gfn', '2', '--lopt', '--lopt-hessian', 'bogus',
+])
+test('landscape scan coord unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'Unknown landscape scan coordinate', '--gfn', '2', '--lscan', '--lscan-coord', 'bogus',
+])
+test('landscape scan nstep missing', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'at least one step is required', '--gfn', '2', '--lscan', '--lscan-coord', 'distance',
+  '--lscan-atoms', '1,2', '--lscan-step', '0.1', '--lscan-nstep', '0',
+])
+test('landscape scan atom range', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'outside 1..3', '--gfn', '2', '--lscan', '--lscan-coord', 'distance',
+  '--lscan-atoms', '1,9', '--lscan-step', '0.1', '--lscan-nstep', '2',
 ])

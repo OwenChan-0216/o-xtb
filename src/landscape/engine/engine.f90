@@ -79,7 +79,7 @@ module xtb_landscape_engine
    use xtb_single, only : singlepoint
    use xtb_landscape_settings, only : landscape_engine_control, &
       & p_landscape_restart_off, p_landscape_restart_pin, p_landscape_restart_warm, &
-      & landscape_restart_name, landscape_log_failed
+      & landscape_restart_name, landscape_log_failed, landscape_value_present
    use xtb_landscape_coords, only : geometry_pack
    use xtb_landscape_hessian, only : landscape_hessian_provider, &
       & landscape_numerical_hessian_provider, landscape_model_hessian_provider, &
@@ -422,6 +422,17 @@ end subroutine engine_invalidate
 !> meaningful; the task layer escalates any `n_scf_fail > 0` to an error
 !> (`tasks/opt.f90`).  The fresh result is deliberately **not** cached, so a
 !> later cache hit cannot silently resurrect it.
+!>
+!> A second, independent failure mode is checked as well: `singlepoint`
+!> declares its `results` argument `intent(out)` but returns early without
+!> assigning it whenever `env%check` reports a previous error ("Electronic
+!> structure method terminated").  `results%converged` is then undefined and a
+!> stale `.true.` from an earlier call passed as a successful evaluation -
+!> measured: a scan point with a failed SCC reported `energy = 0.0` together
+!> with `converged = .true.` (`docs/_landscape-recon/14-m2-validation-`
+!> `experiments.md` section 5.3).  An error logged during the call is the
+!> reliable signal, exactly like `TEnvironment%check` uses it, so it is tested
+!> first and `results%converged` only afterwards (when `results` is defined).
 subroutine engine_energy_gradient(self, env, mol, chk, energy, gradient, fail)
    character(len=*), parameter :: source = 'landscape_engine_energy_gradient'
    !> Engine
@@ -441,7 +452,8 @@ subroutine engine_energy_gradient(self, env, mol, chk, energy, gradient, fail)
 
    real(wp), allocatable :: x(:), gflat(:)
    real(wp) :: egap
-   logical :: hit
+   integer :: nlog
+   logical :: hit, scf_fail
 
    fail = .false.
 
@@ -484,15 +496,32 @@ subroutine engine_energy_gradient(self, env, mol, chk, energy, gradient, fail)
       ! calculator; passing the previous gap would leak state across calls and
       ! break the bitwise reproducibility of the `off` policy.
       egap = 0.0_wp
+      nlog = env%nLog
       call singlepoint(env, mol, chk, self%calc, egap, self%ctrl%etemp, &
          & self%ctrl%maxiter, self%ctrl%printlevel, .true., self%ctrl%lgrad, &
          & self%ctrl%acc, energy, gradient, self%cache_sigma, self%cache_results)
       self%cache_hlgap = egap
-      if (.not. self%cache_results%converged) then
+      if (landscape_log_failed(env, nlog)) then
+         ! The calculator terminated, so `results` was never assigned and the
+         ! `energy` still holds the `0.0` `singlepoint` wrote before its SCF.
+         scf_fail = .true.
+      else
+         scf_fail = .not. self%cache_results%converged
+      end if
+      if (scf_fail) then
          self%n_scf_fail = self%n_scf_fail + 1
          self%n_eval = self%n_eval + 1
          call env%warning("SCC did not converge at the current geometry; the "//&
             & "energy and gradient are discarded", source)
+         fail = .true.
+         return
+      end if
+      if (.not. landscape_value_present(energy) .or. &
+            & .not. all(landscape_value_present(gradient))) then
+         self%n_scf_fail = self%n_scf_fail + 1
+         self%n_eval = self%n_eval + 1
+         call env%warning("the single point returned a non-finite energy or "//&
+            & "gradient; the result is discarded", source)
          fail = .true.
          return
       end if

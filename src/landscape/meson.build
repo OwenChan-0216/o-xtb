@@ -33,6 +33,10 @@ srcs += files(
   'optimize/driver.f90',
   'tasks/sp.f90',
   'tasks/opt.f90',
+  'scan/relax_scan.f90',
+  'scan/scan1d.f90',
+  'scan/scan2d.f90',
+  'tasks/scan.f90',
   'landscape_driver.f90',
   'landscape_api.f90',
 )

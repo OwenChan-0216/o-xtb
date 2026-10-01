@@ -1064,6 +1064,9 @@ subroutine set_runtyp(typ)
    case('lopt')
       set%runtyp = p_run_lopt
 
+   case('lscan')
+      set%runtyp = p_run_lscan
+
    case('path')
       set%runtyp = p_run_path
 

@@ -45,6 +45,7 @@ module xtb_landscape_tasks_opt
    private
 
    public :: landscape_optimize
+   public :: landscape_engine_model
 
    !> Engine backed potential, bridges the abstract optimiser objective to
    !> `landscape_engine`.

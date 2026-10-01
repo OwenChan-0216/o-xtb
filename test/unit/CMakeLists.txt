@@ -45,6 +45,7 @@ set(
   "landscape-hessian"
   "landscape-optimize-xtb"
   "landscape-failure"
+  "landscape-scan"
   "latticepoint"
   "molecule"
   "model-hessian"
@@ -274,6 +275,85 @@ add_test("xtb/landscape-opt-acc"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-acc
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_acc.cmake")
 
+# Landscape suite: the `--lopt-hessian` flag must select the Hessian backend.
+#
+# `model` is the cheap Lindh-D2 model Hessian and seeds the quasi-Newton
+# approximation of BFGS and the trust region step of RFO; the CLI value must
+# reach the engine (visible in the `Hessian source:` header), every combination
+# must converge on water and the converged energies must agree to the printed
+# precision (the first three decimals of the hartree value).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_hessian.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+function(run_case args suffix)
+  file(REMOVE "${RUNDIR}/xtbopt.xyz")
+  separate_arguments(arg_list UNIX_COMMAND "${args}")
+  execute_process(
+    COMMAND "${EXE}" "${INPUT}" --gfn 2 --lopt --norestart ${arg_list}
+    WORKING_DIRECTORY "${RUNDIR}"
+    RESULT_VARIABLE status
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE output
+  )
+  if(NOT status EQUAL 0)
+    message(FATAL_ERROR "xtb --lopt ${args} failed with status ${status}\n${output}")
+  endif()
+  if(NOT output MATCHES "landscape: converged")
+    message(FATAL_ERROR "xtb --lopt ${args} did not converge\n${output}")
+  endif()
+  file(READ "${RUNDIR}/xtbopt.xyz" xyzfile)
+  string(REGEX MATCH "energy: +(-?[0-9]+[.][0-9]+)" _ "${xyzfile}")
+  if(NOT CMAKE_MATCH_1)
+    message(FATAL_ERROR "the ${suffix} run reported no energy\n${xyzfile}")
+  endif()
+  string(SUBSTRING "${CMAKE_MATCH_1}" 0 6 energy_prefix)
+  set(${suffix}_prefix "${energy_prefix}" PARENT_SCOPE)
+  string(REGEX MATCH "Hessian source: +([a-z]+)" _ "${output}")
+  set(${suffix}_source "${CMAKE_MATCH_1}" PARENT_SCOPE)
+endfunction()
+run_case("--lopt-engine lbfgs --lopt-hessian model" model_lbfgs)
+run_case("--lopt-engine lbfgs --lopt-hessian numerical" num_lbfgs)
+run_case("--lopt-engine rfo --lopt-hessian model" model_rfo)
+run_case("--lopt-engine rfo --lopt-hessian numerical" num_rfo)
+if(NOT model_lbfgs_source STREQUAL "model")
+  message(FATAL_ERROR
+    "--lopt-hessian model did not reach the engine (${model_lbfgs_source})")
+endif()
+if(NOT model_rfo_source STREQUAL "model")
+  message(FATAL_ERROR
+    "--lopt-hessian model did not reach the RFO engine (${model_rfo_source})")
+endif()
+if(NOT num_lbfgs_source STREQUAL "numerical")
+  message(FATAL_ERROR
+    "the default Hessian source is not numerical (${num_lbfgs_source})")
+endif()
+if(NOT num_rfo_source STREQUAL "numerical")
+  message(FATAL_ERROR
+    "--lopt-hessian numerical is not reported for rfo (${num_rfo_source})")
+endif()
+if(NOT model_lbfgs_prefix STREQUAL num_lbfgs_prefix)
+  message(FATAL_ERROR
+    "lbfgs converges differently for model (${model_lbfgs_prefix}) and numerical (${num_lbfgs_prefix})")
+endif()
+if(NOT model_rfo_prefix STREQUAL num_rfo_prefix)
+  message(FATAL_ERROR
+    "rfo converges differently for model (${model_rfo_prefix}) and numerical (${num_rfo_prefix})")
+endif()
+]=])
+add_test("xtb/landscape-opt-hessian"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-hessian
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_hessian.cmake")
+
+# Landscape suite: the `--lopt-hessian` error branch.
+add_test("xtb/landscape-hessian-unknown"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lopt --lopt-hessian bogus"
+  "-DPATTERN=Unknown landscape Hessian source"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
 # Landscape suite: an unconverged SCC must lead to a non-zero exit status.
 #
 # The SCC iteration count is forced to one with an xcontrol file; the run must
@@ -348,6 +428,127 @@ add_test("xtb/landscape-level-unknown"
   -DRUNDIR=${LANDSCAPE-ERROR-DIR}
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
 
+# Landscape suite: CLI level smoke test of the `--lscan` run type.
+#
+# The scan must terminate with status 0, write `xtbscan.log` with one frame
+# per scan point (a bidirectional scan of three steps has 2*3+1 points) and
+# report the constraint residual and the hysteresis in its output.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scan.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lscan --lscan-coord angle
+          --lscan-atoms 2,1,3 --lscan-step 3 --lscan-nstep 3
+          --lscan-level loose --norestart --namespace landscape2
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lscan terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: relaxed scan")
+  message(FATAL_ERROR "the scan header was not printed\n${output}")
+endif()
+if(NOT output MATCHES "hysteresis: max")
+  message(FATAL_ERROR "no hysteresis report was printed\n${output}")
+endif()
+if(NOT output MATCHES "landscape task terminated: scan completed")
+  message(FATAL_ERROR "the scan did not complete\n${output}")
+endif()
+# "scan completed" is a prefix of "scan completed with unconverged points", so
+# the status check above cannot tell the two apart on its own
+# (docs/_landscape-recon/17-m2-independent-review.md section 3.1).
+if(output MATCHES "scan completed with unconverged points")
+  message(FATAL_ERROR "a scan point did not converge\n${output}")
+endif()
+# the scan log honours the namespace, exactly like the existing `--scan`
+if(NOT EXISTS "${RUNDIR}/landscape2.xtbscan.log")
+  message(FATAL_ERROR "landscape2.xtbscan.log was not written")
+endif()
+file(SIZE "${RUNDIR}/landscape2.xtbscan.log" size)
+if(size EQUAL 0)
+  message(FATAL_ERROR "landscape2.xtbscan.log is empty")
+endif()
+# one frame is two header lines plus three atoms
+file(READ "${RUNDIR}/landscape2.xtbscan.log" scanlog)
+string(REGEX MATCHALL "energy:" frames "${scanlog}")
+list(LENGTH frames nframes)
+if(NOT nframes EQUAL 7)
+  message(FATAL_ERROR "xtbscan.log holds ${nframes} frames, expected 7")
+endif()
+]=])
+add_test("xtb/landscape-scan-cli"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-scan
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scan.cmake")
+
+# Landscape suite: a scan point whose single point fails must not be
+# written as a fabricated energy.
+# The rigid geometry of the second point of a 5 angstrom distance scan sits at
+# 5.96 angstrom, where the SCC does not converge.  The run has to terminate
+# with a readable diagnostic and a non-zero status, and the scan log may
+# neither contain a frame with `energy: 0.000000000000` nor one frame per
+# requested point (a point without an energy is omitted).
+#
+# `test/unit/landscape_cli_check.py` implements exactly the same conditions
+# for the meson build (test `landscape scan failed point`).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scan_fail.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lscan --lscan-mode rigid
+          --lscan-coord distance --lscan-atoms 1,2 --lscan-step 5.0
+          --lscan-nstep 2 --namespace landscape3
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(status EQUAL 0)
+  message(FATAL_ERROR "the failed scan points did not fail the run\n${output}")
+endif()
+if(NOT output MATCHES "scan points failed")
+  message(FATAL_ERROR "the failed scan points were not reported\n${output}")
+endif()
+file(READ "${RUNDIR}/landscape3.xtbscan.log" scanlog)
+if(scanlog MATCHES "energy: 0.000000000000")
+  message(FATAL_ERROR "a failed scan point was written with a zero energy\n${scanlog}")
+endif()
+string(REGEX MATCHALL "energy:" frames "${scanlog}")
+list(LENGTH frames nframes)
+if(NOT nframes LESS 5)
+  message(FATAL_ERROR "the scan log holds ${nframes} frames, expected fewer than 5")
+endif()
+]=])
+add_test("xtb/landscape-scan-failed-point"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-scan-fail
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scan_fail.cmake")
+
+# Landscape suite: `--lscan` error branches.
+add_test("xtb/landscape-scan-coord-unknown"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lscan --lscan-coord bogus"
+  "-DPATTERN=Unknown landscape scan coordinate"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-scan-nstep-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lscan --lscan-coord distance --lscan-atoms 1,2 --lscan-step 0.1 --lscan-nstep 0"
+  "-DPATTERN=at least one step is required"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-scan-atom-range"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lscan --lscan-coord distance --lscan-atoms 1,9 --lscan-step 0.1 --lscan-nstep 2"
+  "-DPATTERN=outside 1..3"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
 set_tests_properties(
   "xtb/Singlepoint"
   "xtb/GFN0-xTB"
@@ -359,11 +560,51 @@ set_tests_properties(
   "xtb/landscape-opt"
   "xtb/landscape-opt-energy"
   "xtb/landscape-opt-acc"
+  "xtb/landscape-opt-hessian"
   "xtb/landscape-scf-failure"
   "xtb/landscape-engine-missing"
   "xtb/landscape-engine-unknown"
   "xtb/landscape-level-missing"
   "xtb/landscape-level-unknown"
+  "xtb/landscape-hessian-unknown"
+  "xtb/landscape-scan-cli"
+  "xtb/landscape-scan-failed-point"
+  "xtb/landscape-scan-coord-unknown"
+  "xtb/landscape-scan-nstep-missing"
+  "xtb/landscape-scan-atom-range"
   PROPERTIES
   ENVIRONMENT XTBPATH=${PROJECT_SOURCE_DIR}
+)
+
+# The scan suite runs GFN2 single points; with the default thread count the
+# 340x OpenMP anti-scaling of AGENTS.md section 6.8 turns it into a 20 s test
+# (0.13 s with one thread), and one thread also removes the last bit of thread
+# dependence from the scan assertions.
+set_tests_properties(
+  "${PROJECT_NAME}/landscape-scan"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
+# The same holds for every landscape CLI check that runs the engine (PLAN
+# appendix A: scan/Hessian benchmarks and tests always use one thread); the
+# error branches and the unconverged-SCC probe abort before/without a real
+# calculation and keep the plain environment.
+set_tests_properties(
+  "xtb/landscape-opt"
+  "xtb/landscape-opt-energy"
+  "xtb/landscape-opt-acc"
+  "xtb/landscape-opt-hessian"
+  "xtb/landscape-scan-cli"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
+# The failed scan points evaluate SCCs at strongly stretched geometries; with
+# the default thread count the 340x OpenMP anti-scaling of AGENTS.md section
+# 6.8 turns a 0.2 s run into 30 s.
+set_tests_properties(
+  "xtb/landscape-scan-failed-point"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

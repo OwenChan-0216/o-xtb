@@ -34,9 +34,10 @@ module xtb_landscape_driver
    use xtb_type_restart, only : TRestart
    use xtb_type_calculator, only : TCalculator
    use xtb_landscape_settings, only : landscape_settings, landscape_opt_settings, &
-      & landscape_sp_settings
+      & landscape_sp_settings, landscape_scan_settings
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_tasks_opt, only : landscape_optimize
+   use xtb_landscape_tasks_scan, only : landscape_scan
    use xtb_landscape_sp, only : landscape_single_point
    implicit none(type, external)
    private
@@ -86,6 +87,14 @@ subroutine landscape_run(env, mol, chk, calc, settings, result)
          call landscape_optimize(env, mol, chk, calc, opt, result)
       class default
          call env%error("the 'opt' task requires landscape_opt_settings", source)
+         return
+      end select
+   case ('scan')
+      select type (scan => settings)
+      type is (landscape_scan_settings)
+         call landscape_scan(env, mol, chk, calc, scan, result)
+      class default
+         call env%error("the 'scan' task requires landscape_scan_settings", source)
          return
       end select
    case default

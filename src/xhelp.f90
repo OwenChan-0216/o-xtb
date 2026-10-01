@@ -283,6 +283,67 @@ subroutine help(iunit)
    "    convergence level of the landscape suite, one of superloose, loose,", &
    "    normal (default), tight or vtight",&
    "",&
+   "--lopt-hessian SOURCE",&
+   "    Hessian backend of the landscape suite (minimisation and Hessian", &
+   "    based steps), one of numerical (default, central differences of the", &
+   "    electronic gradient) or model (Lindh-D2 model Hessian)",&
+   "",&
+   "--lscan",&
+   "    scan an internal coordinate (distance, angle or dihedral) with the landscape", &
+   "    task suite (src/landscape); a relaxed scan relaxes each scan point under a", &
+   "    constraint potential, a rigid scan only moves the geometry. The result is", &
+   "    written to xtbscan.log with the de-biased energy of every frame, together", &
+   "    with a report of the constraint residual and, for a bidirectional scan, of", &
+   "    the hysteresis between the forward and the reverse branch",&
+   "",&
+   "--lscan-coord TYPE",&
+   "    type of the first scanned coordinate, one of distance, angle or dihedral",&
+   "",&
+   "--lscan-atoms LIST",&
+   "    1-based atom indices of the first coordinate, comma or blank separated", &
+   "    (two for a distance, three for an angle, four for a dihedral)",&
+   "",&
+   "--lscan-step VALUE",&
+   "    step size of the first coordinate in angstrom (distance) or degree", &
+   "    (angle/dihedral)",&
+   "",&
+   "--lscan-nstep N",&
+   "    number of steps of the first coordinate",&
+   "",&
+   "--lscan-coord2, --lscan-atoms2, --lscan-step2, --lscan-nstep2",&
+   "    same as above for the second scanned coordinate; any of them switches the", &
+   "    scan to a two-dimensional Cartesian product grid",&
+   "",&
+   "--lscan-mode MODE",&
+   "    scan mode, relaxed (default) or rigid",&
+   "",&
+   "--lscan-method NAME",&
+   "    inner minimiser of a relaxed scan, one of sd, cg, lbfgs (default), bfgs,", &
+   "    diis or rfo",&
+   "",&
+   "--lscan-level LEVEL",&
+   "    convergence level of the inner minimisation, one of superloose, loose,", &
+   "    normal (default), tight or vtight",&
+   "",&
+   "--lscan-ndim N",&
+   "    number of scanned coordinates, 1 (default) or 2",&
+   "",&
+   "--lscan-restart MODE",&
+   "    wavefunction policy of the scan points, off (default), pin or warm", &
+   "    (warm_start reuses only the geometry, never the wavefunction)",&
+   "",&
+   "--lscan-oneway",&
+   "    scan the forward branch only (no reverse branch, no hysteresis report)",&
+   "",&
+   "--lscan-cold-start",&
+   "    start every scan point from the input geometry instead of the previous point",&
+   "",&
+   "--lscan-fc VALUE",&
+   "    force constant of the constraint potential in hartree/bohr^2 (default 0.5)",&
+   "",&
+   "--lscan-expo VALUE",&
+   "    exponent of the constraint potential (default 2.0)",&
+   "",&
    "--cycles [int]",&
    "    maximum number of optimization cycles.",&
    "",&

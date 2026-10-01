@@ -38,6 +38,10 @@ list(APPEND srcs
   "${dir}/optimize/driver.f90"
   "${dir}/tasks/sp.f90"
   "${dir}/tasks/opt.f90"
+  "${dir}/scan/relax_scan.f90"
+  "${dir}/scan/scan1d.f90"
+  "${dir}/scan/scan2d.f90"
+  "${dir}/tasks/scan.f90"
   "${dir}/landscape_driver.f90"
   "${dir}/landscape_api.f90"
 )

@@ -1,0 +1,1007 @@
+      -----------------------------------------------------------      
+     |                   =====================                   |     
+     |                           x T B                           |     
+     |                   =====================                   |     
+     |                         S. Grimme                         |     
+     |          Mulliken Center for Theoretical Chemistry        |     
+     |                    University of Bonn                     |     
+      -----------------------------------------------------------      
+
+   * xtb version 6.7.1 (be9b7014107b9ec89980302e84ad1df6937fe328) compiled by '@Linux' on 2026/10/01
+
+   xtb is free software: you can redistribute it and/or modify it under
+   the terms of the GNU Lesser General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   xtb is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU Lesser General Public License for more details.
+   
+   Cite this work as:
+   * C. Bannwarth, E. Caldeweyher, S. Ehlert, A. Hansen, P. Pracht,
+     J. Seibert, S. Spicher, S. Grimme, WIREs Comput. Mol. Sci., 2020, 11,
+     e01493. DOI: 10.1002/wcms.1493
+   
+   for GFN2-xTB:
+   * C. Bannwarth, S. Ehlert and S. Grimme., J. Chem. Theory Comput., 2019,
+     15, 1652-1671. DOI: 10.1021/acs.jctc.8b01176
+   for GFN1-xTB:
+   * S. Grimme, C. Bannwarth, P. Shushkov, J. Chem. Theory Comput., 2017,
+     13, 1989-2009. DOI: 10.1021/acs.jctc.7b00118
+   for GFN0-xTB:
+   * P. Pracht, E. Caldeweyher, S. Ehlert, S. Grimme, ChemRxiv, 2019, preprint.
+     DOI: 10.26434/chemrxiv.8326202.v1
+   for GFN-FF:
+   * S. Spicher and S. Grimme, Angew. Chem. Int. Ed., 2020, 59, 15665-15673.
+     DOI: 10.1002/anie.202004239
+   
+   for ALPB and GBSA implicit solvation:
+   * S. Ehlert, M. Stahn, S. Spicher, S. Grimme, J. Chem. Theory Comput.,
+     2021, 17, 4250-4261. DOI: 10.1021/acs.jctc.1c00471
+   
+   for ddCOSMO and CPCM-X implicit solvation:
+   * M. Stahn, S. Ehlert, S. Grimme, J. Phys. Chem. A,
+     2023, XX, XXXX-XXXX. DOI: 10.1021/acs.jpca.3c04382
+   
+   for DFT-D4:
+   * E. Caldeweyher, C. Bannwarth and S. Grimme, J. Chem. Phys., 2017,
+     147, 034112. DOI: 10.1063/1.4993215
+   * E. Caldeweyher, S. Ehlert, A. Hansen, H. Neugebauer, S. Spicher,
+     C. Bannwarth and S. Grimme, J. Chem. Phys., 2019, 150, 154122.
+     DOI: 10.1063/1.5090222
+   * E. Caldeweyher, J.-M. Mewes, S. Ehlert and S. Grimme, Phys. Chem. Chem. Phys.
+     2020, 22, 8499-8512. DOI: 10.1039/D0CP00502A
+   
+   for sTDA-xTB:
+   * S. Grimme and C. Bannwarth, J. Chem. Phys., 2016, 145, 054103.
+     DOI: 10.1063/1.4959605
+   
+   in the mass-spec context:
+   * V. Asgeirsson, C. Bauer and S. Grimme, Chem. Sci., 2017, 8, 4879.
+     DOI: 10.1039/c7sc00601b
+   * J. Koopman and S. Grimme, ACS Omega 2019, 4, 12, 15120-15133.
+     DOI: 10.1021/acsomega.9b02011
+   
+   for metadynamics refer to:
+   * S. Grimme, J. Chem. Theory Comput., 2019, 155, 2847-2862
+     DOI: 10.1021/acs.jctc.9b00143
+   
+   for SPH calculations refer to:
+   * S. Spicher and S. Grimme, J. Chem. Theory Comput., 2021, 17, 1701-1714
+     DOI: 10.1021/acs.jctc.0c01306
+   
+   for ONIOM refer to:
+   * C. Plett, A. Katbashev, S. Ehlert, S. Grimme, M. Bursch,
+     Phys. Chem. Chem. Phys., 2023, 25, 17860-17868. DOI: 10.1039/D3CP02178E
+   
+   for DIPRO refer to:
+   * J. Kohn, N. Gildemeister, S. Grimme, D. Fazzi, A. Hansen,
+     J. Chem. Phys. 159, 144106 (2023). DOI: 10.1063/5.0167484
+   
+   for PTB refer to:
+   * S. Grimme, M. Mueller, A. Hansen, J. Chem. Phys., 2023, 158, 124111.
+     DOI: 10.1063/5.0137838
+   
+   for O1NumHess refer to:
+   * B. Wang, S. Luo, Z. Wang, W. Liu,
+     J. Chem. Theory Comput. 21, 10893-10909.
+     DOI: 10.1021/acs.jctc.5c01354
+   
+   with help from (in alphabetical order)
+   P. Atkinson, C. Bannwarth, F. Bohle, G. Brandenburg, E. Caldeweyher,
+   M. Checinski, S. Dohm, S. Ehlert, S. Ehrlich, M. Friede, T. Froitzheim,
+   I. Gerasimov, C. Hölzer, A. Katbashev, J. Kohn, J. Koopman, C. Lavigne,
+   S. Lehtola, F. März, M. Müller, F. Musil, H. Neugebauer, J. Pisarek,
+   C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
+   M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
+   
+ * started run on 2026/10/01 at 12:21:09.927     
+   ID    Z sym.   atoms
+    1    8 O      1
+    2    1 H      2, 3
+
+           -------------------------------------------------
+          |                Calculation Setup                |
+           -------------------------------------------------
+
+          program call               : /tmp/xtb-land/build/xtb water.xyz --gfn2 --lscan --lscan-coord distance --lscan-atoms 1,2 --lscan-step 5.0 --lscan-nstep 2 --lscan-oneway --lscan-fc 0.5 --norestart --namespace huge
+          calculation namespace      : huge
+          coordinate file            : water.xyz
+          omp threads                :                     1
+          random seed                :            1116042143
+
+
+           -------------------------------------------------
+          |                 G F N 2 - x T B                 |
+           -------------------------------------------------
+
+        Reference                      10.1021/acs.jctc.8b01176
+      * Hamiltonian:
+        H0-scaling (s, p, d)           1.850000    2.230000    2.230000
+        zeta-weighting                 0.500000
+      * Dispersion:
+        s8                             2.700000
+        a1                             0.520000
+        a2                             5.000000
+        s9                             5.000000
+      * Repulsion:
+        kExp                           1.500000    1.000000
+        rExp                           1.000000
+      * Coulomb:
+        alpha                          2.000000
+        third order                    shell-resolved
+        anisotropic                    true
+        a3                             3.000000
+        a5                             4.000000
+        cn-shift                       1.200000
+        cn-exp                         4.000000
+        max-rad                        5.000000
+
+
+          ...................................................
+          :                      SETUP                      :
+          :.................................................:
+          :  # basis functions                   6          :
+          :  # atomic orbitals                   6          :
+          :  # shells                            4          :
+          :  # electrons                         8          :
+          :  max. iterations                   250          :
+          :  Hamiltonian                  GFN2-xTB          :
+          :  restarted?                      false          :
+          :  GBSA solvation                  false          :
+          :  PC potential                    false          :
+          :  electronic temp.          300.0000000     K    :
+          :  accuracy                    1.0000000          :
+          :  -> integral cutoff          0.2500000E+02      :
+          :  -> integral neglect         0.1000000E-07      :
+          :  -> SCF convergence          0.1000000E-05 Eh   :
+          :  -> wf. convergence          0.1000000E-03 e    :
+          :  Broyden damping             0.4000000          :
+          :  net charge                          0          :
+          :  unpaired electrons                  0          :
+          ...................................................
+
+ iter      E             dE          RMSdq      gap      omega  full diag
+   1     -5.1029411 -0.510294E+01  0.428E+00   14.90       0.0  T
+   2     -5.1042190 -0.127796E-02  0.248E+00   14.62       1.0  T
+   3     -5.1044500 -0.230956E-03  0.384E-01   14.40       1.0  T
+   4     -5.1045135 -0.635603E-04  0.857E-02   14.54       1.0  T
+   5     -5.1045159 -0.237816E-05  0.537E-02   14.50       1.1  T
+   6     -5.1045176 -0.171253E-05  0.120E-03   14.52      48.0  T
+   7     -5.1045176 -0.327830E-09  0.960E-04   14.52      60.1  T
+   8     -5.1045176 -0.557807E-09  0.177E-05   14.52    3262.3  T
+
+   *** convergence criteria satisfied after 8 iterations ***
+
+         #    Occupation            Energy/Eh            Energy/eV
+      -------------------------------------------------------------
+         1        2.0000           -0.6812987             -18.5391
+         2        2.0000           -0.5662387             -15.4081
+         3        2.0000           -0.5146524             -14.0044
+         4        2.0000           -0.4473698             -12.1736 (HOMO)
+         5                          0.0861932               2.3454 (LUMO)
+         6                          0.2406269               6.5478
+      -------------------------------------------------------------
+                  HL-Gap            0.5335630 Eh           14.5190 eV
+             Fermi-level           -0.1805883 Eh           -4.9141 eV
+
+ SCC (total)                   0 d,  0 h,  0 min,  0.003 sec
+ SCC setup                      ...        0 min,  0.000 sec (  2.399%)
+ Dispersion                     ...        0 min,  0.000 sec (  0.907%)
+ classical contributions        ...        0 min,  0.000 sec (  0.240%)
+ integral evaluation            ...        0 min,  0.000 sec (  2.662%)
+ iterations                     ...        0 min,  0.003 sec ( 89.166%)
+ molecular gradient             ...        0 min,  0.000 sec (  3.462%)
+ printout                       ...        0 min,  0.000 sec (  1.012%)
+
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+         ::                     SUMMARY                     ::
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+         :: total energy              -5.070383095219 Eh    ::
+         :: gradient norm              0.007659658070 Eh/a0 ::
+         :: HOMO-LUMO gap             14.518987926825 eV    ::
+         ::.................................................::
+         :: SCC energy                -5.104517627658 Eh    ::
+         :: -> isotropic ES            0.031400392671 Eh    ::
+         :: -> anisotropic ES          0.000610908598 Eh    ::
+         :: -> anisotropic XC         -0.000805309300 Eh    ::
+         :: -> dispersion             -0.000141270483 Eh    ::
+         :: repulsion energy           0.034134532439 Eh    ::
+         :: add. restraining           0.000000000000 Eh    ::
+         :: total charge              -0.000000000000 e     ::
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+ landscape: relaxed scan
+   coordinate 1: distance 1 2 0 0
+ number of coordinates:    1
+ restart policy:           off
+ Hessian source:           numerical
+    point      value/Ang           energy/Eh      residual      steps  conv
+        1       0.96000009      -5.070544208690   1.0234E-05      5 T
+        2       5.96000009       0.000000000000   5.4806E+00     18 F
+        3      10.96000009       0.000000000000   0.0000E+00     29 T
+ largest jump between points:    5.070544E+00 Eh
+ lowest energy:   -5.070544E+00 Eh
+ landscape engine: energy evaluations 264
+ landscape engine: cache hits         4
+ landscape engine: Hessians           0
+ landscape engine: Hessian-vector     0
+ landscape engine: unconverged SCC    1
+ landscape engine: restart policy     off
+ landscape engine: SCC accuracy              1.000000
+ landscape engine: hessian source     numerical
+ wrote huge.xtbscan.log
+ landscape task terminated: scan completed with unconverged points
+########################################################################
+[ERROR] Program stopped due to fatal error
+-753- Landscape task terminated
+-752- landscape_scan: 1 scan point(s) did not converge; check the reported residual
+-751- landscape_scan1d: the scan profile jumps by    5.070544E+00 hartree between two consecutive points; this indicates a basin switch or a SCF discontinuity
+-750- xtb_calculator_singlepoint: Electronic structure method terminated
+-749- scf: Setup of Coulomb evaluator failed
+-748- type_latticepoint_update: Could not generate lattice points
+-747- xtb_calculator_singlepoint: Electronic structure method terminated
+-746- scf: Setup of Coulomb evaluator failed
+-745- type_latticepoint_update: Could not generate lattice points
+-744- xtb_calculator_singlepoint: Electronic structure method terminated
+-743- scf: Setup of Coulomb evaluator failed
+-742- type_latticepoint_update: Could not generate lattice points
+-741- xtb_calculator_singlepoint: Electronic structure method terminated
+-740- scf: Setup of Coulomb evaluator failed
+-739- type_latticepoint_update: Could not generate lattice points
+-738- xtb_calculator_singlepoint: Electronic structure method terminated
+-737- scf: Setup of Coulomb evaluator failed
+-736- type_latticepoint_update: Could not generate lattice points
+-735- xtb_calculator_singlepoint: Electronic structure method terminated
+-734- scf: Setup of Coulomb evaluator failed
+-733- type_latticepoint_update: Could not generate lattice points
+-732- xtb_calculator_singlepoint: Electronic structure method terminated
+-731- scf: Setup of Coulomb evaluator failed
+-730- type_latticepoint_update: Could not generate lattice points
+-729- xtb_calculator_singlepoint: Electronic structure method terminated
+-728- scf: Setup of Coulomb evaluator failed
+-727- type_latticepoint_update: Could not generate lattice points
+-726- xtb_calculator_singlepoint: Electronic structure method terminated
+-725- scf: Setup of Coulomb evaluator failed
+-724- type_latticepoint_update: Could not generate lattice points
+-723- xtb_calculator_singlepoint: Electronic structure method terminated
+-722- scf: Setup of Coulomb evaluator failed
+-721- type_latticepoint_update: Could not generate lattice points
+-720- xtb_calculator_singlepoint: Electronic structure method terminated
+-719- scf: Setup of Coulomb evaluator failed
+-718- type_latticepoint_update: Could not generate lattice points
+-717- xtb_calculator_singlepoint: Electronic structure method terminated
+-716- scf: Setup of Coulomb evaluator failed
+-715- type_latticepoint_update: Could not generate lattice points
+-714- xtb_calculator_singlepoint: Electronic structure method terminated
+-713- scf: Setup of Coulomb evaluator failed
+-712- type_latticepoint_update: Could not generate lattice points
+-711- xtb_calculator_singlepoint: Electronic structure method terminated
+-710- scf: Setup of Coulomb evaluator failed
+-709- type_latticepoint_update: Could not generate lattice points
+-708- xtb_calculator_singlepoint: Electronic structure method terminated
+-707- scf: Setup of Coulomb evaluator failed
+-706- type_latticepoint_update: Could not generate lattice points
+-705- xtb_calculator_singlepoint: Electronic structure method terminated
+-704- scf: Setup of Coulomb evaluator failed
+-703- type_latticepoint_update: Could not generate lattice points
+-702- xtb_calculator_singlepoint: Electronic structure method terminated
+-701- scf: Setup of Coulomb evaluator failed
+-700- type_latticepoint_update: Could not generate lattice points
+-699- xtb_calculator_singlepoint: Electronic structure method terminated
+-698- scf: Setup of Coulomb evaluator failed
+-697- type_latticepoint_update: Could not generate lattice points
+-696- xtb_calculator_singlepoint: Electronic structure method terminated
+-695- scf: Setup of Coulomb evaluator failed
+-694- type_latticepoint_update: Could not generate lattice points
+-693- xtb_calculator_singlepoint: Electronic structure method terminated
+-692- scf: Setup of Coulomb evaluator failed
+-691- type_latticepoint_update: Could not generate lattice points
+-690- xtb_calculator_singlepoint: Electronic structure method terminated
+-689- scf: Setup of Coulomb evaluator failed
+-688- type_latticepoint_update: Could not generate lattice points
+-687- xtb_calculator_singlepoint: Electronic structure method terminated
+-686- scf: Setup of Coulomb evaluator failed
+-685- type_latticepoint_update: Could not generate lattice points
+-684- xtb_calculator_singlepoint: Electronic structure method terminated
+-683- scf: Setup of Coulomb evaluator failed
+-682- type_latticepoint_update: Could not generate lattice points
+-681- xtb_calculator_singlepoint: Electronic structure method terminated
+-680- scf: Setup of Coulomb evaluator failed
+-679- type_latticepoint_update: Could not generate lattice points
+-678- xtb_calculator_singlepoint: Electronic structure method terminated
+-677- scf: Setup of Coulomb evaluator failed
+-676- type_latticepoint_update: Could not generate lattice points
+-675- xtb_calculator_singlepoint: Electronic structure method terminated
+-674- scf: Setup of Coulomb evaluator failed
+-673- type_latticepoint_update: Could not generate lattice points
+-672- xtb_calculator_singlepoint: Electronic structure method terminated
+-671- scf: Setup of Coulomb evaluator failed
+-670- type_latticepoint_update: Could not generate lattice points
+-669- xtb_calculator_singlepoint: Electronic structure method terminated
+-668- scf: Setup of Coulomb evaluator failed
+-667- type_latticepoint_update: Could not generate lattice points
+-666- xtb_calculator_singlepoint: Electronic structure method terminated
+-665- scf: Setup of Coulomb evaluator failed
+-664- type_latticepoint_update: Could not generate lattice points
+-663- xtb_calculator_singlepoint: Electronic structure method terminated
+-662- scf: Setup of Coulomb evaluator failed
+-661- type_latticepoint_update: Could not generate lattice points
+-660- xtb_calculator_singlepoint: Electronic structure method terminated
+-659- scf: Setup of Coulomb evaluator failed
+-658- type_latticepoint_update: Could not generate lattice points
+-657- xtb_calculator_singlepoint: Electronic structure method terminated
+-656- scf: Setup of Coulomb evaluator failed
+-655- type_latticepoint_update: Could not generate lattice points
+-654- xtb_calculator_singlepoint: Electronic structure method terminated
+-653- scf: Setup of Coulomb evaluator failed
+-652- type_latticepoint_update: Could not generate lattice points
+-651- xtb_calculator_singlepoint: Electronic structure method terminated
+-650- scf: Setup of Coulomb evaluator failed
+-649- type_latticepoint_update: Could not generate lattice points
+-648- xtb_calculator_singlepoint: Electronic structure method terminated
+-647- scf: Setup of Coulomb evaluator failed
+-646- type_latticepoint_update: Could not generate lattice points
+-645- xtb_calculator_singlepoint: Electronic structure method terminated
+-644- scf: Setup of Coulomb evaluator failed
+-643- type_latticepoint_update: Could not generate lattice points
+-642- xtb_calculator_singlepoint: Electronic structure method terminated
+-641- scf: Setup of Coulomb evaluator failed
+-640- type_latticepoint_update: Could not generate lattice points
+-639- xtb_calculator_singlepoint: Electronic structure method terminated
+-638- scf: Setup of Coulomb evaluator failed
+-637- type_latticepoint_update: Could not generate lattice points
+-636- xtb_calculator_singlepoint: Electronic structure method terminated
+-635- scf: Setup of Coulomb evaluator failed
+-634- type_latticepoint_update: Could not generate lattice points
+-633- xtb_calculator_singlepoint: Electronic structure method terminated
+-632- scf: Setup of Coulomb evaluator failed
+-631- type_latticepoint_update: Could not generate lattice points
+-630- xtb_calculator_singlepoint: Electronic structure method terminated
+-629- scf: Setup of Coulomb evaluator failed
+-628- type_latticepoint_update: Could not generate lattice points
+-627- xtb_calculator_singlepoint: Electronic structure method terminated
+-626- scf: Setup of Coulomb evaluator failed
+-625- type_latticepoint_update: Could not generate lattice points
+-624- xtb_calculator_singlepoint: Electronic structure method terminated
+-623- scf: Setup of Coulomb evaluator failed
+-622- type_latticepoint_update: Could not generate lattice points
+-621- xtb_calculator_singlepoint: Electronic structure method terminated
+-620- scf: Setup of Coulomb evaluator failed
+-619- type_latticepoint_update: Could not generate lattice points
+-618- xtb_calculator_singlepoint: Electronic structure method terminated
+-617- scf: Setup of Coulomb evaluator failed
+-616- type_latticepoint_update: Could not generate lattice points
+-615- xtb_calculator_singlepoint: Electronic structure method terminated
+-614- scf: Setup of Coulomb evaluator failed
+-613- type_latticepoint_update: Could not generate lattice points
+-612- xtb_calculator_singlepoint: Electronic structure method terminated
+-611- scf: Setup of Coulomb evaluator failed
+-610- type_latticepoint_update: Could not generate lattice points
+-609- xtb_calculator_singlepoint: Electronic structure method terminated
+-608- scf: Setup of Coulomb evaluator failed
+-607- type_latticepoint_update: Could not generate lattice points
+-606- xtb_calculator_singlepoint: Electronic structure method terminated
+-605- scf: Setup of Coulomb evaluator failed
+-604- type_latticepoint_update: Could not generate lattice points
+-603- xtb_calculator_singlepoint: Electronic structure method terminated
+-602- scf: Setup of Coulomb evaluator failed
+-601- type_latticepoint_update: Could not generate lattice points
+-600- xtb_calculator_singlepoint: Electronic structure method terminated
+-599- scf: Setup of Coulomb evaluator failed
+-598- type_latticepoint_update: Could not generate lattice points
+-597- xtb_calculator_singlepoint: Electronic structure method terminated
+-596- scf: Setup of Coulomb evaluator failed
+-595- type_latticepoint_update: Could not generate lattice points
+-594- xtb_calculator_singlepoint: Electronic structure method terminated
+-593- scf: Setup of Coulomb evaluator failed
+-592- type_latticepoint_update: Could not generate lattice points
+-591- xtb_calculator_singlepoint: Electronic structure method terminated
+-590- scf: Setup of Coulomb evaluator failed
+-589- type_latticepoint_update: Could not generate lattice points
+-588- xtb_calculator_singlepoint: Electronic structure method terminated
+-587- scf: Setup of Coulomb evaluator failed
+-586- type_latticepoint_update: Could not generate lattice points
+-585- xtb_calculator_singlepoint: Electronic structure method terminated
+-584- scf: Setup of Coulomb evaluator failed
+-583- type_latticepoint_update: Could not generate lattice points
+-582- xtb_calculator_singlepoint: Electronic structure method terminated
+-581- scf: Setup of Coulomb evaluator failed
+-580- type_latticepoint_update: Could not generate lattice points
+-579- xtb_calculator_singlepoint: Electronic structure method terminated
+-578- scf: Setup of Coulomb evaluator failed
+-577- type_latticepoint_update: Could not generate lattice points
+-576- xtb_calculator_singlepoint: Electronic structure method terminated
+-575- scf: Setup of Coulomb evaluator failed
+-574- type_latticepoint_update: Could not generate lattice points
+-573- xtb_calculator_singlepoint: Electronic structure method terminated
+-572- scf: Setup of Coulomb evaluator failed
+-571- type_latticepoint_update: Could not generate lattice points
+-570- xtb_calculator_singlepoint: Electronic structure method terminated
+-569- scf: Setup of Coulomb evaluator failed
+-568- type_latticepoint_update: Could not generate lattice points
+-567- xtb_calculator_singlepoint: Electronic structure method terminated
+-566- scf: Setup of Coulomb evaluator failed
+-565- type_latticepoint_update: Could not generate lattice points
+-564- xtb_calculator_singlepoint: Electronic structure method terminated
+-563- scf: Setup of Coulomb evaluator failed
+-562- type_latticepoint_update: Could not generate lattice points
+-561- xtb_calculator_singlepoint: Electronic structure method terminated
+-560- scf: Setup of Coulomb evaluator failed
+-559- type_latticepoint_update: Could not generate lattice points
+-558- xtb_calculator_singlepoint: Electronic structure method terminated
+-557- scf: Setup of Coulomb evaluator failed
+-556- type_latticepoint_update: Could not generate lattice points
+-555- xtb_calculator_singlepoint: Electronic structure method terminated
+-554- scf: Setup of Coulomb evaluator failed
+-553- type_latticepoint_update: Could not generate lattice points
+-552- xtb_calculator_singlepoint: Electronic structure method terminated
+-551- scf: Setup of Coulomb evaluator failed
+-550- type_latticepoint_update: Could not generate lattice points
+-549- xtb_calculator_singlepoint: Electronic structure method terminated
+-548- scf: Setup of Coulomb evaluator failed
+-547- type_latticepoint_update: Could not generate lattice points
+-546- xtb_calculator_singlepoint: Electronic structure method terminated
+-545- scf: Setup of Coulomb evaluator failed
+-544- type_latticepoint_update: Could not generate lattice points
+-543- xtb_calculator_singlepoint: Electronic structure method terminated
+-542- scf: Setup of Coulomb evaluator failed
+-541- type_latticepoint_update: Could not generate lattice points
+-540- xtb_calculator_singlepoint: Electronic structure method terminated
+-539- scf: Setup of Coulomb evaluator failed
+-538- type_latticepoint_update: Could not generate lattice points
+-537- xtb_calculator_singlepoint: Electronic structure method terminated
+-536- scf: Setup of Coulomb evaluator failed
+-535- type_latticepoint_update: Could not generate lattice points
+-534- xtb_calculator_singlepoint: Electronic structure method terminated
+-533- scf: Setup of Coulomb evaluator failed
+-532- type_latticepoint_update: Could not generate lattice points
+-531- xtb_calculator_singlepoint: Electronic structure method terminated
+-530- scf: Setup of Coulomb evaluator failed
+-529- type_latticepoint_update: Could not generate lattice points
+-528- xtb_calculator_singlepoint: Electronic structure method terminated
+-527- scf: Setup of Coulomb evaluator failed
+-526- type_latticepoint_update: Could not generate lattice points
+-525- xtb_calculator_singlepoint: Electronic structure method terminated
+-524- scf: Setup of Coulomb evaluator failed
+-523- type_latticepoint_update: Could not generate lattice points
+-522- xtb_calculator_singlepoint: Electronic structure method terminated
+-521- scf: Setup of Coulomb evaluator failed
+-520- type_latticepoint_update: Could not generate lattice points
+-519- xtb_calculator_singlepoint: Electronic structure method terminated
+-518- scf: Setup of Coulomb evaluator failed
+-517- type_latticepoint_update: Could not generate lattice points
+-516- xtb_calculator_singlepoint: Electronic structure method terminated
+-515- scf: Setup of Coulomb evaluator failed
+-514- type_latticepoint_update: Could not generate lattice points
+-513- xtb_calculator_singlepoint: Electronic structure method terminated
+-512- scf: Setup of Coulomb evaluator failed
+-511- type_latticepoint_update: Could not generate lattice points
+-510- xtb_calculator_singlepoint: Electronic structure method terminated
+-509- scf: Setup of Coulomb evaluator failed
+-508- type_latticepoint_update: Could not generate lattice points
+-507- xtb_calculator_singlepoint: Electronic structure method terminated
+-506- scf: Setup of Coulomb evaluator failed
+-505- type_latticepoint_update: Could not generate lattice points
+-504- xtb_calculator_singlepoint: Electronic structure method terminated
+-503- scf: Setup of Coulomb evaluator failed
+-502- type_latticepoint_update: Could not generate lattice points
+-501- xtb_calculator_singlepoint: Electronic structure method terminated
+-500- scf: Setup of Coulomb evaluator failed
+-499- type_latticepoint_update: Could not generate lattice points
+-498- xtb_calculator_singlepoint: Electronic structure method terminated
+-497- scf: Setup of Coulomb evaluator failed
+-496- type_latticepoint_update: Could not generate lattice points
+-495- xtb_calculator_singlepoint: Electronic structure method terminated
+-494- scf: Setup of Coulomb evaluator failed
+-493- type_latticepoint_update: Could not generate lattice points
+-492- xtb_calculator_singlepoint: Electronic structure method terminated
+-491- scf: Setup of Coulomb evaluator failed
+-490- type_latticepoint_update: Could not generate lattice points
+-489- xtb_calculator_singlepoint: Electronic structure method terminated
+-488- scf: Setup of Coulomb evaluator failed
+-487- type_latticepoint_update: Could not generate lattice points
+-486- xtb_calculator_singlepoint: Electronic structure method terminated
+-485- scf: Setup of Coulomb evaluator failed
+-484- type_latticepoint_update: Could not generate lattice points
+-483- xtb_calculator_singlepoint: Electronic structure method terminated
+-482- scf: Setup of Coulomb evaluator failed
+-481- type_latticepoint_update: Could not generate lattice points
+-480- xtb_calculator_singlepoint: Electronic structure method terminated
+-479- scf: Setup of Coulomb evaluator failed
+-478- type_latticepoint_update: Could not generate lattice points
+-477- xtb_calculator_singlepoint: Electronic structure method terminated
+-476- scf: Setup of Coulomb evaluator failed
+-475- type_latticepoint_update: Could not generate lattice points
+-474- xtb_calculator_singlepoint: Electronic structure method terminated
+-473- scf: Setup of Coulomb evaluator failed
+-472- type_latticepoint_update: Could not generate lattice points
+-471- xtb_calculator_singlepoint: Electronic structure method terminated
+-470- scf: Setup of Coulomb evaluator failed
+-469- type_latticepoint_update: Could not generate lattice points
+-468- xtb_calculator_singlepoint: Electronic structure method terminated
+-467- scf: Setup of Coulomb evaluator failed
+-466- type_latticepoint_update: Could not generate lattice points
+-465- xtb_calculator_singlepoint: Electronic structure method terminated
+-464- scf: Setup of Coulomb evaluator failed
+-463- type_latticepoint_update: Could not generate lattice points
+-462- xtb_calculator_singlepoint: Electronic structure method terminated
+-461- scf: Setup of Coulomb evaluator failed
+-460- type_latticepoint_update: Could not generate lattice points
+-459- xtb_calculator_singlepoint: Electronic structure method terminated
+-458- scf: Setup of Coulomb evaluator failed
+-457- type_latticepoint_update: Could not generate lattice points
+-456- xtb_calculator_singlepoint: Electronic structure method terminated
+-455- scf: Setup of Coulomb evaluator failed
+-454- type_latticepoint_update: Could not generate lattice points
+-453- xtb_calculator_singlepoint: Electronic structure method terminated
+-452- scf: Setup of Coulomb evaluator failed
+-451- type_latticepoint_update: Could not generate lattice points
+-450- xtb_calculator_singlepoint: Electronic structure method terminated
+-449- scf: Setup of Coulomb evaluator failed
+-448- type_latticepoint_update: Could not generate lattice points
+-447- xtb_calculator_singlepoint: Electronic structure method terminated
+-446- scf: Setup of Coulomb evaluator failed
+-445- type_latticepoint_update: Could not generate lattice points
+-444- xtb_calculator_singlepoint: Electronic structure method terminated
+-443- scf: Setup of Coulomb evaluator failed
+-442- type_latticepoint_update: Could not generate lattice points
+-441- xtb_calculator_singlepoint: Electronic structure method terminated
+-440- scf: Setup of Coulomb evaluator failed
+-439- type_latticepoint_update: Could not generate lattice points
+-438- xtb_calculator_singlepoint: Electronic structure method terminated
+-437- scf: Setup of Coulomb evaluator failed
+-436- type_latticepoint_update: Could not generate lattice points
+-435- xtb_calculator_singlepoint: Electronic structure method terminated
+-434- scf: Setup of Coulomb evaluator failed
+-433- type_latticepoint_update: Could not generate lattice points
+-432- xtb_calculator_singlepoint: Electronic structure method terminated
+-431- scf: Setup of Coulomb evaluator failed
+-430- type_latticepoint_update: Could not generate lattice points
+-429- xtb_calculator_singlepoint: Electronic structure method terminated
+-428- scf: Setup of Coulomb evaluator failed
+-427- type_latticepoint_update: Could not generate lattice points
+-426- xtb_calculator_singlepoint: Electronic structure method terminated
+-425- scf: Setup of Coulomb evaluator failed
+-424- type_latticepoint_update: Could not generate lattice points
+-423- xtb_calculator_singlepoint: Electronic structure method terminated
+-422- scf: Setup of Coulomb evaluator failed
+-421- type_latticepoint_update: Could not generate lattice points
+-420- xtb_calculator_singlepoint: Electronic structure method terminated
+-419- scf: Setup of Coulomb evaluator failed
+-418- type_latticepoint_update: Could not generate lattice points
+-417- xtb_calculator_singlepoint: Electronic structure method terminated
+-416- scf: Setup of Coulomb evaluator failed
+-415- type_latticepoint_update: Could not generate lattice points
+-414- xtb_calculator_singlepoint: Electronic structure method terminated
+-413- scf: Setup of Coulomb evaluator failed
+-412- type_latticepoint_update: Could not generate lattice points
+-411- xtb_calculator_singlepoint: Electronic structure method terminated
+-410- scf: Setup of Coulomb evaluator failed
+-409- type_latticepoint_update: Could not generate lattice points
+-408- xtb_calculator_singlepoint: Electronic structure method terminated
+-407- scf: Setup of Coulomb evaluator failed
+-406- type_latticepoint_update: Could not generate lattice points
+-405- xtb_calculator_singlepoint: Electronic structure method terminated
+-404- scf: Setup of Coulomb evaluator failed
+-403- type_latticepoint_update: Could not generate lattice points
+-402- xtb_calculator_singlepoint: Electronic structure method terminated
+-401- scf: Setup of Coulomb evaluator failed
+-400- type_latticepoint_update: Could not generate lattice points
+-399- xtb_calculator_singlepoint: Electronic structure method terminated
+-398- scf: Setup of Coulomb evaluator failed
+-397- type_latticepoint_update: Could not generate lattice points
+-396- xtb_calculator_singlepoint: Electronic structure method terminated
+-395- scf: Setup of Coulomb evaluator failed
+-394- type_latticepoint_update: Could not generate lattice points
+-393- xtb_calculator_singlepoint: Electronic structure method terminated
+-392- scf: Setup of Coulomb evaluator failed
+-391- type_latticepoint_update: Could not generate lattice points
+-390- xtb_calculator_singlepoint: Electronic structure method terminated
+-389- scf: Setup of Coulomb evaluator failed
+-388- type_latticepoint_update: Could not generate lattice points
+-387- xtb_calculator_singlepoint: Electronic structure method terminated
+-386- scf: Setup of Coulomb evaluator failed
+-385- type_latticepoint_update: Could not generate lattice points
+-384- xtb_calculator_singlepoint: Electronic structure method terminated
+-383- scf: Setup of Coulomb evaluator failed
+-382- type_latticepoint_update: Could not generate lattice points
+-381- xtb_calculator_singlepoint: Electronic structure method terminated
+-380- scf: Setup of Coulomb evaluator failed
+-379- type_latticepoint_update: Could not generate lattice points
+-378- xtb_calculator_singlepoint: Electronic structure method terminated
+-377- scf: Setup of Coulomb evaluator failed
+-376- type_latticepoint_update: Could not generate lattice points
+-375- xtb_calculator_singlepoint: Electronic structure method terminated
+-374- scf: Setup of Coulomb evaluator failed
+-373- type_latticepoint_update: Could not generate lattice points
+-372- xtb_calculator_singlepoint: Electronic structure method terminated
+-371- scf: Setup of Coulomb evaluator failed
+-370- type_latticepoint_update: Could not generate lattice points
+-369- xtb_calculator_singlepoint: Electronic structure method terminated
+-368- scf: Setup of Coulomb evaluator failed
+-367- type_latticepoint_update: Could not generate lattice points
+-366- xtb_calculator_singlepoint: Electronic structure method terminated
+-365- scf: Setup of Coulomb evaluator failed
+-364- type_latticepoint_update: Could not generate lattice points
+-363- xtb_calculator_singlepoint: Electronic structure method terminated
+-362- scf: Setup of Coulomb evaluator failed
+-361- type_latticepoint_update: Could not generate lattice points
+-360- xtb_calculator_singlepoint: Electronic structure method terminated
+-359- scf: Setup of Coulomb evaluator failed
+-358- type_latticepoint_update: Could not generate lattice points
+-357- xtb_calculator_singlepoint: Electronic structure method terminated
+-356- scf: Setup of Coulomb evaluator failed
+-355- type_latticepoint_update: Could not generate lattice points
+-354- xtb_calculator_singlepoint: Electronic structure method terminated
+-353- scf: Setup of Coulomb evaluator failed
+-352- type_latticepoint_update: Could not generate lattice points
+-351- xtb_calculator_singlepoint: Electronic structure method terminated
+-350- scf: Setup of Coulomb evaluator failed
+-349- type_latticepoint_update: Could not generate lattice points
+-348- xtb_calculator_singlepoint: Electronic structure method terminated
+-347- scf: Setup of Coulomb evaluator failed
+-346- type_latticepoint_update: Could not generate lattice points
+-345- xtb_calculator_singlepoint: Electronic structure method terminated
+-344- scf: Setup of Coulomb evaluator failed
+-343- type_latticepoint_update: Could not generate lattice points
+-342- xtb_calculator_singlepoint: Electronic structure method terminated
+-341- scf: Setup of Coulomb evaluator failed
+-340- type_latticepoint_update: Could not generate lattice points
+-339- xtb_calculator_singlepoint: Electronic structure method terminated
+-338- scf: Setup of Coulomb evaluator failed
+-337- type_latticepoint_update: Could not generate lattice points
+-336- xtb_calculator_singlepoint: Electronic structure method terminated
+-335- scf: Setup of Coulomb evaluator failed
+-334- type_latticepoint_update: Could not generate lattice points
+-333- xtb_calculator_singlepoint: Electronic structure method terminated
+-332- scf: Setup of Coulomb evaluator failed
+-331- type_latticepoint_update: Could not generate lattice points
+-330- xtb_calculator_singlepoint: Electronic structure method terminated
+-329- scf: Setup of Coulomb evaluator failed
+-328- type_latticepoint_update: Could not generate lattice points
+-327- xtb_calculator_singlepoint: Electronic structure method terminated
+-326- scf: Setup of Coulomb evaluator failed
+-325- type_latticepoint_update: Could not generate lattice points
+-324- xtb_calculator_singlepoint: Electronic structure method terminated
+-323- scf: Setup of Coulomb evaluator failed
+-322- type_latticepoint_update: Could not generate lattice points
+-321- xtb_calculator_singlepoint: Electronic structure method terminated
+-320- scf: Setup of Coulomb evaluator failed
+-319- type_latticepoint_update: Could not generate lattice points
+-318- xtb_calculator_singlepoint: Electronic structure method terminated
+-317- scf: Setup of Coulomb evaluator failed
+-316- type_latticepoint_update: Could not generate lattice points
+-315- xtb_calculator_singlepoint: Electronic structure method terminated
+-314- scf: Setup of Coulomb evaluator failed
+-313- type_latticepoint_update: Could not generate lattice points
+-312- xtb_calculator_singlepoint: Electronic structure method terminated
+-311- scf: Setup of Coulomb evaluator failed
+-310- type_latticepoint_update: Could not generate lattice points
+-309- xtb_calculator_singlepoint: Electronic structure method terminated
+-308- scf: Setup of Coulomb evaluator failed
+-307- type_latticepoint_update: Could not generate lattice points
+-306- xtb_calculator_singlepoint: Electronic structure method terminated
+-305- scf: Setup of Coulomb evaluator failed
+-304- type_latticepoint_update: Could not generate lattice points
+-303- xtb_calculator_singlepoint: Electronic structure method terminated
+-302- scf: Setup of Coulomb evaluator failed
+-301- type_latticepoint_update: Could not generate lattice points
+-300- xtb_calculator_singlepoint: Electronic structure method terminated
+-299- scf: Setup of Coulomb evaluator failed
+-298- type_latticepoint_update: Could not generate lattice points
+-297- xtb_calculator_singlepoint: Electronic structure method terminated
+-296- scf: Setup of Coulomb evaluator failed
+-295- type_latticepoint_update: Could not generate lattice points
+-294- xtb_calculator_singlepoint: Electronic structure method terminated
+-293- scf: Setup of Coulomb evaluator failed
+-292- type_latticepoint_update: Could not generate lattice points
+-291- xtb_calculator_singlepoint: Electronic structure method terminated
+-290- scf: Setup of Coulomb evaluator failed
+-289- type_latticepoint_update: Could not generate lattice points
+-288- xtb_calculator_singlepoint: Electronic structure method terminated
+-287- scf: Setup of Coulomb evaluator failed
+-286- type_latticepoint_update: Could not generate lattice points
+-285- xtb_calculator_singlepoint: Electronic structure method terminated
+-284- scf: Setup of Coulomb evaluator failed
+-283- type_latticepoint_update: Could not generate lattice points
+-282- xtb_calculator_singlepoint: Electronic structure method terminated
+-281- scf: Setup of Coulomb evaluator failed
+-280- type_latticepoint_update: Could not generate lattice points
+-279- xtb_calculator_singlepoint: Electronic structure method terminated
+-278- scf: Setup of Coulomb evaluator failed
+-277- type_latticepoint_update: Could not generate lattice points
+-276- xtb_calculator_singlepoint: Electronic structure method terminated
+-275- scf: Setup of Coulomb evaluator failed
+-274- type_latticepoint_update: Could not generate lattice points
+-273- xtb_calculator_singlepoint: Electronic structure method terminated
+-272- scf: Setup of Coulomb evaluator failed
+-271- type_latticepoint_update: Could not generate lattice points
+-270- xtb_calculator_singlepoint: Electronic structure method terminated
+-269- scf: Setup of Coulomb evaluator failed
+-268- type_latticepoint_update: Could not generate lattice points
+-267- xtb_calculator_singlepoint: Electronic structure method terminated
+-266- scf: Setup of Coulomb evaluator failed
+-265- type_latticepoint_update: Could not generate lattice points
+-264- xtb_calculator_singlepoint: Electronic structure method terminated
+-263- scf: Setup of Coulomb evaluator failed
+-262- type_latticepoint_update: Could not generate lattice points
+-261- xtb_calculator_singlepoint: Electronic structure method terminated
+-260- scf: Setup of Coulomb evaluator failed
+-259- type_latticepoint_update: Could not generate lattice points
+-258- xtb_calculator_singlepoint: Electronic structure method terminated
+-257- scf: Setup of Coulomb evaluator failed
+-256- type_latticepoint_update: Could not generate lattice points
+-255- xtb_calculator_singlepoint: Electronic structure method terminated
+-254- scf: Setup of Coulomb evaluator failed
+-253- type_latticepoint_update: Could not generate lattice points
+-252- xtb_calculator_singlepoint: Electronic structure method terminated
+-251- scf: Setup of Coulomb evaluator failed
+-250- type_latticepoint_update: Could not generate lattice points
+-249- xtb_calculator_singlepoint: Electronic structure method terminated
+-248- scf: Setup of Coulomb evaluator failed
+-247- type_latticepoint_update: Could not generate lattice points
+-246- xtb_calculator_singlepoint: Electronic structure method terminated
+-245- scf: Setup of Coulomb evaluator failed
+-244- type_latticepoint_update: Could not generate lattice points
+-243- xtb_calculator_singlepoint: Electronic structure method terminated
+-242- scf: Setup of Coulomb evaluator failed
+-241- type_latticepoint_update: Could not generate lattice points
+-240- xtb_calculator_singlepoint: Electronic structure method terminated
+-239- scf: Setup of Coulomb evaluator failed
+-238- type_latticepoint_update: Could not generate lattice points
+-237- xtb_calculator_singlepoint: Electronic structure method terminated
+-236- scf: Setup of Coulomb evaluator failed
+-235- type_latticepoint_update: Could not generate lattice points
+-234- xtb_calculator_singlepoint: Electronic structure method terminated
+-233- scf: Setup of Coulomb evaluator failed
+-232- type_latticepoint_update: Could not generate lattice points
+-231- xtb_calculator_singlepoint: Electronic structure method terminated
+-230- scf: Setup of Coulomb evaluator failed
+-229- type_latticepoint_update: Could not generate lattice points
+-228- xtb_calculator_singlepoint: Electronic structure method terminated
+-227- scf: Setup of Coulomb evaluator failed
+-226- type_latticepoint_update: Could not generate lattice points
+-225- xtb_calculator_singlepoint: Electronic structure method terminated
+-224- scf: Setup of Coulomb evaluator failed
+-223- type_latticepoint_update: Could not generate lattice points
+-222- xtb_calculator_singlepoint: Electronic structure method terminated
+-221- scf: Setup of Coulomb evaluator failed
+-220- type_latticepoint_update: Could not generate lattice points
+-219- xtb_calculator_singlepoint: Electronic structure method terminated
+-218- scf: Setup of Coulomb evaluator failed
+-217- type_latticepoint_update: Could not generate lattice points
+-216- xtb_calculator_singlepoint: Electronic structure method terminated
+-215- scf: Setup of Coulomb evaluator failed
+-214- type_latticepoint_update: Could not generate lattice points
+-213- xtb_calculator_singlepoint: Electronic structure method terminated
+-212- scf: Setup of Coulomb evaluator failed
+-211- type_latticepoint_update: Could not generate lattice points
+-210- xtb_calculator_singlepoint: Electronic structure method terminated
+-209- scf: Setup of Coulomb evaluator failed
+-208- type_latticepoint_update: Could not generate lattice points
+-207- xtb_calculator_singlepoint: Electronic structure method terminated
+-206- scf: Setup of Coulomb evaluator failed
+-205- type_latticepoint_update: Could not generate lattice points
+-204- xtb_calculator_singlepoint: Electronic structure method terminated
+-203- scf: Setup of Coulomb evaluator failed
+-202- type_latticepoint_update: Could not generate lattice points
+-201- xtb_calculator_singlepoint: Electronic structure method terminated
+-200- scf: Setup of Coulomb evaluator failed
+-199- type_latticepoint_update: Could not generate lattice points
+-198- xtb_calculator_singlepoint: Electronic structure method terminated
+-197- scf: Setup of Coulomb evaluator failed
+-196- type_latticepoint_update: Could not generate lattice points
+-195- xtb_calculator_singlepoint: Electronic structure method terminated
+-194- scf: Setup of Coulomb evaluator failed
+-193- type_latticepoint_update: Could not generate lattice points
+-192- xtb_calculator_singlepoint: Electronic structure method terminated
+-191- scf: Setup of Coulomb evaluator failed
+-190- type_latticepoint_update: Could not generate lattice points
+-189- xtb_calculator_singlepoint: Electronic structure method terminated
+-188- scf: Setup of Coulomb evaluator failed
+-187- type_latticepoint_update: Could not generate lattice points
+-186- xtb_calculator_singlepoint: Electronic structure method terminated
+-185- scf: Setup of Coulomb evaluator failed
+-184- type_latticepoint_update: Could not generate lattice points
+-183- xtb_calculator_singlepoint: Electronic structure method terminated
+-182- scf: Setup of Coulomb evaluator failed
+-181- type_latticepoint_update: Could not generate lattice points
+-180- xtb_calculator_singlepoint: Electronic structure method terminated
+-179- scf: Setup of Coulomb evaluator failed
+-178- type_latticepoint_update: Could not generate lattice points
+-177- xtb_calculator_singlepoint: Electronic structure method terminated
+-176- scf: Setup of Coulomb evaluator failed
+-175- type_latticepoint_update: Could not generate lattice points
+-174- xtb_calculator_singlepoint: Electronic structure method terminated
+-173- scf: Setup of Coulomb evaluator failed
+-172- type_latticepoint_update: Could not generate lattice points
+-171- xtb_calculator_singlepoint: Electronic structure method terminated
+-170- scf: Setup of Coulomb evaluator failed
+-169- type_latticepoint_update: Could not generate lattice points
+-168- xtb_calculator_singlepoint: Electronic structure method terminated
+-167- scf: Setup of Coulomb evaluator failed
+-166- type_latticepoint_update: Could not generate lattice points
+-165- xtb_calculator_singlepoint: Electronic structure method terminated
+-164- scf: Setup of Coulomb evaluator failed
+-163- type_latticepoint_update: Could not generate lattice points
+-162- xtb_calculator_singlepoint: Electronic structure method terminated
+-161- scf: Setup of Coulomb evaluator failed
+-160- type_latticepoint_update: Could not generate lattice points
+-159- xtb_calculator_singlepoint: Electronic structure method terminated
+-158- scf: Setup of Coulomb evaluator failed
+-157- type_latticepoint_update: Could not generate lattice points
+-156- xtb_calculator_singlepoint: Electronic structure method terminated
+-155- scf: Setup of Coulomb evaluator failed
+-154- type_latticepoint_update: Could not generate lattice points
+-153- xtb_calculator_singlepoint: Electronic structure method terminated
+-152- scf: Setup of Coulomb evaluator failed
+-151- type_latticepoint_update: Could not generate lattice points
+-150- xtb_calculator_singlepoint: Electronic structure method terminated
+-149- scf: Setup of Coulomb evaluator failed
+-148- type_latticepoint_update: Could not generate lattice points
+-147- xtb_calculator_singlepoint: Electronic structure method terminated
+-146- scf: Setup of Coulomb evaluator failed
+-145- type_latticepoint_update: Could not generate lattice points
+-144- xtb_calculator_singlepoint: Electronic structure method terminated
+-143- scf: Setup of Coulomb evaluator failed
+-142- type_latticepoint_update: Could not generate lattice points
+-141- xtb_calculator_singlepoint: Electronic structure method terminated
+-140- scf: Setup of Coulomb evaluator failed
+-139- type_latticepoint_update: Could not generate lattice points
+-138- xtb_calculator_singlepoint: Electronic structure method terminated
+-137- scf: Setup of Coulomb evaluator failed
+-136- type_latticepoint_update: Could not generate lattice points
+-135- xtb_calculator_singlepoint: Electronic structure method terminated
+-134- scf: Setup of Coulomb evaluator failed
+-133- type_latticepoint_update: Could not generate lattice points
+-132- xtb_calculator_singlepoint: Electronic structure method terminated
+-131- scf: Setup of Coulomb evaluator failed
+-130- type_latticepoint_update: Could not generate lattice points
+-129- xtb_calculator_singlepoint: Electronic structure method terminated
+-128- scf: Setup of Coulomb evaluator failed
+-127- type_latticepoint_update: Could not generate lattice points
+-126- xtb_calculator_singlepoint: Electronic structure method terminated
+-125- scf: Setup of Coulomb evaluator failed
+-124- type_latticepoint_update: Could not generate lattice points
+-123- xtb_calculator_singlepoint: Electronic structure method terminated
+-122- scf: Setup of Coulomb evaluator failed
+-121- type_latticepoint_update: Could not generate lattice points
+-120- xtb_calculator_singlepoint: Electronic structure method terminated
+-119- scf: Setup of Coulomb evaluator failed
+-118- type_latticepoint_update: Could not generate lattice points
+-117- xtb_calculator_singlepoint: Electronic structure method terminated
+-116- scf: Setup of Coulomb evaluator failed
+-115- type_latticepoint_update: Could not generate lattice points
+-114- xtb_calculator_singlepoint: Electronic structure method terminated
+-113- scf: Setup of Coulomb evaluator failed
+-112- type_latticepoint_update: Could not generate lattice points
+-111- xtb_calculator_singlepoint: Electronic structure method terminated
+-110- scf: Setup of Coulomb evaluator failed
+-109- type_latticepoint_update: Could not generate lattice points
+-108- xtb_calculator_singlepoint: Electronic structure method terminated
+-107- scf: Setup of Coulomb evaluator failed
+-106- type_latticepoint_update: Could not generate lattice points
+-105- xtb_calculator_singlepoint: Electronic structure method terminated
+-104- scf: Setup of Coulomb evaluator failed
+-103- type_latticepoint_update: Could not generate lattice points
+-102- xtb_calculator_singlepoint: Electronic structure method terminated
+-101- scf: Setup of Coulomb evaluator failed
+-100- type_latticepoint_update: Could not generate lattice points
+-99- xtb_calculator_singlepoint: Electronic structure method terminated
+-98- scf: Setup of Coulomb evaluator failed
+-97- type_latticepoint_update: Could not generate lattice points
+-96- xtb_calculator_singlepoint: Electronic structure method terminated
+-95- scf: Setup of Coulomb evaluator failed
+-94- type_latticepoint_update: Could not generate lattice points
+-93- xtb_calculator_singlepoint: Electronic structure method terminated
+-92- scf: Setup of Coulomb evaluator failed
+-91- type_latticepoint_update: Could not generate lattice points
+-90- xtb_calculator_singlepoint: Electronic structure method terminated
+-89- scf: Setup of Coulomb evaluator failed
+-88- type_latticepoint_update: Could not generate lattice points
+-87- xtb_calculator_singlepoint: Electronic structure method terminated
+-86- scf: Setup of Coulomb evaluator failed
+-85- type_latticepoint_update: Could not generate lattice points
+-84- xtb_calculator_singlepoint: Electronic structure method terminated
+-83- scf: Setup of Coulomb evaluator failed
+-82- type_latticepoint_update: Could not generate lattice points
+-81- xtb_calculator_singlepoint: Electronic structure method terminated
+-80- scf: Setup of Coulomb evaluator failed
+-79- type_latticepoint_update: Could not generate lattice points
+-78- xtb_calculator_singlepoint: Electronic structure method terminated
+-77- scf: Setup of Coulomb evaluator failed
+-76- type_latticepoint_update: Could not generate lattice points
+-75- xtb_calculator_singlepoint: Electronic structure method terminated
+-74- scf: Setup of Coulomb evaluator failed
+-73- type_latticepoint_update: Could not generate lattice points
+-72- xtb_calculator_singlepoint: Electronic structure method terminated
+-71- scf: Setup of Coulomb evaluator failed
+-70- type_latticepoint_update: Could not generate lattice points
+-69- xtb_calculator_singlepoint: Electronic structure method terminated
+-68- scf: Setup of Coulomb evaluator failed
+-67- type_latticepoint_update: Could not generate lattice points
+-66- xtb_calculator_singlepoint: Electronic structure method terminated
+-65- scf: Setup of Coulomb evaluator failed
+-64- type_latticepoint_update: Could not generate lattice points
+-63- xtb_calculator_singlepoint: Electronic structure method terminated
+-62- scf: Setup of Coulomb evaluator failed
+-61- type_latticepoint_update: Could not generate lattice points
+-60- xtb_calculator_singlepoint: Electronic structure method terminated
+-59- scf: Setup of Coulomb evaluator failed
+-58- type_latticepoint_update: Could not generate lattice points
+-57- xtb_calculator_singlepoint: Electronic structure method terminated
+-56- scf: Setup of Coulomb evaluator failed
+-55- type_latticepoint_update: Could not generate lattice points
+-54- xtb_calculator_singlepoint: Electronic structure method terminated
+-53- scf: Setup of Coulomb evaluator failed
+-52- type_latticepoint_update: Could not generate lattice points
+-51- xtb_calculator_singlepoint: Electronic structure method terminated
+-50- scf: Setup of Coulomb evaluator failed
+-49- type_latticepoint_update: Could not generate lattice points
+-48- xtb_calculator_singlepoint: Electronic structure method terminated
+-47- scf: Setup of Coulomb evaluator failed
+-46- type_latticepoint_update: Could not generate lattice points
+-45- xtb_calculator_singlepoint: Electronic structure method terminated
+-44- scf: Setup of Coulomb evaluator failed
+-43- type_latticepoint_update: Could not generate lattice points
+-42- xtb_calculator_singlepoint: Electronic structure method terminated
+-41- scf: Setup of Coulomb evaluator failed
+-40- type_latticepoint_update: Could not generate lattice points
+-39- xtb_calculator_singlepoint: Electronic structure method terminated
+-38- scf: Setup of Coulomb evaluator failed
+-37- type_latticepoint_update: Could not generate lattice points
+-36- xtb_calculator_singlepoint: Electronic structure method terminated
+-35- scf: Setup of Coulomb evaluator failed
+-34- type_latticepoint_update: Could not generate lattice points
+-33- xtb_calculator_singlepoint: Electronic structure method terminated
+-32- scf: Setup of Coulomb evaluator failed
+-31- type_latticepoint_update: Could not generate lattice points
+-30- xtb_calculator_singlepoint: Electronic structure method terminated
+-29- scf: Setup of Coulomb evaluator failed
+-28- type_latticepoint_update: Could not generate lattice points
+-27- xtb_calculator_singlepoint: Electronic structure method terminated
+-26- scf: Setup of Coulomb evaluator failed
+-25- type_latticepoint_update: Could not generate lattice points
+-24- xtb_calculator_singlepoint: Electronic structure method terminated
+-23- scf: Setup of Coulomb evaluator failed
+-22- type_latticepoint_update: Could not generate lattice points
+-21- xtb_calculator_singlepoint: Electronic structure method terminated
+-20- scf: Setup of Coulomb evaluator failed
+-19- type_latticepoint_update: Could not generate lattice points
+-18- xtb_calculator_singlepoint: Electronic structure method terminated
+-17- scf: Setup of Coulomb evaluator failed
+-16- type_latticepoint_update: Could not generate lattice points
+-15- xtb_calculator_singlepoint: Electronic structure method terminated
+-14- scf: Setup of Coulomb evaluator failed
+-13- type_latticepoint_update: Could not generate lattice points
+-12- xtb_calculator_singlepoint: Electronic structure method terminated
+-11- scf: Setup of Coulomb evaluator failed
+-10- type_latticepoint_update: Could not generate lattice points
+-9- xtb_calculator_singlepoint: Electronic structure method terminated
+-8- scf: Setup of Coulomb evaluator failed
+-7- type_latticepoint_update: Could not generate lattice points
+-6- xtb_calculator_singlepoint: Electronic structure method terminated
+-5- scf: Setup of Coulomb evaluator failed
+-4- type_latticepoint_update: Could not generate lattice points
+-3- landscape_engine_energy_gradient: SCC did not converge at the current geometry; the energy and gradient are discarded
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+ERROR STOP 
+
+Error termination. Backtrace:
+#0  0x1069692218c2 in ???
+#1  0x1069692223b9 in ???
+#2  0x106969223727 in ???
+#3  0x620b9fdda591 in ???
+#4  0x620b9fce09a7 in ???
+#5  0x620b9fcc500a in ???
+#6  0x106968e6c249 in ???
+#7  0x106968e6c304 in ???
+#8  0x620b9fcc5090 in ???
+#9  0xffffffffffffffff in ???
+abnormal termination of xtb
+-2- xtb_calculator_singlepoint: Electronic structure method terminated
+-1- scf: Self consistent charge iterator did not converge
+########################################################################

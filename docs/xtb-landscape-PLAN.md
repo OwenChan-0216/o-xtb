@@ -348,6 +348,8 @@ src/landscape/
 | 去平动转动 | `detrotra`(`src/detrotra.f90:18`)、`axis3`(`src/axis_trafo.f90:377`)、`rmrottr`(`src/rmrottr.f90:19`) | `coords/cartesian.f90` |
 | RMSD | `xtb_lsrmsd::rmsd`（`src/ls_rmsd.f90:33`） | `coords/cartesian.f90` |
 | 约束势/扫描 | `constrain_pot`(`src/constrain_pot.f90:313`)、`constrain_hess`(`:331`)、`qpothess2`(`:88`)、`relaxed_scan`(`src/scan_driver.f90:21`) | `scan/*` |
+| 约束参数对象 | `xtb_type_setvar::constr_setvar`(`src/type/setvar.f90:135`)、`xtb_scanparam::constrain_all_bonds`(`src/scanparam.f90:322`，仅取 `bond_factor = 1.2` 作为连通性阈值) | `scan/*` |
+| 角度/二面角约定 | `xtb_basic_geo::bangl`(`src/basic_geo.f90:502`) / `valijkl`(`:245`) | `scan/*` |
 | 路径插值 | `cqpath_*`（`src/cqpath.f90:32,128,270`） | `path/string.f90` |
 | 统一松弛入口 | `geometry_optimization`（`src/geoopt_driver.f90:23`） | `scan/relax_scan.f90`(可选) |
 | 轨迹写入 | `writeMolecule`（`src/io/writer.f90:36`） | `types/log.f90` |
@@ -623,8 +625,8 @@ M0/M1 **不**添加空的 stub 类型（避免死代码 / 占位实现）；"预
 | `bidirectional` | — | `.true.` | 正反双向扫描并报告滞回（**新增**，理由见 R04 §4.6 失效模式 1） |
 | `sequential` | — | `.true.` | ndim=1 时用 sequential 语义；ndim=2 时改为笛卡尔积网格 |
 | `warm_start` | — | `.true.` | 每个扫描点从前一点几何热启动（R04 §4 工程建议 (b)） |
-| `spring_expo` | — | 2.0 | 约束势指数（xtb `springexpo`，`src/scanparam.f90:36`） |
-| `constraint_fc` | hartree/bohr² | 0.5 | 约束力常数（xtb `fcconstr` 默认；`src/scanparam.f90:77`） |
+| `spring_expo` | — | 2.0 | 约束势指数，**仅对 distance 生效**：xtb `constrain_pot` 中角度用 `fc·(θ−θ0)²`、二面角用 `fc·(1−cos(φ−φ0))`，`expo` 只进入距离项（`src/constrain_pot.f90:196-212, 253-258, 282-312`）。二面角这一**有界**周期形式在 Δφ = 180° 处**恢复力矩为零**（仅在 90° 处达到最大值 `fc`，势垒上界 `2fc`），因此被转坐标接近反式时的实际刚度远小于名义 `fc`——这是“二面角扫描比距离扫描更容易漂移”的原因，也是 spring_expo 对它无效的直接后果（实测见 `docs/_landscape-recon/14-m2-validation-experiments.md` §4.2） |
+| `constraint_fc` | hartree/bohr²（距离）或 hartree（角/二面角） | 0.5 | 约束力常数。**0.5 不是 xtb 既有默认值**：`src/scanparam.f90:77` 实测为 `fcconstr = 0.05_wp`（初版计划此处误读，M2 复核实测更正，见 `docs/_landscape-recon/14-m2-validation-experiments.md` §4）。保留 0.5 的理由：有限弹簧势会让约束坐标产生系统偏移，实测（1,2-二氯乙烷二面角，GFN2，24° 网格，`normal` 档）fc=0.05 时最大偏移 6.84°、势垒 2.731 kcal/mol；fc=0.5 时 0.82° / 2.864 kcal/mol；fc≥2 收敛到 0.04° / 2.873 kcal/mol（极限值），即 fc=0.5 的势垒误差 0.33%、fc=0.05 为 4.9%。要与既有 `--scan`（`xtbscan.log` 工具链）逐点对齐时显式使用 `--lscan-fc 0.05` |
 
 #### 5.3.6 `TTsSettings`（含子块）
 
@@ -810,7 +812,7 @@ end type
 | opt | `xtbopt.xyz` | 最终优化几何 | **沿用现有命名**（`src/prog/main.F90:1129-1136`） |
 | opt | `xtbopt.log` | 每步轨迹 | 沿用现有命名 |
 | opt | `xtb.trj` | 轨迹（`fileType%trj` 语义） | 沿用现有命名 |
-| scan | `xtbscan.log` | 每帧几何 + `energy=Etot−Efix`（去偏能量） | **沿用现有**（`src/scan_driver.f90:98,129`）；新 driver 仍写该名以保证兼容 |
+| scan | `xtbscan.log` | 每帧几何 + `energy=Etot−Efix`（去偏能量） | **沿用现有**（`src/scan_driver.f90:98,129`）；新 driver 仍写该名以保证兼容。**几何被丢弃的扫描点不写帧**（既无能量，几何也可能是未评估的零帧）；此时 stdout 表里该行能量为 `NaN`、`conv = F`，文件以 `status='replace'` 打开以免残留上一次运行的帧 |
 | scan | `xtbscan_2d.xyz`（ndim=2 时） | 网格帧（comment 带两个坐标值） | 新增 |
 | ts (prfo/bprfo/dimer) | `xtbts.xyz`（最终 TS）、`xtbts.log`（轨迹） | 几何 + `n_imag` | 新增 |
 | ts (neb/cineb/autoneb/string) | `path.xyz` | `n_images` 帧，comment 含 `energy` 与帧号 | 与 R05 §3.4 一致 |
@@ -822,6 +824,12 @@ end type
 **统一规则**：所有文件在 `env%unit` 打印一次
 `wrote <filename>`；文件句柄用 `open_file`/`close_file`（xtb 既有 `filetools`），
 失败 → `env%error`（不 `stop`）。
+
+**缺失值的表示（M2 复核轮确定）**：能量/梯度被引擎丢弃的量化值一律以 **NaN**
+表示（`xtb_landscape_settings::landscape_missing_value`），**不得**写成 `0.0`：
+`0.0` 是一个完全可信的能量值（剖面里一个 `0.0` 点会在脚本中静默存活），而 NaN 会被
+任何 `isnan`/比较检查抓住。规则与实测（同一剖面里 `0.0` 与 `-5.07 Eh` 相邻）见
+`docs/_landscape-recon/14-m2-validation-experiments.md` §5.3 与 `16-m2-fix-report.md`。
 
 ---
 
@@ -1020,6 +1028,11 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
     并在 `testsuites = [...]` 中追加 `new_testsuite(...)`。
   - `test/unit/meson.build:34-66` 的 `tests` 列表同步（无法在本机验证，见 §10 R-16）。
 - 命名风格对齐现有：`new_unittest("single-atom-ancopt", test_single_atom_ancopt)`（R02 §7.5）。
+- **ctest 测试名必须全局唯一**：`xtb/<suite>` 形式的单元套件名与 CLI 测试名撞名时，
+  CMake 会**静默丢掉先注册的那一个**。M2 曾把 CLI 冒烟测试也叫 `xtb/landscape-scan`，
+  导致 23 个 scan 单元用例从未在 ctest 下跑过（在 `test/unit/CTestTestfile.cmake` 里
+  只剩 `cmake -P` 那一行）；M2 复核轮把 CLI 测试改名为 `xtb/landscape-scan-cli`。
+  新增测试后用 `ctest -N -R landscape` 核对名字与数量。
 
 ---
 
@@ -1089,19 +1102,33 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 
 **M1 实际 LOC ≈ 2700（实现 + 测试）。**
 
-### 9.3 M2：Scan
+### 9.3 M2（已实现）：Scan
 
-| 模块 | 文件 | LOC 估 |
-|---|---|---|
-| 约束松弛内核 | `scan/relax_scan.f90` | 300 |
-| 1D | `scan/scan1d.f90` | 350 |
-| 2D | `scan/scan2d.f90` | 320 |
-| 任务 driver | `tasks/scan.f90` | 180 |
-| 测试 | `test/unit/test_landscape_scan.f90` | 400 |
+| 模块 | 文件 | LOC 实/估 | 状态 |
+|---|---|---|---|
+| 约束松弛内核 | `scan/relax_scan.f90` | 1139 / 300 | ✅ 已交付（含 rigid 片段守卫 + drift 判据 + 回绕函数） |
+| 1D | `scan/scan1d.f90` | 473 / 350 | ✅ 已交付 |
+| 2D | `scan/scan2d.f90` | 363 / 320 | ✅ 已交付 |
+| 任务 driver | `tasks/scan.f90` | 352 / 180 | ✅ 已交付 |
+| 测试 | `test/unit/test_landscape_scan.f90` | 2098 / 400 | ✅ 已交付（27 个 case） |
 
 交付物：`--lscan`；`xtbscan.log` 兼容输出；双向扫描 + 滞回报告；约束残差报告。
-验收：实验 #11（滞回量化）；1D/2D 网格点计数与坐标正确性；与既有 `relaxed_scan` 在同输入下能量剖面一致（容差 1e-6 hartree）。
-**LOC ≈ 1550。**
+**M2 验收测试**：`ctest -R landscape` 25/25 全绿（其中 `xtb/landscape-scan` 含 27 个 case）；+ `ctest -R 'Singlepoint|GFN|model-hessian|optimizer|Argparser|CAPI'` 12/12 无回归。
+验收（M2 复核轮改写为可达到的形式；三项 MEDIUM 于终轮修完，见 `docs/_landscape-recon/18-m2-final-fix-report.md`）：
+
+1. 实验 #11（滞回量化）：relaxed 双向扫描的滞回随收敛档收紧单调下降（默认档 12° 网格实测 5.63e−6 Eh）；
+2. 1D/2D 网格点计数与**坐标正确性**（分模式，均可证伪）：
+   - **rigid**：`wrapped(reached − target) == 0`（构造是纯几何的，容差 1e−8 bohr / 1e−8 rad，即点级运行期判据 `xtb_landscape_scan_relax::rigid_drift_tol`；1D 超限即判错，2D 因两次刚体操作互相扰动只告警）；
+   - **relaxed**：`reached − target` 等于约束弹簧的**已知**偏移 `F_phys(q*)/(2 fc)`（§5.3.5 实测：fc=0.5 约 0.82°、fc=0.05 约 6.84°），由 `reached` 列直接读出，**不要求为 0**；
+   stdout 表打印 `value/reached/drift` 三列，其中 **drift = wrapped(reached − value)**，回绕到 [−180°, 180°)，因此跨越 ±180° 的扫描不再打印 ±360° 的假漂移（2D 路径已有 requested/value 两组）；
+3. **在同一约束残差水平下**，与参考扫描（`--scan`/`relaxed_scan`）的能量剖面一致（容差 1e-6 hartree）——**两侧的 `constraint_fc` 必须显式设定并对齐**（本套件默认 0.5，xtb `fcconstr` 默认 0.05，见 §5.3.5）；
+4. rigid 扫描必须**无滞回**（纯几何构造 ⇒ 正反两支逐点互逆，滞回 ≤ 1e−14 Eh）且逐点 `wrapped(reached − target) == 0`（容差 1e−8 bohr / 1e−8 rad，同第 2 项的 `rigid_drift_tol`）。
+
+**收敛档与容差（实测）**：两侧默认档下第 3 项**未达成**：水分子 distance 5 点最大 1.316e−5 Eh、H₂O₂ 二面角 13 点 4.830e−6 Eh；两侧都收紧到 `vtight` 后 H₂O₂ 6.672e−7 Eh（**达成**）、水分子 1.615e−6 Eh（差 1.6 倍）。根因是**参照实现 ANCopt 自身**在 default↔vtight 之间漂移 3.96e−6 Eh（与两侧差异同量级），不是本套件的问题（本套件侧约束残差 vtight 已 ≤1e−5 Eh/rad）。**实验基准纪律：scan / Hessian 相关实验一律 `OMP_NUM_THREADS=1`**（实测同一 2 点扫描 0.13 s vs 44.12 s，340× 反向加速比；见 §附录 A）。
+**rigid 扫描（M2 复核轮修复，见 `docs/_landscape-recon/16-m2-fix-report.md`）**：二面角 rigid 点的旋转片段必须按**中心键 `j–k`** 切割（取含第三个原子 `k` 的远侧片段，它包含末端原子 `l` 及其取代基）。按 `l–k` 切割会把片段退化成 `{l}`，取代基留在原地、连通性一旦跨过切割就吞掉 `i` 侧，被扫二面角在第 7 点起**冻结**（实测 DCE 12° 扫描：滞回 0.1295 Eh = 81 kcal/mol，纯属伪影；修复后同一扫描 1.78e−14 Eh，逐点 drift < 5e−9°）。
+**rigid 运行期判据（M2 终轮，见 `docs/_landscape-recon/18-m2-final-fix-report.md`）**：切割若切不出两侧（`moving(blocked)` 为真：环、非成键切割、跨切割伪桥接）一律 `env%error` + 失败，不再静默继续；每个 rigid 点另按 `rigid_drift_tol = 1e−8`（bohr / rad）检查 `wrapped(reached − target)`，1D 超限即判错、2D 只告警（两次刚体操作互相扰动是 2D rigid 的固有性质）。rigid 点的漂移判据依赖 `landscape_scan_coord_wrap_delta`，后者也是 1D 表 `drift` 列的定义。
+**Hessian（留待 M3 的策略项）**：`--lscan-method rfo` 会为**每个**扫描点付 6N 次单点建数值 Hessian，而 `--lopt-hessian` 只作用于 `lset`；扫描目前**没有** `--lscan-hessian` 开关（`landscape_scan_settings%hessian_source` 继承默认 `numerical`，只能从 API 改）。加该开关与 M3 的 `file` provider 一并处理。
+**LOC ≈ 4400（实现 2330 + 测试 2100）。**
 
 ### 9.4 M3：Hessian / freq / thermo
 
@@ -1243,7 +1270,7 @@ grep -rn "set%mode_extrun = p_ext_" src/set_module.f90   # :958,:978 —— p_ex
 | 常量 | 值 | 里程碑 | 用途 | 状态 |
 |---|---|---|---|---|
 | `p_run_lopt` | 9 | **M0/M1** | 新版极小化套件（`--lopt`） | ✅ 实现在 `src/setparam.f90`（`p_run_omd = 8` 之后） |
-| `p_run_lscan` | 12 | M2 | 扫描（`--lscan`） | ❌ 未实现 |
+| `p_run_lscan` | 12 | **M2** | 扫描（`--lscan`） | ✅ 实现在 `src/setparam.f90`（`p_run_screen = 11` 之后） |
 | `p_run_lts` | 19 | M4 | 过渡态（`--lts`） | ❌ 未实现 |
 | `p_run_lirc` | 20 | M6 | IRC（`--lirc`） | ❌ 未实现 |
 
@@ -1272,24 +1299,46 @@ grep -rn "set%mode_extrun = p_ext_" src/set_module.f90   # :958,:978 —— p_ex
 
 ### 12.3 `src/prog/main.F90`【已实现】
 
-**（a）runtyp 分派**：主分派区（在 `anyopt` 块之后、VIP/VEA 之前）新增：
+**（a）runtyp 分派**：主分派区（在 `anyopt` 块之后、VIP/VEA 之前）新增
+（以下为 `src/prog/main.F90:928-961` 的**实际**代码，M2 复核轮核对了本节）：
 
 ```fortran
-      ! --------------------------- landscape suite (src/landscape)
+      ! landscape suite (minimisation with the algorithms of src/landscape)
       if (set%runtyp == p_run_lopt) then
+         lset%engine%acc = set%acc          ! CLI 的 --acc 同步到引擎控制对象
          call start_timing(3)
          call run_landscape(env, mol, chk, calc, lset, lres)
          call stop_timing(3)
+         ! 回写：TOTAL ENERGY 行/xtbout.json 读的是 res，几何由任务层写
+         res%e_total = lres%energy
+         res%gnorm   = lres%gnorm
+         call env%checkpoint("Landscape task terminated")
+      end if
+
+      ! landscape suite (scan with the algorithms of src/landscape)
+      if (set%runtyp == p_run_lscan) then
+         lsset%engine%acc = set%acc
+         call start_timing(3)
+         call run_landscape(env, mol, chk, calc, lsset, lres)
+         call stop_timing(3)
+         res%e_total = lres%energy          ! 最低扫描点的去偏能量
+         res%gnorm   = lres%gnorm
          call env%checkpoint("Landscape task terminated")
       end if
 ```
 
-其中 `lset`（`landscape_opt_settings`）/`lres`（`landscape_result`）在 `xtbMain` 声明区加入，
-并通过新增的 `use` 语句引入（`use xtb_landscape, only : run_landscape`、
-`use xtb_landscape_settings, only : landscape_opt_settings, landscape_opt_algorithm_from_name, landscape_conv_level_known`、
+两处 `%engine%acc = set%acc` 是必需的：`xtb_single::singlepoint` 虽然收下了 `acc` 形参却**丢弃**
+它，只有 `calc%accuracy` 真正生效（`docs/_landscape-recon/12-*.md` R2-02）。同理
+`engine%maxiter` **不会**传到 SCC（`singlepoint` 只转发 `printlevel`/`restart`），
+要限制 SCF 迭代数必须设 `calc%maxiter`（单元测试 `scan-task-no-energy` 即用此法）。
+
+其中 `lset`（`landscape_opt_settings`）/`lsset`（`landscape_scan_settings`）/`lres`
+（`landscape_result`）在 `xtbMain` 声明区加入，并通过新增的 `use` 语句引入
+（`use xtb_landscape, only : run_landscape`；
+`use xtb_landscape_settings, only : landscape_opt_settings, landscape_scan_settings, …`；
 `use xtb_landscape_results, only : landscape_result`）。
-`lset` 由 `parseArguments`（新增 `intent(inout)` 形参）填充，无需 xcontrol handler（§12.4）。
-另外 `p_run_lopt` 必须加入参数文件选择块的 `select case (set%runtyp)` 列表，
+`lset`/`lsset` 由 `parseArguments`（新增 `intent(inout)` 形参）填充，无需 xcontrol handler（§12.4）。
+另外 `p_run_lopt`/`p_run_lscan` 必须加入参数文件选择块的 `select case (set%runtyp)` 列表，
 并在 `finalize_xtb` 中加 `prtiming(3, 'landscape optimizer')`。
 
 **（b）CLI flag**：主 flag 循环的 `select case(flag)`（`src/prog/main.F90:1378-2070`，
@@ -1301,7 +1350,9 @@ grep -rn "set%mode_extrun = p_ext_" src/set_module.f90   # :958,:978 —— p_ex
 | `--lopt` | `set_runtyp('lopt')`，不解桁任何位置参数（避免吃掉几何文件名）；算法/收敛档用下面两个 flag | ✅ **已实现** |
 | `--lopt-engine <sd\|cg\|lbfgs\|bfgs\|diis\|rfo>` | 设 `lset%algorithm`（`landscape_opt_algorithm_from_name`）；未识别的名字 → `env%error` 并终止（exit 1） | ✅ **已实现** |
 | `--lopt-level <superloose\|loose\|normal\|tight\|vtight>` | `lset%set_conv_level`；未识别的档名 → `env%error` | ✅ **已实现** |
-| `--lscan` / `--lts` / `--lirc` / `--ljson` | —— | ❌ 未实现（后续里程碑） |
+| `--lopt-hessian <numerical\|model>` | 设 `lset%hessian_source`（`landscape_hessian_source_known` 校验）；`model` = Lindh-D2 模型 Hessian，作为 BFGS 的初始 Hessian 与 RFO 的 trust-region Hessian；未识别名字 → `env%error` | ✅ **M2 复核轮已实现**（R2-09 遗留项） |
+| `--lscan` | `set_runtyp('lscan')`，不解桁位置参数；全部扫描参数走 `--lscan-*` | ✅ **M2 已实现**（见 §12.10） |
+| `--lts` / `--lirc` / `--ljson` | —— | ❌ 未实现（后续里程碑） |
 
 **与初版计划的差异**：`--lopt` **不**接受位置参数（原计划为 `--lopt [level]`）。原因：
 `TArgParser%nextArg` 无 peek，无条件消费会让 `xtb --lopt water.xyz` 把文件名当作 level 吃掉；
@@ -1446,6 +1497,45 @@ landscape task terminated: converged
 
 ---
 
+### 12.10 M2（scan）实际 CLI 接线
+
+`--lscan` 与 `--lopt` 同构：flag 本身不解桁任何位置参数，所有参数用独立的
+`--lscan-*` flag。全部名字实测存在于 `src/prog/main.F90` 的 `select case(flag)`，
+`xtb --help | grep lscan` 有输出（`src/xhelp.f90`）。
+
+| flag | 语义 | 对应 settings 字段 |
+|---|---|---|
+| `--lscan` | 选中 `p_run_lscan`（runtyp 12） | — |
+| `--lscan-coord <distance\|angle\|dihedral>` | 第 1 个扫描坐标类型 | `coord(1)%ctype` |
+| `--lscan-atoms <i[,j[,k[,l]]]>` | 第 1 个坐标的 1-based 原子编号（逗号/空格分隔） | `coord(1)%atoms(1:4)` |
+| `--lscan-step <x>` | 第 1 个坐标步长，**Å（distance）/度（angle、dihedral）**，解析末尾统一换算为 a.u. | `coord(1)%step` |
+| `--lscan-nstep <n>` | 第 1 个坐标步数（必须 ≥ 1） | `coord(1)%nstep` |
+| `--lscan-coord2` / `--lscan-atoms2` / `--lscan-step2` / `--lscan-nstep2` | 同上，第 2 个坐标；**任一出现即置 `ndim = 2`**（笛卡尔积网格） | `coord(2)%*`、`ndim` |
+| `--lscan-ndim <1\|2>` | 显式设置维数 | `ndim` |
+| `--lscan-mode <relaxed\|rigid>` | 松弛 / 刚体 | `mode` |
+| `--lscan-method <sd\|cg\|lbfgs\|bfgs\|diis\|rfo>` | 内层极小化算法 | `method` |
+| `--lscan-level <superloose\|loose\|normal\|tight\|vtight>` | 内层收敛档 | `g_max/g_rms/d_max/d_rms` |
+| `--lscan-restart <off\|pin\|warm>` | 波函数策略（**不是**几何热启动） | `engine%restart_mode` |
+| `--lscan-oneway` | 只扫正向（关闭反向支与滞回报告） | `bidirectional = .false.` |
+| `--lscan-cold-start` | 每点从输入几何出发（关闭几何热启动） | `warm_start = .false.` |
+| `--lscan-fc <hartree/bohr^2>` | 约束势力常数 | `constraint_fc` |
+| `--lscan-expo <x>` | 约束势指数 | `spring_expo` |
+
+**单位换算位置**：`--lscan-step` 在 flag 循环结束后（`parseArguments` 末尾）统一
+按最终确定的 `ctype` 换算（Å→bohr 用 `aatoau`，度→rad 用 `pi/180`），因此
+`--lscan-coord` 与 `--lscan-step` 的先后顺序不影响结果。settings 内部一律 a.u.。
+
+**输出**：`xtbscan.log`（受 `--namespace` 影响，与既有 `src/scan_driver.f90:98,129`
+一致；每帧 = 几何 + `energy = Etot − Efix` 去偏能量；**能量被丢弃的点不写帧**，
+见 §5.5），stdout 打印逐点表（**请求值 / 到达值 / 漂移** / 去偏能量 / 约束残差 /
+内层步数 / 收敛标记；无能量的点为 `NaN` + `F`）、滞回报告与最大跳变位置。
+
+`landscape_scan` 对每个扫描点写盘与报告；`result%energy` = 最低点去偏能量，
+`result%gnorm` = 该点的约束残差，`mol%xyz` 回写为最低点几何（`main.F90` 因此
+打印的是最低点而非初始几何）。
+
+---
+
 ## 附录 A：环境约束（已实测）
 
 | 项 | 实测值 | 对本计划的影响 |
@@ -1456,6 +1546,14 @@ landscape task terminated: converged
 | mctc-lib | 本机无，CMake 经 FetchContent 联网拉取 v0.5.1 | 构建需网络；已验证可行 |
 | 构建目录 | 一律 `/tmp/...` | 仓库内**不得**出现 `build/` |
 | `git status` | 仅 `?? docs/` | 本轮交付物只有文档 + 允许的最小既有文件改动 |
+| `OMP_NUM_THREADS` | 未设置时 = 机器核数（本机 8） | **scan / Hessian 相关实验、基准与测试一律 `OMP_NUM_THREADS=1`**：实测同一 2 点扫描 0.13 s（1 线程）vs 44.12 s（8 线程，340× 反向加速，AGENTS §6.8）；`ctest -R landscape` 由 38 s 降到 10.6 s，其中 `xtb/landscape-scan`（单元套件）从 19.6 s 降到 0.13 s、`xtb/landscape-scan-failed-point` 从 28 s 降到 0.11 s；所有跑引擎的 landscape CLI 检查与单元套件已在 CMake/meson 两侧固定单线程。并行只用于「多进程跑不同扫描点」 |
+
+**M2 复核轮的验证命令**（实现阶段；不得跑全量 ctest）：
+
+```bash
+ctest --test-dir /tmp/xtb-land/build -R landscape                       # 25/25, 12.6 s
+ctest --test-dir /tmp/xtb-land/build -R 'Singlepoint|GFN|model-hessian|optimizer|Argparser|CAPI'   # 12/12
+```
 
 **M0/M1 必须执行的验证命令**（实现阶段）：
 
