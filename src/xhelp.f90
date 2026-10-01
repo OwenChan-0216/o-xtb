@@ -344,6 +344,55 @@ subroutine help(iunit)
    "--lscan-expo VALUE",&
    "    exponent of the constraint potential (default 2.0)",&
    "",&
+   "--lscan-max-steps N",&
+   "    step budget of the inner relaxation of every scan point (default 256)", &
+   "",&
+   "--lscan-hessian SOURCE",&
+   "    Hessian backend of the scan points, one of numerical (default), model or file",&
+   "",&
+   "--lscan-hessian-file NAME",&
+   "    file read by --lscan-hessian file (TURBOMOLE Hessian layout)", &
+   "",&
+   "--lopt-hessian-file NAME",&
+   "    file read by --lopt-hessian file (TURBOMOLE Hessian layout)", &
+   "",&
+   "--lvib",&
+   "    harmonic frequencies, normal modes and thermochemistry with the landscape task", &
+   "    suite (src/landscape); writes vibspectrum, vib_normal_modes, g98.out and hessian", &
+   "    with the names and formats of --hess", &
+   "",&
+   "--lvib-hessian SOURCE",&
+   "    Hessian backend of the frequency task, one of numerical (default, central", &
+   "    differences of the electronic gradient), model (Lindh-D2) or file (read the", &
+   "    Hessian of an earlier run)", &
+   "",&
+   "--lvib-hessian-file NAME",&
+   "    file read by --lvib-hessian file (TURBOMOLE Hessian layout)", &
+   "",&
+   "--lvib-step VALUE",&
+   "    finite difference step of the numerical Hessian in bohr (default 0.005)", &
+   "",&
+   "--lvib-sccacc VALUE",&
+   "    SCC accuracy of the displaced single points of the numerical Hessian (default 0.3)", &
+   "",&
+   "--lvib-odlr",&
+   "    request the ODLR approximation; not implemented, the run reports the request", &
+   "",&
+   "--lvib-no-project",&
+   "    do not project the translations and rotations out of the Hessian", &
+   "",&
+   "--lvib-temp VALUE",&
+   "    temperature of the thermodynamic table in K (default 298.15)", &
+   "",&
+   "--lvib-rotor-cutoff VALUE",&
+   "    rotor cutoff of the quasi-RRHO entropy treatment in cm^-1 (default 50.0)", &
+   "",&
+   "--lvib-imag-cutoff VALUE",&
+   "    imaginary frequency cutoff in cm^-1 (default -20.0, needs the minus sign)", &
+   "",&
+   "--lvib-freq-scal VALUE",&
+   "    frequency scaling factor of the thermochemistry (default 1.0)", &
+   "",&
    "--cycles [int]",&
    "    maximum number of optimization cycles.",&
    "",&

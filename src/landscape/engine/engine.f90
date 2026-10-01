@@ -75,6 +75,7 @@ module xtb_landscape_engine
    use xtb_type_molecule, only : TMolecule
    use xtb_type_restart, only : TRestart
    use xtb_type_calculator, only : TCalculator
+   use xtb_xtb_calculator, only : TxTBCalculator
    use xtb_type_data, only : scc_results
    use xtb_single, only : singlepoint
    use xtb_landscape_settings, only : landscape_engine_control, &
@@ -281,15 +282,43 @@ subroutine engine_set_calculator(self, calc)
 
    if (allocated(self%calc)) deallocate(self%calc)
    allocate(self%calc, source=calc)
-   ! The engine control is the single source of truth for the SCC accuracy:
-   ! `xtb_single::singlepoint` receives `acc` as an argument but drops it, so
-   ! the value has to be pushed into the calculator itself here
-   ! (`landscape_engine_control%acc`).
+   ! The engine control is the single source of truth for the SCC accuracy and
+   ! the electronic temperature: `xtb_single::singlepoint` receives `acc` and
+   ! `et` as arguments but drops both (`acc` never reaches the calculator,
+   ! `et` is ignored, `src/single.f90:52`), so the values have to be pushed
+   ! into the calculator itself here (`landscape_engine_control%acc` and
+   ! `%etemp`).
    self%calc%accuracy = self%ctrl%acc
+   call push_calculator_etemp(self)
    self%ref_valid = .false.
    call self%invalidate()
 
 end subroutine engine_set_calculator
+
+!> Push the electronic temperature of the engine control into the calculator.
+!>
+!> An xTB calculator uses its **own** `etemp` field (`scf(...)` is called with
+!> `self%etemp`, `src/xtb/calculator.f90:258`), which the constructor copies
+!> once from the global `set%etemp` (`src/xtb/calculator.f90:144`) because the
+!> single point driver of the suite cannot forward it.  Without this push the
+!> control field would be dead and a caller that sets
+!> `landscape_engine_control%etemp` would be silently ignored (measured in
+!> `docs/_landscape-recon/21-m3-validation-experiments.md`, F1).
+!>
+!> Only `TxTBCalculator` carries an electronic temperature; the other
+!> calculators (GFN-FF, external codes) have no such field and keep their own
+!> settings untouched.  The value is verified from the outside by
+!> `engine_report`, which prints it next to the SCC accuracy.
+subroutine push_calculator_etemp(self)
+   !> Engine
+   class(landscape_engine), intent(inout) :: self
+
+   select type (calc => self%calc)
+   type is (TxTBCalculator)
+      calc%etemp = self%ctrl%etemp
+   end select
+
+end subroutine push_calculator_etemp
 
 !> Return a copy of the attached calculator, if any.
 subroutine engine_get_calculator(self, calc)
@@ -755,6 +784,16 @@ subroutine engine_report(self, unit)
    ! makes a missing CLI sync visible from the outside.
    write(unit, '(1x,a,f15.6)') "landscape engine: SCC accuracy       ", &
       & self%ctrl%acc
+   ! The electronic temperature actually in effect: read back from the
+   ! calculator (`push_calculator_etemp`), so a control value that did not
+   ! reach it shows up here.
+   if (allocated(self%calc)) then
+      select type (calc => self%calc)
+      type is (TxTBCalculator)
+         write(unit, '(1x,a,f12.3,a)') "landscape engine: etemp              ", &
+            & calc%etemp, " K"
+      end select
+   end if
    if (allocated(self%hp)) then
       write(unit, '(1x,a,a)') "landscape engine: hessian source     ", &
          & self%hp%name

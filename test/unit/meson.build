@@ -57,6 +57,7 @@ tests = [
   'landscape-optimize-xtb',
   'landscape-failure',
   'landscape-scan',
+  'landscape-vib',
   'latticepoint',
   'molecule',
   'model-hessian',
@@ -99,10 +100,11 @@ tester = executable(
 )
 
 foreach t : tests
-  if t == 'landscape-optimize-xtb' or t == 'landscape-scan'
+  if t == 'landscape-optimize-xtb' or t == 'landscape-scan' or t == 'landscape-vib'
     # bitwise reproducibility of the `off` restart policy needs a fixed thread
-    # count (OpenMP reduction ordering changes the last bits); the scan suite
-    # additionally runs 340x faster and therefore uses one thread as well
+    # count (OpenMP reduction ordering changes the last bits); the scan and
+    # frequency suites additionally run 340x faster with one thread (they
+    # evaluate many small single points)
     test(t, tester, args: t, suite: 'unit', env: xtbenv + ['OMP_NUM_THREADS=1'])
   else
     test(t, tester, args: t, suite: 'unit', env: xtbenv)
@@ -220,9 +222,79 @@ test('landscape level unknown', python, env: xtbenv, args: [
   landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
   'Unknown landscape convergence level', '--gfn', '2', '--lopt', '--lopt-level', 'bogus',
 ])
+# the frequency task: the four `--hess` output files, the `res` write-back and
+# the read back of the `hessian` file through the file provider
+test('landscape vib cli', python, env: landscape_env, args: [
+  landscape_cli_check, 'vib', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-vib',
+])
+
+# the `hessian` file carries `--namespace` once and is read back by the file
+# provider through the same name
+# (mirrors `xtb/landscape-vib-namespace`)
+test('landscape vib namespace', python, env: landscape_env, args: [
+  landscape_cli_check, 'vibnamespace', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-vib-namespace',
+])
+
+# the CLI `--etemp` reaches the landscape engine (the `main.F90` sync guard);
+# a near-degenerate stretched H2 shifts its only mode by >30 % between 300 K
+# and 5000 K (mirrors `xtb/landscape-vib-etemp`)
+h2_xyz = meson.current_build_dir() / 'landscape_h2.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("2\\nstretched H2 (2.4 A)\\nH 0.0 0.0 -2.2674600\\nH 0.0 0.0 2.2674600\\n")',
+  h2_xyz,
+  check: true,
+)
+test('landscape vib etemp', python, env: landscape_env, args: [
+  landscape_cli_check, 'vibetemp', xtb_exe, h2_xyz,
+  landscape_cli_dir / 'landscape-cli-vib-etemp',
+])
+
+# `--lscan-max-steps`: a scan without a converged point reports a missing
+# minimum (M2 leftovers M-1/M-2)
+test('landscape scan max steps', python, env: landscape_env, args: [
+  landscape_cli_check, 'maxsteps', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-maxsteps',
+])
+
+# `--lscan-hessian` reaches the engine of the scan points
+test('landscape scan hessian', python, env: landscape_env, args: [
+  landscape_cli_check, 'scanhess', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-scanhess',
+])
+
 test('landscape hessian unknown', python, env: xtbenv, args: [
   landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
   'Unknown landscape Hessian source', '--gfn', '2', '--lopt', '--lopt-hessian', 'bogus',
+])
+test('landscape vib odlr', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'ODLR approximation', '--gfn', '2', '--lvib', '--lvib-odlr',
+])
+test('landscape vib hessian missing file', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'cannot open Hessian file', '--gfn', '2', '--lvib', '--lvib-hessian', 'file',
+  '--lvib-hessian-file', 'no_such_file.dat',
+])
+test('landscape vib hessian unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'Unknown landscape Hessian source', '--gfn', '2', '--lvib', '--lvib-hessian', 'bogus',
+])
+# unusable thermochemical parameters are rejected instead of producing Inf/NaN
+# (mirrors `xtb/landscape-vib-temperature-invalid`)
+test('landscape vib temperature invalid', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'the thermochemical temperature must be positive',
+  '--gfn', '2', '--lvib', '--lvib-temp', '0',
+])
+# a positive imaginary cutoff silently inverts the flag
+# (mirrors `xtb/landscape-vib-imag-cutoff-invalid`)
+test('landscape vib imag cutoff invalid', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'the imaginary frequency cutoff must not be positive',
+  '--gfn', '2', '--lvib', '--lvib-imag-cutoff', '20',
 ])
 test('landscape scan coord unknown', python, env: xtbenv, args: [
   landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',

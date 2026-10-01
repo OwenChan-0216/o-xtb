@@ -132,7 +132,7 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
 
    call new_landscape_engine(engine, settings%engine)
    call new_landscape_hessian_provider(env, settings%hessian_source, hp, &
-      & settings%engine%hess_acc)
+      & sccacc=settings%engine%hess_acc, filename=settings%hessian_file)
    if (.not. allocated(hp)) return
    call engine%set_hessian_provider(hp)
    call engine%set_calculator(calc)
@@ -221,6 +221,19 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
          & " of "//int_to_string(result%n_steps)//" scan points failed (no "//&
          & "energy; the failed points are the NaN rows of the scan table)", &
          & source)
+   else if (n_unconverged == result%n_steps .and. result%n_steps > 0) then
+      ! Not a single point relaxed its constraints.  The scan itself is not a
+      ! failure of the machinery - a point may legitimately stop short of its
+      ! convergence thresholds - but there is no minimum to report: both the
+      ! one- and the two-dimensional minimum search count only converged points
+      ! (`landscape_scan1d`, `landscape_scan2d`), so the energy stays at the
+      ! missing value and the reference geometry is the input geometry (the
+      ! `0.0` of an unevaluated point must never be reported as a result).
+      result%message = "scan completed without a converged point"
+      call env%warning("no scan point converged: the reported energy is "//&
+         & "undefined (it stays NaN) and the reference geometry is the input "//&
+         & "geometry; raise the step budget of the inner relaxation "//&
+         & "(max_steps)", source)
    else if (n_unconverged > 0) then
       ! An inner relaxation that hit its step budget is not a hard failure - a
       ! scan point may legitimately converge loosely - but it has to be

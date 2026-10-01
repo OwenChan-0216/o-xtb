@@ -41,6 +41,7 @@ module xtb_landscape_settings
 
    public :: landscape_settings, landscape_sp_settings, landscape_opt_settings
    public :: landscape_scan_settings, landscape_scan_coord_settings
+   public :: landscape_vib_settings
    public :: landscape_engine_control
    public :: p_landscape_opt_sd, p_landscape_opt_cg, p_landscape_opt_lbfgs
    public :: p_landscape_opt_bfgs
@@ -88,13 +89,21 @@ module xtb_landscape_settings
    !> Immutable run-time control of one landscape engine instance.
    !>
    !> `etemp`, `maxiter` and `printlevel` are forwarded verbatim to the xtb
-   !> single point driver (`src/single.f90:37`).  `hess_step` and `hess_acc`
-   !> default to the values xtb uses for numerical Hessians
+   !> single point driver (`src/single.f90:37`).  `etemp` and `acc` additionally
+   !> have to be pushed into the calculator by the engine, because that driver
+   !> drops both arguments and the calculator reads its own fields
+   !> (`landscape_engine%set_calculator`, `engine_report`).  `hess_step` and
+   !> `hess_acc` default to the values xtb uses for numerical Hessians
    !> (`src/type/setvar.f90:156-158`).  The Hessian backend itself is selected
    !> by the task settings field `hessian_source` (see
    !> `xtb_landscape_hessian::new_landscape_hessian_provider`).
    type :: landscape_engine_control
-      !> Electronic temperature (kelvin), 300 K is the xtb default
+      !> Electronic temperature (kelvin), 300 K is the xtb default.  The value
+      !> in effect during a run: it is pushed into the xTB calculator by the
+      !> engine (`landscape_engine%set_calculator`), because
+      !> `xtb_single::singlepoint` drops the argument and the calculator would
+      !> otherwise keep the value its constructor copied from the global
+      !> `set%etemp` (`src/xtb/calculator.f90:144`).
       real(wp) :: etemp = 300.0_wp
       !> Maximum number of SCC iterations
       integer :: maxiter = 250
@@ -144,10 +153,14 @@ module xtb_landscape_settings
       integer :: printlevel = 1
       !> Engine control forwarded to the xtb single point driver
       type(landscape_engine_control) :: engine
-      !> Hessian backend, one of `numerical` or `model`
+      !> Hessian backend, one of `numerical`, `model` or `file`
       !> (`xtb_landscape_hessian`); unknown names are rejected by the provider
       !> factory (`src/landscape/types/hessian.f90`)
       character(len=16) :: hessian_source = 'numerical'
+      !> File read by `hessian_source = 'file'` (TURBOMOLE format, the layout
+      !> of the `hessian` file written by `--hess` and by the `vib` task).
+      !> Unused - and unallocated - for the other sources.
+      character(len=:), allocatable :: hessian_file
    contains
       !> Test the four convergence criteria plus the energy guard
       procedure :: is_converged => landscape_settings_is_converged
@@ -317,6 +330,55 @@ module xtb_landscape_settings
       !> This type implements the scan task
       procedure :: task => landscape_scan_settings_task
    end type landscape_scan_settings
+
+   !> Settings of a vibrational analysis (`vib` task, PLAN section 5.3.8).
+   !>
+   !> The Hessian itself is described by the inherited `hessian_source`/
+   !> `hessian_file` and by the engine control (`engine%hess_step`,
+   !> `engine%hess_acc`, `engine%odlr`), so the finite difference step and the
+   !> SCC accuracy of the differentiation are explicit parameters and the task
+   !> never reads the xtb globals `set%step_hess`/`set%accu_hess`
+   !> (their `$hess` control block is silently ignored on the non-`--copy`
+   !> path, `docs/_landscape-recon/07-*.md`).
+   !>
+   !> The thermochemical fields are the ones consumed by the existing xtb
+   !> implementation (`src/setparam.f90:284-291`): they are copied into the set
+   !> object by `xtb_landscape_vib_thermo` immediately before `main_freq` runs,
+   !> because `print_thermo` and `thermodyn` read them from there.
+   type, extends(landscape_settings) :: landscape_vib_settings
+      !> Project translations and rotations out of the mass weighted Hessian
+      !> before the diagonalisation (Eckart projection,
+      !> `xtb_freq_project::projectHessian`)
+      logical :: project_tr = .true.
+      !> Linearity threshold: the smallest unit-mass moment of inertia (bohr^2)
+      !> below which a molecule counts as linear and has 3n-5 instead of
+      !> 3n-6 internal modes.  The default is the threshold of the existing
+      !> xtb check (`xtb_axis::is_linear`, `linthr_bohr2 = 1.0e-4`), so the
+      !> mode count of this task agrees with `--hess`.
+      real(wp) :: linear_tol = 1.0e-4_wp
+      !> Temperatures of the thermochemical table (kelvin); only the first
+      !> `n_temperature` entries are used
+      real(wp) :: temperature(50) = [298.15_wp, spread(0.0_wp, 1, 49)]
+      !> Number of temperatures used
+      integer :: n_temperature = 1
+      !> Rotor cutoff of the quasi-RRHO treatment (cm^-1, xtb
+      !> `set%thermo_sthr`): low frequency modes below this value are treated
+      !> by the Grimme free-rotor interpolation instead of the harmonic
+      !> partition function
+      real(wp) :: rotor_cutoff = 50.0_wp
+      !> Imaginary frequency cutoff (cm^-1, xtb `set%thermo_ithr`): a mode
+      !> with a smaller magnitude is treated as a numerical artifact of the
+      !> projected Hessian rather than as a saddle point
+      real(wp) :: imag_cutoff = -20.0_wp
+      !> Frequency scaling factor applied by the thermochemistry (xtb
+      !> `set%thermo_fscal`, recommended value 1.0 for GFN2-xTB)
+      real(wp) :: freq_scal = 1.0_wp
+      !> Write `hessian`, `vibspectrum`, `vib_normal_modes` and `g98.out`
+      logical :: write_files = .true.
+   contains
+      !> This type implements the frequency task
+      procedure :: task => landscape_vib_settings_task
+   end type landscape_vib_settings
 
 contains
 
@@ -534,6 +596,17 @@ function landscape_scan_settings_task(self) result(name)
    name = 'scan'
 
 end function landscape_scan_settings_task
+
+!> Task name of the vibrational analysis
+function landscape_vib_settings_task(self) result(name)
+   !> Settings instance
+   class(landscape_vib_settings), intent(in) :: self
+   !> Task name
+   character(len=:), allocatable :: name
+
+   name = 'vib'
+
+end function landscape_vib_settings_task
 
 !> Name of an internal coordinate type identifier.
 pure function landscape_scan_coord_name(ctype) result(name)

@@ -44,6 +44,7 @@ program tester
    use test_landscape_optimize_xtb, only : collect_landscape_optimize_xtb
    use test_landscape_failure, only : collect_landscape_failure
    use test_landscape_scan, only : collect_landscape_scan
+   use test_landscape_vib, only : collect_landscape_vib
    use test_latticepoint, only : collect_latticepoint
    use test_molecule, only : collect_molecule
    use test_model_hessian, only : collect_model_hessian
@@ -97,6 +98,7 @@ program tester
       new_testsuite("landscape-optimize-xtb", collect_landscape_optimize_xtb), &
       new_testsuite("landscape-failure", collect_landscape_failure), &
       new_testsuite("landscape-scan", collect_landscape_scan), &
+      new_testsuite("landscape-vib", collect_landscape_vib), &
       new_testsuite("latticepoint", collect_latticepoint), &
       new_testsuite("molecule", collect_molecule), &
       new_testsuite("model-hessian", collect_model_hessian), &

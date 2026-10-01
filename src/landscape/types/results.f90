@@ -27,9 +27,40 @@ module xtb_landscape_results
    implicit none(type, external)
    private
 
+   public :: landscape_vib_result
    public :: landscape_step, landscape_result, landscape_convergence_report
    public :: landscape_result_add_step, landscape_report_add, landscape_result_trim
    public :: landscape_print_step, landscape_result_write, landscape_report_write
+
+   !> Result of a vibrational analysis (`vib` task, PLAN section 5.4).
+   !>
+   !> The frequency layout follows the existing xtb frequency output exactly
+   !> (`numhess` in `src/hessian.F90`): the array holds **all** 3n modes, the
+   !> first `n_zero` of which are the projected translations and rotations and
+   !> are set to exactly zero, followed by the `n_vib` internal modes in
+   !> ascending order.  Imaginary modes are negative, so `freq(1)` is the
+   !> lowest frequency and a negative `freq(n)` is the highest imaginary one.
+   type :: landscape_vib_result
+      !> Frequencies (cm^-1), imaginary modes negative
+      real(wp), allocatable :: freq(:)
+      !> Mass weighted normal modes (columns, same order as `freq`)
+      real(wp), allocatable :: modes(:, :)
+      !> Reduced masses of the modes (amu, xtb `freq_results%rmass`)
+      real(wp), allocatable :: rmass(:)
+      !> Number of projected translation/rotation modes: 6, or 5 for a linear
+      !> molecule, or 3 for a single atom (all its modes are translations)
+      integer :: n_zero = 0
+      !> Number of internal vibrational modes, 3n-6 (3n-5 if linear, 0 for a
+      !> single atom)
+      integer :: n_vib = 0
+      !> Number of imaginary internal modes, counted against `imag_cutoff`
+      integer :: n_imag = 0
+      !> True if the geometry was detected as linear (`linear_tol`)
+      logical :: linear = .false.
+      !> Zero point energy (hartree) as reported by the thermochemistry
+      !> wrapper (`print_thermo`), zero until that wrapper has run
+      real(wp) :: zpe = 0.0_wp
+   end type landscape_vib_result
 
    !> Bookkeeping of a single macro step of an optimisation.
    type :: landscape_step

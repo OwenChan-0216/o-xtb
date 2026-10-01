@@ -1144,6 +1144,21 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 交付物：`hessian_source=file`；`vibspectrum`/`vib_normal_modes`/`g98.out` 与既有 `--hess` 对齐。
 验收：实验 #2、#3、#12。**LOC ≈ 1310。**
 
+**状态：已实现（M3）**，实现与接线细节见 §12.11，报告见
+`docs/_landscape-recon/20-m3-vib-implementation-report.md`（实现）、
+`21-m3-validation-experiments.md`（验收实验）与
+`23-m3-fix-report.md`（复核后修复）；实际 LOC：实现 1407
+（`vib/numhess.f90` 147 + `vib/modes.f90` 349 + `vib/thermo.f90` 173 +
+`tasks/vib.f90` 277 + `types/hessian.f90` 新增的 `file` provider/读写器 461）
++ 测试 1036。
+实验 #2（step×sccacc 敏感度）、#3（`etemp` 对最低本征值）与 #12（线性分子 3N−5）
+均在验证轮完成，数据在 `docs/_landscape-recon/m3-vib-data/`（79 个作业）：
+#2 → 默认 0.005/0.3 相对最严格设置误差 ≤0.10（H₂O）/≤0.35（CH₃OH）cm⁻¹，
+|λ| ≲ 3 cm⁻¹ 时必须收紧到 0.002/0.1；#3 → `etemp` 在近简并体系上改变最低曲率
+5 %–31 %（拉伸 H₂ 0→5000 K 为 −31.4 %），远大于 step/sccacc 的全部误差；
+#12 → CO₂/HCN 的 3N−5 与转动配分函数正确。
+残余能力边界只有 IR/Raman 强度（Hessian provider 不携带偶极导数，见 §12.11）。
+
 ### 9.5 M4：P-RFO / B-PRFO / Dimer
 
 | 模块 | 文件 | LOC 估 |
@@ -1158,6 +1173,21 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 交付物：`--lts [method=prfo|bprfo|dimer]`；`xtbts.xyz`/`xtbts.log`；虚频确认。
 验收：实验 #3、#4、#5；Müller–Brown 上 prfo 与 bprfo 收敛到同一鞍点（几何 RMSD < 1e-3 bohr）。
 **LOC ≈ 3400。**
+
+**M4 硬约束（来自 M3 验证轮，报告 21 §3 与 §7 R2/R3）：**
+
+1. **`etemp` 必须冻结并记录**。电子温度是这套方法里最大的单一误差源：实测拉伸 H₂
+   的最低（也是唯一）曲率在 `etemp` 0→5000 K 之间漂移 **−31.4 %**（近简并 CH₃· −4.8 %、
+   O₂ −0.26 %），远大于 step/sccacc 的全部误差。`ts`/`irc` 的一次运行内不得改变
+   `etemp`（引擎的 `landscape_engine_control%etemp` 会写入 xTB 计算器，见 §12.11），
+   且必须在输出/重启文件里**记录实际生效值**（`engine_report` 已打印，`sp`/`opt`/`scan`/`vib`
+   四个任务均调用，见 §12.11；`xtb/landscape-vib-etemp` 锁住 CLI 同步）。
+2. **虚频附近的 FD 不确定度**：默认 `step=0.005 bohr`/`sccacc=0.3` 已被验收，相对最严格
+   设置（0.002/0.1）的频率误差 ≤0.10 cm⁻¹（H₂O）、≤0.35 cm⁻¹（CH₃OH）；步长 0.02 或
+   `sccacc=1.0` 会退化到 1.7–4.4 cm⁻¹。**当某条曲率落在 0±3 cm⁻¹ 以内时，必须收紧到
+   step 0.002（必要时 sccacc 0.1）后再判符号。**
+3. **不要用「与 `--hess` 逐位一致」做判据**：两条路径的投影约定不同（Eckart vs
+   `trproj`），离驻点越远差越大（实测 0.076–5.21 cm⁻¹，§12.11）。
 
 ### 9.6 M5：NEB / CI-NEB / AutoNEB / String(GSM)
 
@@ -1533,6 +1563,120 @@ landscape task terminated: converged
 `landscape_scan` 对每个扫描点写盘与报告；`result%energy` = 最低点去偏能量，
 `result%gnorm` = 该点的约束残差，`mol%xyz` 回写为最低点几何（`main.F90` 因此
 打印的是最低点而非初始几何）。
+
+### 12.11 M3（vib）实际接线与偏离
+
+**runtyp 取值实测**：`grep -n "p_run_" src/setparam.f90` 的取值集合为
+`{1..15, 71, 100..104}`（`p_ext_*` 占 13–18，属 `set%mode_extrun`，与 `p_run_*`
+语义不同但为避免误读不重合）。19/20 仍预留给 `--lts`/`--lirc`（§12.1），
+因此 M3 取 **21**：
+
+| 常量 | 值 | 里程碑 | 用途 | 状态 |
+|---|---|---|---|---|
+| `p_run_lvib` | 21 | **M3** | 频率/热化学（`--lvib`） | ✅ 实现在 `src/setparam.f90`（`p_run_metaopt` 之后） |
+
+**新增 CLI flag**（`src/prog/main.F90` 的 `select case(flag)`，`src/xhelp.f90` 同步）：
+
+| flag | 语义 | 对应 settings 字段 |
+|---|---|---|
+| `--lvib` | 选中 `p_run_lvib`，不解桁位置参数 | — |
+| `--lvib-hessian <numerical\|model\|file>` | Hessian 后端 | `hessian_source` |
+| `--lvib-hessian-file <name>` | `file` 源读取的文件（TURBOMOLE 布局） | `hessian_file` |
+| `--lvib-step <bohr>` | 数值 Hessian 差分步 | `engine%hess_step` |
+| `--lvib-sccacc <acc>` | 差分点的 SCC 精度 | `engine%hess_acc` |
+| `--lvib-odlr` | 请求 ODLR（**未实现，显式报错**） | `engine%odlr` |
+| `--lvib-no-project` | 不做平动/转动投影 | `project_tr = .false.` |
+| `--lvib-temp <K>` | 热化学表温度（单值） | `temperature(1)`、`n_temperature` |
+| `--lvib-rotor-cutoff <cm^-1>` | quasi-RRHO 转子 cutoff | `rotor_cutoff` |
+| `--lvib-imag-cutoff <cm^-1>` | 虚频 cutoff（需带负号；`-20` 不含字母，`TArgParser` 判为参数而非 flag） | `imag_cutoff` |
+| `--lvib-freq-scal <x>` | 热化学频率缩放 | `freq_scal` |
+
+**顺带补齐（PLAN §9.3 遗留）**：`--lopt-hessian-file`、`--lscan-hessian`、
+`--lscan-hessian-file`（`--lscan-method rfo` 与内层 BFGS 初猜因此可从 CLI 选择后端）、
+`--lscan-max-steps`（M2 遗留 M-1）。
+
+**与 §5.3.8 的偏离（代码为准）**：
+
+1. `step`/`sccacc`/`odlr` 不另设字段，复用 `landscape_engine_control` 的
+   `hess_step`/`hess_acc`/`odlr`（同一概念只保留一种拼写）。
+2. `pressure` 与 `ilowfreq` **不实现**：xtb 的 RRHO 没有压力参数，也没有
+   `ilowfreq`；`rotor_cutoff`（= `set%thermo_sthr`）就是 Grimme 自由转子方案本身。
+   暴露无消费者的字段属于死代码。
+3. `linear_tol` 默认取 **1.0e-4 bohr²**（`src/axis_trafo.f90:31` 的 `linthr_bohr2`），
+   不是计划表里的 1e-8：必须与既有 `--hess` 的 `mol%linear` 判据一致，否则
+   3N−5/3N−6 计数会与既有输出不同。
+4. `landscape_vib_settings%write_files` 只控制本套件自己写的 `hessian` 与
+   `vib_normal_modes`；`vibspectrum`、`g98.out` 与热化学表由复用的 `main_freq`
+   无条件产生（该函数没有输出开关）。
+5. `landscape_vib_result` 增加 `rmass(3n)`（xtb `freq_results%rmass` 的定义），
+   因为 `g98.out` 与 `vibspectrum` 需要"Red. masses"列。
+
+**热化学的全局写入**：`vib/thermo.f90` 是全套件唯一写既有全局状态的地方，写入
+`set%thermotemp/nthermo/thermo_sthr/thermo_ithr/thermo_fscal`（`src/setparam.f90:284-291`）
+与 `xtb_splitparam::atmass`（amu，`axis2` 读它；`src/prog/main.F90:461`、
+`src/prog/thermo.f90:103` 同样如此）。settings 对象仍是唯一真源，写入发生在调用
+`main_freq` 之前。
+
+**投影约定与 `--hess` 的关系（实测，第 23 号修复轮更新）**：本套件用 Eckart 投影
+（`xtb_freq_project::projectHessian`，即 `xtb thermo` 的路径，PLAN §5.3.8/R04 §71），
+既有 `--hess` 用遗留的 `trproj`（非质量加权空间）。两者**都**是数值（中心差分）Hessian，
+步长 0.005 bohr、SCC 精度 0.3（`--hess` 自己的 stdout 写的是 `| Numerical Hessian |`、
+`step length 0.00500`、`SCC accuracy 0.30000`；计时表里的 `analytical hessian` 只是
+`src/prog/main.F90:2840` 的固定标签，**不代表解析 Hessian**）。差异**主要**来自投影：
+把**同一个**原始 Hessian 分别过两条投影（单元测试 `water-vs-trproj`，同一矩阵）：
+
+| 几何 | Eckart | trproj | max‖Δf‖ |
+|---|---|---|---|
+| GFN2 极小点（`h2o_opt`） | 1539.1480 3644.0560 3652.3753 | 1539.1469 3644.0557 3652.3013 | **0.074** cm⁻¹ |
+| 强扭曲水（测试几何） | 1318.0122 3716.0701 4141.5458 | 1318.5519 3706.8595 4128.6366 | **12.91** cm⁻¹ |
+| 非驻点水（`h2o_raw`） | 1565.0991 3629.7342 3642.9892 | 1565.0984 3634.9475 3643.6359 | **5.213** cm⁻¹ |
+
+机制：两个投影算子去掉的是**同一个** 6 维刚体运动的**空间**，但它们在**不同的度量**里
+定义它——`trproj` 用**单位质量**的平动/转动向量（绕单位质量质心）投影**非质量加权**
+Hessian（`src/freq/project.f90:151`），Eckart 先质量加权、再用质量加权的刚体向量
+（绕质量加权质心）投影（`projectHessian`，`:34`）。因此在**驻点**上两者几乎一致
+（真实 Hessian 的零空间与之重合），随偏离驻点程度增大而增大（实测三点：极小点 0.074、
+非驻点 5.213、强扭曲水 12.91 cm⁻¹；未做比例性检验，不写成 ∝ ‖g‖）；`trproj` 本身
+**不含任何梯度项**（早期文档里的这句话是错的）。
+
+CLI 层面的同几何对比（`--lvib` vs `--hess`，本轮重测，与第 21 号报告一致）：
+**0.0757（H2O 极小点）/ 0.9972（CH3OH 极小点）/ 0.0036（CO2）/ 5.2109（非驻点 H2O）**
+cm⁻¹。CO2 是线性分子、两条路径**都跳过投影**，所以 0.0036 cm⁻¹ 是「非投影」残余的
+上界（为 `--hess` 与套件两条数值 Hessian 实现之间的差异，来源未进一步归因，报告 23 §8.1）；
+投影项在极小点上占 0.0757−0.0036 ≈ 0.072 cm⁻¹。**不再使用
+单一数字 5.71 cm⁻¹**（该数字来自一个未入库的几何，第 21 号报告 §5.5 已无法复现）。
+线性分子按既有做法**跳过投影**并取最低 5 个本征值为零模，因此 CO2 两路径一致。
+把各自的 `hessian` 文件喂回套件（Eckart）会**各自复现自己**到 0.01 cm⁻¹（对已投影
+矩阵再投影近似幂等），所以文件级互操作不受影响。
+
+**电子温度（`etemp`）接线（第 23 号修复轮；第 25 号补 P2-B/P1-1）**：`xtb_single::singlepoint`
+把传入的 `et` 参量**丢弃**（`src/single.f90:52`），计算器实际用的是自己的 `etemp` 字段
+（构造时从全局 `set%etemp` 拷一次，`src/xtb/calculator.f90:144`）。引擎因此在
+`landscape_engine%set_calculator` 里把 `landscape_engine_control%etemp` 显式写进
+xTB 计算器（与已有的 `acc` 同一机制），CLI 侧在 `main.F90` 三个 landscape 入口处
+`engine%etemp = set%etemp` 同步；`engine_report` 从计算器**读回**并打印生效值，
+使「设置没进去」从外部可见。`sp`/`opt`/`scan` 在任务末尾调用 `engine_report`；
+`--lvib` 的引擎在 `vib/numhess.f90` 内建内销毁，现在同样在销毁前调用它，
+因此四个任务的 stdout 都含生效 `etemp`（PLAN §9.5 的 M4 gate 依赖这一点）。
+行为由三层测试锁住：单元测试 `etemp-control`（拉伸 H₂ 300 K vs 5000 K，锁住
+“推入计算器”）、CLI 测试 `xtb/landscape-vib-etemp`（`--etemp 300` vs `--etemp 5000`，
+断言打印值等于传入值且 `eigval` 确实改变，锁住 `main.F90` 同步）。
+
+**INFO-1（`vib_normal_modes` 的索引约定）**：`writeNormalModesTurbomole` 把传入矩阵的
+**第一个下标当笛卡尔分量**做质量反加权、却把**第一个下标当模式号打印**，因此该文件里
+**每一行是笛卡尔分量、每一列（列组）才是模式**（与常见读法相反，
+`src/io/writer/turbomole.f90:164-188`）。下游工具按「行 = 模式」读会得到错误结论。
+
+**INFO-2（与 MAPLE 的频率常数差异，不得用作紧容差参照）**：MAPLE 的 `2721.1383`
+是 **Hartree/Å² + amu** 约定，xtb 的 `autorcm = 219474.63067`
+（`src/mctc/convert.f90:40`）是 **Hartree/bohr² + 电子质量** 约定；两者对同一物理频率
+系统差 ~0.04 %（3644 cm⁻¹ 处 ~1.5 cm⁻¹）。与 MAPLE 对拍只能比拓扑/量级（N9），
+不能比 0.01 cm⁻¹。
+
+**INFO-3（全域未收敛扫描的退出码）**：`tasks/scan.f90` 的「无收敛点」分支只发
+`env%warning`，因此 `xtb --lscan-max-steps 0` 以**退出码 0** 结束（同时 TOTAL ENERGY
+打印 NaN）。这是 M2 已接受的语义（R-04：点未收敛是告警不是失败）且已被测试固定；
+M7 收口时若统一「结果不可用 ⇒ 非零退出」，这里要一并改。
 
 ---
 

@@ -46,6 +46,7 @@ set(
   "landscape-optimize-xtb"
   "landscape-failure"
   "landscape-scan"
+  "landscape-vib"
   "latticepoint"
   "molecule"
   "model-hessian"
@@ -549,6 +550,337 @@ add_test("xtb/landscape-scan-atom-range"
   -DRUNDIR=${LANDSCAPE-ERROR-DIR}
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
 
+# Landscape suite: CLI level check of the `--lvib` run type (M3).
+#
+# The task must write the four output files of the existing `--hess` run, must
+# report the energy of the analysed geometry (the `res` write-back; without it
+# the TOTAL ENERGY line would show an unrelated energy), and the `hessian` file
+# it writes must be readable by the file provider: the re-run from the file has
+# to reproduce the frequencies of the direct numerical Hessian.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_vib.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lvib terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: harmonic frequencies")
+  message(FATAL_ERROR "the frequency header was not printed\n${output}")
+endif()
+if(NOT output MATCHES "Hessian source: +numerical")
+  message(FATAL_ERROR "the Hessian source was not reported\n${output}")
+endif()
+if(NOT output MATCHES "landscape task terminated: frequency analysis completed")
+  message(FATAL_ERROR "the frequency task did not complete\n${output}")
+endif()
+if(NOT output MATCHES "modes: 3 internal, 6 projected zero modes")
+  message(FATAL_ERROR "the mode count of water is wrong\n${output}")
+endif()
+if(NOT output MATCHES "linear molecule: +F")
+  message(FATAL_ERROR "water was classified as linear\n${output}")
+endif()
+foreach(name "hessian" "vibspectrum" "vib_normal_modes" "g98.out")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written")
+  endif()
+  file(SIZE "${RUNDIR}/${name}" size)
+  if(size EQUAL 0)
+    message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+# the reported task energy must be the energy of the TOTAL ENERGY line
+string(REGEX MATCH "energy: +(-?[0-9]+[.][0-9]+)" _ "${output}")
+set(task_energy "${CMAKE_MATCH_1}")
+string(REGEX MATCH "TOTAL ENERGY +(-?[0-9]+[.][0-9]+)" _ "${output}")
+set(total_energy "${CMAKE_MATCH_1}")
+if(NOT task_energy)
+  message(FATAL_ERROR "the frequency task reported no energy\n${output}")
+endif()
+if(NOT task_energy STREQUAL total_energy)
+  message(FATAL_ERROR
+    "the task energy (${task_energy}) is not the reported TOTAL ENERGY (${total_energy})")
+endif()
+string(REGEX MATCH "eigval : +([-0-9. ]+)" _ "${output}")
+string(REGEX REPLACE " +" " " vib_freqs "${CMAKE_MATCH_1}")
+# the file provider must reproduce the direct numerical Hessian
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --lvib-hessian file
+          --lvib-hessian-file hessian --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE file_output
+  ERROR_VARIABLE file_output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "reading the Hessian file failed with status ${status}\n${file_output}")
+endif()
+if(NOT file_output MATCHES "Hessian file: +hessian")
+  message(FATAL_ERROR "the file provider did not report its file\n${file_output}")
+endif()
+string(REGEX MATCH "eigval : +([-0-9. ]+)" _ "${file_output}")
+string(REGEX REPLACE " +" " " file_freqs "${CMAKE_MATCH_1}")
+if(NOT file_freqs STREQUAL vib_freqs)
+  message(FATAL_ERROR
+    "the Hessian file reproduces different frequencies (${file_freqs} vs ${vib_freqs})")
+endif()
+]=])
+add_test("xtb/landscape-vib-cli"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-vib
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_vib.cmake")
+
+# Landscape suite: the CLI `--etemp` reaches the landscape engine (guard of the
+# `main.F90` sync, `landscape_engine_control%etemp <- set%etemp`).
+#
+# The engine control is the single source of truth for the electronic
+# temperature (`push_calculator_etemp` overwrites the calculator field with it),
+# so a missing sync would silently run every landscape task at the 300 K
+# default.  The stretched H2 is the near-degenerate case of report 21 section
+# 3.1, whose only mode shifts by >30 % between 300 K and 5000 K: the two runs
+# must therefore report different effective temperatures and different
+# frequencies.  Deleting the sync line in `main.F90` turns this test red (both
+# runs print 300 K and give identical `eigval`).
+# The input is generated in the build directory (the repository stays free of
+# test data).
+set(LANDSCAPE-H2 "${CMAKE_CURRENT_BINARY_DIR}/landscape_h2.xyz")
+file(WRITE "${LANDSCAPE-H2}"
+  "2\nstretched H2 (2.4 A)\nH  0.0000000  0.0000000 -2.2674600\n"
+  "H  0.0000000  0.0000000  2.2674600\n")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_vib_etemp.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart --etemp 300
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE cold
+  ERROR_VARIABLE cold
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lvib --etemp 300 terminated with status ${status}\n${cold}")
+endif()
+if(NOT cold MATCHES "landscape engine: etemp +300[.]000 K")
+  message(FATAL_ERROR "the effective electronic temperature 300 K was not reported\n${cold}")
+endif()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart --etemp 5000
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE hot
+  ERROR_VARIABLE hot
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lvib --etemp 5000 terminated with status ${status}\n${hot}")
+endif()
+if(NOT hot MATCHES "landscape engine: etemp +5000[.]000 K")
+  message(FATAL_ERROR
+    "--etemp 5000 did not reach the engine control (missing CLI sync)\n${hot}")
+endif()
+string(REGEX MATCH "eigval : +([-0-9. ]+)" _ "${cold}")
+set(cold_freqs "${CMAKE_MATCH_1}")
+string(REGEX MATCH "eigval : +([-0-9. ]+)" _ "${hot}")
+set(hot_freqs "${CMAKE_MATCH_1}")
+if(NOT cold_freqs)
+  message(FATAL_ERROR "the 300 K run reported no frequencies\n${cold}")
+endif()
+if(NOT hot_freqs)
+  message(FATAL_ERROR "the 5000 K run reported no frequencies\n${hot}")
+endif()
+if(cold_freqs STREQUAL hot_freqs)
+  message(FATAL_ERROR
+    "the electronic temperature did not change the frequencies (${cold_freqs})")
+endif()
+]=])
+add_test("xtb/landscape-vib-etemp"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-vib-etemp
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_vib_etemp.cmake")
+
+# Landscape suite: the `hessian` file of `--lvib` carries the namespace once.
+#
+# `get_namespace` is not idempotent, so the task must not prefix the name
+# itself on top of the writer: with `--namespace ns` the file has to be
+# `ns.hessian` (the name `--hess` produces as well) and the re-run with
+# `--lvib-hessian file --lvib-hessian-file hessian --namespace ns` has to find
+# and reproduce it.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_vib_namespace.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart --namespace ns
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lvib --namespace ns terminated with status ${status}\n${output}")
+endif()
+if(NOT EXISTS "${RUNDIR}/ns.hessian")
+  message(FATAL_ERROR "the namespaced hessian file was not written\n${output}")
+endif()
+if(EXISTS "${RUNDIR}/ns.ns.hessian")
+  message(FATAL_ERROR "the hessian file name carries the namespace twice")
+endif()
+string(REGEX MATCH "eigval : +([-0-9. ]+)" _ "${output}")
+string(REGEX REPLACE " +" " " vib_freqs "${CMAKE_MATCH_1}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --lvib-hessian file
+          --lvib-hessian-file hessian --norestart --namespace ns
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE file_output
+  ERROR_VARIABLE file_output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "reading the namespaced Hessian file failed with status ${status}\n${file_output}")
+endif()
+string(REGEX MATCH "eigval : +([-0-9. ]+)" _ "${file_output}")
+string(REGEX REPLACE " +" " " file_freqs "${CMAKE_MATCH_1}")
+if(NOT file_freqs STREQUAL vib_freqs)
+  message(FATAL_ERROR
+    "the namespaced Hessian file reproduces different frequencies (${file_freqs} vs ${vib_freqs})")
+endif()
+]=])
+add_test("xtb/landscape-vib-namespace"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-vib-namespace
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_vib_namespace.cmake")
+
+# Landscape suite: the error branches of the frequency task and of the scan
+# Hessian selector.
+add_test("xtb/landscape-vib-odlr"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lvib --lvib-odlr"
+  "-DPATTERN=ODLR approximation"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-vib-hessian-missing-file"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lvib --lvib-hessian file --lvib-hessian-file no_such_file.dat"
+  "-DPATTERN=cannot open Hessian file"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-vib-hessian-unknown"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lvib --lvib-hessian bogus"
+  "-DPATTERN=Unknown landscape Hessian source"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
+# Landscape suite: unusable thermochemical parameters must be rejected instead
+# of printing Inf/NaN (a zero temperature divides by zero in the RRHO model)
+# or of silently inverting the meaning of a flag (a positive imaginary cutoff).
+add_test("xtb/landscape-vib-temperature-invalid"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lvib --lvib-temp 0"
+  "-DPATTERN=the thermochemical temperature must be positive"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-vib-imag-cutoff-invalid"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lvib --lvib-imag-cutoff 20"
+  "-DPATTERN=the imaginary frequency cutoff must not be positive"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
+# Landscape suite: `--lscan-max-steps` reaches the inner relaxation, and a scan
+# in which no point converges reports a missing minimum instead of a number
+# (M2 leftover M-1/M-2).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_maxsteps.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lscan --lscan-coord angle
+          --lscan-atoms 2,1,3 --lscan-step 3 --lscan-nstep 2
+          --lscan-max-steps 0 --norestart --namespace landscape4
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lscan --lscan-max-steps 0 failed with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "scan completed without a converged point")
+  message(FATAL_ERROR "the missing convergence was not reported\n${output}")
+endif()
+if(NOT output MATCHES "lowest energy: +NaN")
+  message(FATAL_ERROR "the unconverged scan reported a minimum\n${output}")
+endif()
+# the points were evaluated, so their frames carry energies; the scan is
+# bidirectional, so a two step sweep has 2*2+1 = 5 points
+file(READ "${RUNDIR}/landscape4.xtbscan.log" scanlog)
+string(REGEX MATCHALL "energy:" frames "${scanlog}")
+list(LENGTH frames nframes)
+if(NOT nframes EQUAL 5)
+  message(FATAL_ERROR "xtbscan.log holds ${nframes} frames, expected 5")
+endif()
+# with a real step budget the same scan converges again
+file(REMOVE "${RUNDIR}/landscape4.xtbscan.log")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lscan --lscan-coord angle
+          --lscan-atoms 2,1,3 --lscan-step 3 --lscan-nstep 2
+          --lscan-max-steps 256 --lscan-level loose --norestart
+          --namespace landscape4
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the reference scan failed with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape task terminated: scan completed[\n]")
+  if(NOT output MATCHES "landscape task terminated: scan completed")
+    message(FATAL_ERROR "the reference scan did not complete\n${output}")
+  endif()
+endif()
+if(output MATCHES "without a converged point")
+  message(FATAL_ERROR "the reference scan reported a missing minimum\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-scan-max-steps"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-maxsteps
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_maxsteps.cmake")
+
+# Landscape suite: the `--lscan-hessian` selector reaches the scan engine.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scanhess.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lscan --lscan-method rfo
+          --lscan-hessian model --lscan-coord angle --lscan-atoms 2,1,3
+          --lscan-step 3 --lscan-nstep 1 --lscan-level loose --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lscan --lscan-hessian model failed with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "Hessian source: +model")
+  message(FATAL_ERROR "the scan Hessian source was not reported\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-scan-hessian"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-scanhess
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scanhess.cmake")
+
 set_tests_properties(
   "xtb/Singlepoint"
   "xtb/GFN0-xTB"
@@ -572,6 +904,11 @@ set_tests_properties(
   "xtb/landscape-scan-coord-unknown"
   "xtb/landscape-scan-nstep-missing"
   "xtb/landscape-scan-atom-range"
+  "xtb/landscape-vib-odlr"
+  "xtb/landscape-vib-hessian-missing-file"
+  "xtb/landscape-vib-hessian-unknown"
+  "xtb/landscape-vib-temperature-invalid"
+  "xtb/landscape-vib-imag-cutoff-invalid"
   PROPERTIES
   ENVIRONMENT XTBPATH=${PROJECT_SOURCE_DIR}
 )
@@ -586,6 +923,15 @@ set_tests_properties(
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )
 
+# The frequency suite builds numerical Hessians (6N GFN2 single points each);
+# one thread keeps the 340x OpenMP anti-scaling of AGENTS.md section 6.8 out
+# of the picture and makes the Hessians reproducible.
+set_tests_properties(
+  "${PROJECT_NAME}/landscape-vib"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
 # The same holds for every landscape CLI check that runs the engine (PLAN
 # appendix A: scan/Hessian benchmarks and tests always use one thread); the
 # error branches and the unconverged-SCC probe abort before/without a real
@@ -596,6 +942,11 @@ set_tests_properties(
   "xtb/landscape-opt-acc"
   "xtb/landscape-opt-hessian"
   "xtb/landscape-scan-cli"
+  "xtb/landscape-vib-cli"
+  "xtb/landscape-vib-etemp"
+  "xtb/landscape-vib-namespace"
+  "xtb/landscape-scan-max-steps"
+  "xtb/landscape-scan-hessian"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

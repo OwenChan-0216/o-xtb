@@ -42,6 +42,10 @@ list(APPEND srcs
   "${dir}/scan/scan1d.f90"
   "${dir}/scan/scan2d.f90"
   "${dir}/tasks/scan.f90"
+  "${dir}/vib/numhess.f90"
+  "${dir}/vib/modes.f90"
+  "${dir}/vib/thermo.f90"
+  "${dir}/tasks/vib.f90"
   "${dir}/landscape_driver.f90"
   "${dir}/landscape_api.f90"
 )

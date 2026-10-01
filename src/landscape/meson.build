@@ -37,6 +37,10 @@ srcs += files(
   'scan/scan1d.f90',
   'scan/scan2d.f90',
   'tasks/scan.f90',
+  'vib/numhess.f90',
+  'vib/modes.f90',
+  'vib/thermo.f90',
+  'tasks/vib.f90',
   'landscape_driver.f90',
   'landscape_api.f90',
 )

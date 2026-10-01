@@ -104,7 +104,7 @@ module xtb_prog_main
    !> landscape task suite
    use xtb_landscape, only: run_landscape
    use xtb_landscape_settings, only: landscape_opt_settings, &
-      & landscape_scan_settings, &
+      & landscape_scan_settings, landscape_vib_settings, &
       & landscape_opt_algorithm_from_name, landscape_conv_level_known, &
       & landscape_scan_coord_from_name, landscape_scan_coord_known, &
       & landscape_scan_coord_natoms, landscape_scan_mode_known, &
@@ -144,6 +144,7 @@ contains
       type(TTBLiteInput) :: tblite
       type(landscape_opt_settings) :: lset
       type(landscape_scan_settings) :: lsset
+      type(landscape_vib_settings) :: lvset
       type(landscape_result) :: lres
 !  store important names and stuff like that in FORTRAN strings
       character(len=:), allocatable :: fname    ! geometry input file
@@ -240,7 +241,7 @@ contains
       ! read the command line arguments
       call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset)
+         & lsset, lvset)
 
 
       ! No solvation available for PTB!
@@ -583,7 +584,7 @@ contains
             call env%terminate('This is an internal error, please define your runtypes!')
          case (p_run_prescc,p_run_scc, p_run_grad, p_run_opt, p_run_hess, p_run_ohess, p_run_bhess, &
                p_run_md, p_run_omd, p_run_path, p_run_screen, &
-               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt, p_run_lscan)
+               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt, p_run_lscan, p_run_lvib)
             if (set%mode_extrun == p_ext_gfnff) then
                fnv = xfind(p_fname_param_gfnff)
             elseif (set%mode_extrun .eq. p_ext_ptb) then
@@ -927,12 +928,14 @@ contains
       ! ------------------------------------------------------------------------
       ! landscape suite (minimisation with the algorithms of src/landscape)
       if (set%runtyp == p_run_lopt) then
-         ! The CLI electronic-structure setting reaches the engine only through
+         ! The CLI electronic-structure settings reach the engine only through
          ! its own control object: `xtb_single::singlepoint` forwards `acc` as
-         ! an argument but drops it, and the engine writes its value into the
-         ! calculator, so the CLI value has to be synced here
-         ! (docs/_landscape-recon/12-*.md, R2-02).
+         ! an argument but drops it, and the engine writes both values into the
+         ! calculator, so the CLI values have to be synced here
+         ! (docs/_landscape-recon/12-*.md, R2-02;
+         ! docs/_landscape-recon/23-m3-fix-report.md, MEDIUM-B).
          lset%engine%acc = set%acc
+         lset%engine%etemp = set%etemp
          call start_timing(3)
          call run_landscape(env, mol, chk, calc, lset, lres)
          call stop_timing(3)
@@ -949,12 +952,30 @@ contains
       ! landscape suite (scan with the algorithms of src/landscape)
       if (set%runtyp == p_run_lscan) then
          lsset%engine%acc = set%acc
+         lsset%engine%etemp = set%etemp
          call start_timing(3)
          call run_landscape(env, mol, chk, calc, lsset, lres)
          call stop_timing(3)
          ! Report the lowest scan point: `res` feeds the TOTAL ENERGY line and
          ! xtbout.json, while `xtbscan.log` is written by the scan task from
          ! the de-biased energies of all scan points.
+         res%e_total = lres%energy
+         res%gnorm = lres%gnorm
+         call env%checkpoint("Landscape task terminated")
+      end if
+
+      ! ------------------------------------------------------------------------
+      ! landscape suite (harmonic frequencies and thermochemistry of src/landscape)
+      if (set%runtyp == p_run_lvib) then
+         lvset%engine%acc = set%acc
+         lvset%engine%etemp = set%etemp
+         call start_timing(3)
+         call run_landscape(env, mol, chk, calc, lvset, lres)
+         call stop_timing(3)
+         ! Report the energy of the analysed geometry: `res` feeds the TOTAL
+         ! ENERGY line (`write_energy`) and xtbout.json.  Without this
+         ! write-back the reported energy would be the one of an unrelated
+         ! state (the same defect the `--lopt` path had).
          res%e_total = lres%energy
          res%gnorm = lres%gnorm
          call env%checkpoint("Landscape task terminated")
@@ -1347,7 +1368,7 @@ contains
 !> Parse command line arguments and forward them to settings
    subroutine parseArguments(env, args, inputFile, paramFile, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset)
+         & lsset, lvset)
 
       use xtb_mctc_global, only: persistentEnv
 
@@ -1407,6 +1428,9 @@ contains
 
       !> Landscape scan settings (`--lscan`, `--lscan-coord`, ...)
       type(landscape_scan_settings), intent(inout) :: lsset
+
+      !> Landscape frequency settings (`--lvib`, `--lvib-hessian`, ...)
+      type(landscape_vib_settings), intent(inout) :: lvset
 
 !$    integer :: omp_get_num_threads, nproc
       integer :: nFlags
@@ -2380,6 +2404,193 @@ contains
                call env%error("The --lscan-nstep2 flag requires an integer", source)
             end if
 
+         case ('--lscan-max-steps')
+            ! Step budget of the inner relaxation of every scan point
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lsset%max_steps = idum2
+               else
+                  call env%error("The --lscan-max-steps flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lscan-max-steps flag requires an integer", source)
+            end if
+
+         case ('--lscan-hessian')
+            ! Hessian backend of the scan points (`numerical`, `model` or
+            ! `file`); needed for `--lscan-method rfo` and an inner BFGS
+            ! start Hessian
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_hessian_source_known(sec)) then
+                  lsset%hessian_source = sec
+               else
+                  call env%error("Unknown landscape Hessian source '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lscan-hessian flag requires a source name", source)
+            end if
+
+         case ('--lscan-hessian-file')
+            ! File read by `--lscan-hessian file`
+            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               lsset%hessian_file = sec
+            else
+               call env%error("The --lscan-hessian-file flag requires a file name", source)
+            end if
+
+         case ('--lvib')
+            ! Landscape suite: harmonic frequencies and thermochemistry
+            ! (src/landscape/vib); the Hessian backend and the thermochemical
+            ! parameters are set by the dedicated `--lvib-*` flags below.
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+
+         case ('--lvib-hessian')
+            ! Hessian backend of the frequency task
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_hessian_source_known(sec)) then
+                  lvset%hessian_source = sec
+               else
+                  call env%error("Unknown landscape Hessian source '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lvib-hessian flag requires a source name", source)
+            end if
+
+         case ('--lvib-hessian-file')
+            ! File read by `--lvib-hessian file` (TURBOMOLE layout, the
+            ! `hessian` file of a preceding run)
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               lvset%hessian_file = sec
+            else
+               call env%error("The --lvib-hessian-file flag requires a file name", source)
+            end if
+
+         case ('--lvib-step')
+            ! Finite difference step of the numerical Hessian (bohr)
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lvset%engine%hess_step = ddum
+               else
+                  call env%error("The --lvib-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lvib-step flag requires a number", source)
+            end if
+
+         case ('--lvib-sccacc')
+            ! SCC accuracy of the displaced single points of the Hessian
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lvset%engine%hess_acc = ddum
+               else
+                  call env%error("The --lvib-sccacc flag requires a number", source)
+               end if
+            else
+               call env%error("The --lvib-sccacc flag requires a number", source)
+            end if
+
+         case ('--lvib-odlr')
+            ! Request the ODLR approximation; no provider implements it, so
+            ! the task reports the unsupported request instead of silently
+            ! returning a full dense Hessian
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            lvset%engine%odlr = .true.
+
+         case ('--lvib-no-project')
+            ! Keep the translations and rotations in the Hessian
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            lvset%project_tr = .false.
+
+         case ('--lvib-temp')
+            ! Temperature of the thermodynamic table (kelvin)
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lvset%temperature = 0.0_wp
+                  lvset%temperature(1) = ddum
+                  lvset%n_temperature = 1
+               else
+                  call env%error("The --lvib-temp flag requires a number", source)
+               end if
+            else
+               call env%error("The --lvib-temp flag requires a number", source)
+            end if
+
+         case ('--lvib-rotor-cutoff')
+            ! Rotor cutoff of the quasi-RRHO entropy treatment (cm^-1)
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lvset%rotor_cutoff = ddum
+               else
+                  call env%error("The --lvib-rotor-cutoff flag requires a number", source)
+               end if
+            else
+               call env%error("The --lvib-rotor-cutoff flag requires a number", source)
+            end if
+
+         case ('--lvib-imag-cutoff')
+            ! Imaginary frequency cutoff (cm^-1); needs the minus sign, so the
+            ! parser has to be told that the value belongs to the flag
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lvset%imag_cutoff = ddum
+               else
+                  call env%error("The --lvib-imag-cutoff flag requires a number", source)
+               end if
+            else
+               call env%error("The --lvib-imag-cutoff flag requires a number", source)
+            end if
+
+         case ('--lvib-freq-scal')
+            ! Frequency scaling factor of the thermochemistry
+            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lvset%freq_scal = ddum
+               else
+                  call env%error("The --lvib-freq-scal flag requires a number", source)
+               end if
+            else
+               call env%error("The --lvib-freq-scal flag requires a number", source)
+            end if
+
+         case ('--lopt-hessian-file')
+            ! File read by `--lopt-hessian file`
+            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               lset%hessian_file = sec
+            else
+               call env%error("The --lopt-hessian-file flag requires a file name", source)
+            end if
+
          case ('--metadyn')
             call set_runtyp('md')
             call args%nextArg(sec)
@@ -2621,6 +2832,9 @@ contains
       end if
       if (set%runtyp == p_run_lscan) then
          call prtiming(3, 'landscape scan')
+      end if
+      if (set%runtyp == p_run_lvib) then
+         call prtiming(3, 'landscape frequencies')
       end if
       if (set%runtyp == p_run_path) then
          call prtiming(4, 'path finder')

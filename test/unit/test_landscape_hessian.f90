@@ -142,7 +142,9 @@ subroutine test_source_known(error)
    if (allocated(error)) return
    call check(error, landscape_hessian_source_known("model"))
    if (allocated(error)) return
-   call check(error, .not. landscape_hessian_source_known("file"))
+   ! `file` joins the known sources in M3 (`landscape_hessian_file`); the
+   ! reader itself is covered by `test_landscape_vib`
+   call check(error, landscape_hessian_source_known("file"))
    if (allocated(error)) return
    call check(error, .not. landscape_hessian_source_known(""))
    if (allocated(error)) return

@@ -45,7 +45,7 @@ module test_landscape_scan
       & landscape_scan_coord_natoms, landscape_scan_coord_known, &
       & landscape_scan_mode_known, &
       & p_landscape_scan_coord_distance, p_landscape_scan_coord_angle, &
-      & p_landscape_scan_coord_dihedral
+      & p_landscape_scan_coord_dihedral, landscape_value_present
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack
@@ -192,6 +192,7 @@ subroutine collect_landscape_scan(testsuite)
       new_unittest("scan-2d-bookkeeping", test_2d_bookkeeping), &
       new_unittest("scan-task-gfn2", test_scan_task), &
       new_unittest("scan-task-unconverged", test_scan_task_unconverged), &
+      new_unittest("scan-task-no-converged-point", test_scan_task_no_converged_point), &
       new_unittest("scan-task-missing-energy", test_scan_task_missing_energy), &
       new_unittest("scan-task-no-energy", test_scan_task_no_energy), &
       new_unittest("scan-task-invalid", test_scan_task_invalid) &
@@ -1552,6 +1553,127 @@ subroutine test_scan_task_unconverged(error)
       & "a scan with unconverged points claimed to be converged")
 
 end subroutine test_scan_task_unconverged
+
+!> A scan in which **no** point converges must not report a minimum.
+!>
+!> The step budget of the inner relaxation is zero, so every point keeps its
+!> starting geometry: each point has an energy (the frames reach
+!> `xtbscan.log`) but none of them satisfied its convergence criteria.  The
+!> one-dimensional minimum search counts only converged points, so the result
+!> has to report the missing value (NaN) instead of the best unconverged
+!> energy, the run must say so in a diagnostic, and the reference geometry
+!> must stay the input geometry - the `0.0` frame of an unevaluated point may
+!> never be reported as a result
+!> (`docs/_landscape-recon/20-m3-vib-implementation-report.md`, M2 leftover
+!> M-2).
+!>
+!> `--lscan-max-steps` (M2 leftover M-1) is the flag that makes this branch
+!> reachable from the command line; the second half of the test repeats the
+!> scan with a real step budget and checks that the same settings then produce
+!> a converged minimum, so the NaN is not an artefact of an invalid request.
+subroutine test_scan_task_no_converged_point(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(TMolecule) :: mol
+   type(TRestart) :: chk
+   type(TxTBCalculator) :: calc
+   type(landscape_scan_settings) :: set
+   type(landscape_result) :: result
+   real(wp), allocatable :: xyz_saved(:, :)
+   integer :: frames, nlog
+
+   call init(env)
+   call init(mol, sym, xyz)
+   call newXTBCalculator(env, mol, calc, method=2)
+   call newWavefunction(env, mol, calc, chk)
+   allocate(xyz_saved(3, nat), source=mol%xyz)
+
+   set = landscape_scan_settings()
+   set%printlevel = 0
+   set%write_files = .true.
+   set%bidirectional = .false.
+   set%max_steps = 0
+   set%coord(1)%ctype = p_landscape_scan_coord_angle
+   set%coord(1)%atoms(1:3) = [2, 1, 3]
+   set%coord(1)%step = 3.0_wp*pi/180.0_wp
+   set%coord(1)%nstep = 2
+
+   nlog = env%nLog
+   call run_landscape(env, mol, chk, calc, set, result)
+
+   ! a point that stops short of its thresholds is not a hard failure
+   call check(error, .not. landscape_log_failed(env, nlog), &
+      & "the unconverged scan reported an error")
+   if (allocated(error)) return
+   call check(error, result%n_steps, 3)
+   if (allocated(error)) return
+   call check(error, .not. result%converged, &
+      & "a scan without a converged point claimed to be converged")
+   if (allocated(error)) return
+   call check(error, .not. landscape_value_present(result%energy), &
+      & "an unconverged scan reported a minimum")
+   if (allocated(error)) return
+   call check(error, result%message, "scan completed without a converged point", &
+      & "the scan did not report the missing convergence")
+   if (allocated(error)) return
+   ! the geometry of an unevaluated point must not become the reference
+   call check(error, maxval(abs(mol%xyz - xyz_saved)), 0.0_wp, &
+      & "the scan moved the geometry although no point converged")
+   if (allocated(error)) return
+   ! the points themselves were evaluated, so their frames carry energies
+   frames = count_frames('xtbscan.log')
+   call check(error, frames, result%n_steps, &
+      & "a point of the unconverged scan has no energy")
+   if (allocated(error)) return
+
+   ! the same scan with a real step budget converges and reports a number
+   set%max_steps = 256
+   call set%set_conv_level('loose')
+   nlog = env%nLog
+   call run_landscape(env, mol, chk, calc, set, result)
+   call check(error, .not. landscape_log_failed(env, nlog), &
+      & "the reference scan reported an error")
+   if (allocated(error)) return
+   call check(error, result%converged, &
+      & "the scan with a step budget did not converge")
+   if (allocated(error)) return
+   call check(error, landscape_value_present(result%energy), &
+      & "the converged scan reported no minimum")
+   if (allocated(error)) return
+
+   ! The two-dimensional minimum search has the same rule (only converged
+   ! points qualify), so the same settings on a grid must report the missing
+   ! value as well instead of the best evaluated point.
+   set = landscape_scan_settings()
+   set%printlevel = 0
+   set%write_files = .false.
+   set%max_steps = 0
+   set%ndim = 2
+   set%coord(1)%ctype = p_landscape_scan_coord_angle
+   set%coord(1)%atoms(1:3) = [2, 1, 3]
+   set%coord(1)%step = 3.0_wp*pi/180.0_wp
+   set%coord(1)%nstep = 2
+   set%coord(2)%ctype = p_landscape_scan_coord_distance
+   set%coord(2)%atoms(1:2) = [1, 2]
+   set%coord(2)%step = 0.05_wp
+   set%coord(2)%nstep = 1
+
+   nlog = env%nLog
+   call run_landscape(env, mol, chk, calc, set, result)
+   call check(error, .not. landscape_log_failed(env, nlog), &
+      & "the two-dimensional scan reported an error")
+   if (allocated(error)) return
+   call check(error, .not. result%converged, &
+      & "the two-dimensional scan claimed to be converged")
+   if (allocated(error)) return
+   call check(error, result%message, "scan completed without a converged point", &
+      & "the two-dimensional scan reported an unexpected message")
+   if (allocated(error)) return
+   call check(error, .not. landscape_value_present(result%energy), &
+      & "the two-dimensional scan reported the best evaluated grid point as "//&
+      & "its minimum although no point converged")
+
+end subroutine test_scan_task_no_converged_point
 
 !> A GFN2 scan whose points fail must not write a fabricated energy.
 !>

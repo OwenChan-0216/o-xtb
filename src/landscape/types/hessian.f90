@@ -44,6 +44,17 @@
 !>  * an analytic GFN2 Hessian only has to add another extension of
 !>    `landscape_hessian_provider` and a `hessian_source` name.
 !>
+!> The `file` source reads the Hessian written by the existing xtb
+!> implementation (`hessian`, TURBOMOLE layout) back in
+!> (`landscape_read_hessian_file`), so an expensive numerical Hessian of a
+!> preceding run can be reused by every landscape task.  The reader is strict
+!> on purpose: a missing file, a wrong header, a truncated or oversized matrix
+!> and an asymmetric or non-finite matrix are reported with `env%error`
+!> instead of being silently replaced by zeros - `rdhess`
+!> (`src/freq/io.f90:82`), which the xtb subcommands use, cannot do that: it
+!> reads without `iostat`, so a damaged file terminates the program, and a
+!> file without a `$hessian` header yields a silently zero matrix.
+!>
 !> Units: coordinates in bohr, energies in hartree, gradients in hartree/bohr
 !> and Hessian matrix elements in hartree/bohr^2.  The returned Hessian is
 !> dense and exactly symmetric.
@@ -57,21 +68,39 @@ module xtb_landscape_hessian
    use xtb_type_setvar, only : modhess_setvar
    use xtb_modelhessian_type, only : TModelHessian
    use xtb_modelhessian_lindh, only : newLindhD2ModelHessian
-   use xtb_landscape_settings, only : landscape_log_failed
+   use xtb_lin, only : lin
+   use xtb_setparam, only : get_namespace
+   use xtb_landscape_settings, only : landscape_log_failed, landscape_value_present
    implicit none(type, external)
    private
 
    public :: landscape_hessian_provider
    public :: landscape_numerical_hessian_provider
    public :: landscape_model_hessian_provider
+   public :: landscape_hessian_file
    public :: landscape_hessian_source_known
    public :: new_landscape_hessian_provider
+   public :: landscape_read_hessian_file, landscape_write_hessian_file
 
    !> Print level of the displaced single points of the numerical Hessian.
    !> Negative values silence the calculator, exactly like the numerical
    !> Hessian of xtb itself (`get_gradient_derivs` in
    !> `src/type/calculator.f90`).
    integer, parameter :: displacement_printlevel = -1
+
+   !> Header record of a TURBOMOLE Hessian file (`wrhess`, `src/freq/io.f90`)
+   character(len=*), parameter :: hessian_header = '$hessian'
+
+   !> Record format of a TURBOMOLE Hessian matrix, identical to `wrhess`
+   !> (`src/freq/io.f90:53`): five columns per record, prefixed by five blanks
+   character(len=*), parameter :: hessian_format = '(5x,5f15.10)'
+
+   !> Tolerance of the symmetry and finiteness check of a Hessian read from a
+   !> file (hartree/bohr^2, relative to the largest matrix element)
+   real(wp), parameter :: hessian_symmetry_tol = 1.0e-8_wp
+
+   !> Maximum number of values parsed from one record of a Hessian file
+   integer, parameter :: hessian_max_record = 256
 
    !> Abstract Hessian provider.
    !>
@@ -145,6 +174,21 @@ module xtb_landscape_hessian
       procedure :: compute => model_hessian_compute
    end type landscape_model_hessian_provider
 
+   !> Hessian read from a file (`hessian_source = 'file'`).
+   !>
+   !> The file is the `hessian` file of xtb itself (TURBOMOLE layout, see
+   !> `landscape_read_hessian_file`), which makes the result of a preceding
+   !> numerical Hessian reusable without any algorithm knowing about it
+   !> (PLAN section 5.2).  The provider does not evaluate the calculator
+   !> (`n_eval = 0`) and marks the Hessian as exact data.
+   type, extends(landscape_hessian_provider) :: landscape_hessian_file
+      !> Name of the file holding the Hessian
+      character(len=:), allocatable :: filename
+   contains
+      !> Hessian from the file
+      procedure :: compute => file_hessian_compute
+   end type landscape_hessian_file
+
 contains
 
 !> True if `source` names a known Hessian provider.
@@ -155,7 +199,7 @@ pure function landscape_hessian_source_known(source) result(known)
    logical :: known
 
    select case (trim(source))
-   case ('numerical', 'model')
+   case ('numerical', 'model', 'file')
       known = .true.
    case default
       known = .false.
@@ -169,7 +213,7 @@ end function landscape_hessian_source_known
 !> an unknown name is reported with `env%error` and the caller must abort
 !> (there is no default provider on this path, a silent fallback would make
 !> the configured `hessian_source` a lie).
-subroutine new_landscape_hessian_provider(env, source, provider, sccacc)
+subroutine new_landscape_hessian_provider(env, source, provider, sccacc, filename)
    character(len=*), parameter :: source_name = 'new_landscape_hessian_provider'
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
@@ -179,6 +223,8 @@ subroutine new_landscape_hessian_provider(env, source, provider, sccacc)
    class(landscape_hessian_provider), allocatable, intent(out) :: provider
    !> SCC accuracy of the numerical Hessian, defaults to xtb `accu_hess`
    real(wp), intent(in), optional :: sccacc
+   !> File of the `file` source; required for that source, unused otherwise
+   character(len=*), intent(in), optional :: filename
 
    real(wp) :: scc_accuracy
 
@@ -198,6 +244,23 @@ subroutine new_landscape_hessian_provider(env, source, provider, sccacc)
       allocate(landscape_model_hessian_provider :: provider)
       provider%name = 'model'
       provider%exact = .false.
+   case ('file')
+      if (.not. present(filename)) then
+         call env%error("the Hessian source 'file' requires a file name", source_name)
+         return
+      end if
+      if (len_trim(filename) == 0) then
+         call env%error("the Hessian source 'file' requires a non-empty file name", &
+            & source_name)
+         return
+      end if
+      allocate(landscape_hessian_file :: provider)
+      select type (hp => provider)
+      type is (landscape_hessian_file)
+         hp%filename = trim(filename)
+      end select
+      provider%name = 'file'
+      provider%exact = .true.
    case default
       call env%error("unknown hessian source: "//trim(source), source_name)
    end select
@@ -370,5 +433,402 @@ subroutine model_hessian_compute(self, env, mol, chk, calc, hess, step, odlr, fi
    hess = 0.5_wp*(hess + transpose(hess))
 
 end subroutine model_hessian_compute
+
+!> Hessian of the attached file (`hessian_source = 'file'`).
+!>
+!> The dimension of the matrix has to match the molecule, because the
+!> TURBOMOLE layout stores no dimension: a file that describes a different
+!> molecule is only detectable through its number of values, which the reader
+!> checks against `3n` and reports when it differs.  The attached calculator
+!> and wavefunction are untouched, the provider never evaluates them.
+subroutine file_hessian_compute(self, env, mol, chk, calc, hess, step, odlr, final_err)
+   character(len=*), parameter :: source = 'landscape_file_hessian_compute'
+   !> Provider instance
+   class(landscape_hessian_file), intent(inout) :: self
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Molecular structure (only the atom count is used)
+   type(TMolecule), intent(inout) :: mol
+   !> Wavefunction data (unused)
+   type(TRestart), intent(inout) :: chk
+   !> Single point calculator (unused)
+   class(TCalculator), intent(inout) :: calc
+   !> Dense Hessian (3N, 3N)
+   real(wp), intent(inout) :: hess(:, :)
+   !> Finite difference step (bohr), unused
+   real(wp), intent(in) :: step
+   !> Use the ODLR approximation, unused
+   logical, intent(in) :: odlr
+   !> Residual error estimate (0, the file is exact data)
+   real(wp), intent(out) :: final_err
+
+   logical :: ok
+
+   final_err = 0.0_wp
+   self%n_eval = 0
+   if (odlr) then
+      call env%error("the Hessian file provider returns the stored matrix and "//&
+         & "does not support the ODLR approximation", source)
+      return
+   end if
+   if (.not. allocated(self%filename)) then
+      call env%error("the Hessian file provider has no file name", source)
+      return
+   end if
+   if (size(hess, 1) /= 3*mol%n .or. size(hess, 2) /= 3*mol%n) then
+      call env%error("the Hessian of the file provider must be a (3N, 3N) "//&
+         & "matrix; the caller passed a different shape", source)
+      return
+   end if
+
+   call landscape_read_hessian_file(env, self%filename, hess, ok)
+
+end subroutine file_hessian_compute
+
+!> Read a TURBOMOLE format Hessian from `filename`.
+!>
+!> The layout is the one of the `hessian` file written by xtb itself
+!> (`wrhess`/`rdhess` in `src/freq/io.f90`): the record `$hessian` (a trailing
+!> ` (projected)` is allowed) followed by the full square matrix, row by row,
+!> five columns per record in the format `(5x,5f15.10)`; the optional closing
+!> record `$end` is skipped.  The values are assigned to `hess(j, i)` for the
+!> `j`-th entry of row `i`, so an asymmetric matrix (which the symmetric
+!> writer never produces) is detected instead of being averaged silently.
+!>
+!> Failure modes, all reported with `env%error` and `ok = .false.`:
+!>
+!>  * the file does not exist or cannot be opened,
+!>  * the first record is not a `$hessian` header,
+!>  * a record holds a token that is not a number,
+!>  * the number of values is not `(3n)^2`, i.e. the file describes a
+!>    different molecule,
+!>  * the matrix is not symmetric, or holds a non-finite value.
+!>
+!> `hess` is left untouched on failure.
+subroutine landscape_read_hessian_file(env, filename, hess, ok)
+   character(len=*), parameter :: source = 'landscape_read_hessian_file'
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Name of the Hessian file
+   character(len=*), intent(in) :: filename
+   !> Dense Hessian (3n, 3n) in hartree/bohr^2
+   real(wp), intent(out) :: hess(:, :)
+   !> True if the matrix was read completely
+   logical, intent(out) :: ok
+
+   real(wp), allocatable :: work(:, :)
+   real(wp) :: values(hessian_max_record), asym, scale
+   character(len=1024) :: line, token
+   character(len=128) :: iomsg
+   integer :: unit, n3, nvals, irec, ios, itoken, ntoken
+   integer :: istart, iend, irow, icol, i
+   logical :: terminator, opened
+
+   ok = .false.
+   if (size(hess, 1) /= size(hess, 2) .or. size(hess, 1) <= 0) then
+      call env%error("the Hessian target matrix must be a non-empty square "//&
+         & "matrix", source)
+      return
+   end if
+   n3 = size(hess, 1)
+
+   ! `open_hessian_for_read` resolves the xtb file namespace (the same prefix
+   ! `main_freq` and `wrhess` add to the files they write) and falls back to
+   ! the plain name, so a Hessian written by a namespaced run is found both as
+   ! `<namespace>.<name>` and as `<name>`.
+   call open_hessian_for_read(unit, trim(filename), opened)
+   if (.not. opened) then
+      call env%error("cannot open Hessian file '"//trim(filename)//"'", source)
+      return
+   end if
+
+   line = ''
+   read(unit, '(a)', iostat=ios, iomsg=iomsg) line
+   if (ios /= 0) then
+      close(unit)
+      call env%error("the Hessian file '"//trim(filename)//"' is empty or "//&
+         & "unreadable ("//trim(iomsg)//")", source)
+      return
+   end if
+   if (index(line, hessian_header) == 0) then
+      close(unit)
+      call env%error("the Hessian file '"//trim(filename)//"' is not a "//&
+         & "TURBOMOLE Hessian: the first record does not hold '"//&
+         & hessian_header//"'", source)
+      return
+   end if
+
+   allocate(work(n3, n3), source=0.0_wp)
+   nvals = 0
+   irec = 0
+   terminator = .false.
+   do
+      read(unit, '(a)', iostat=ios, iomsg=iomsg) line
+      if (ios < 0) exit
+      if (ios > 0) then
+         close(unit)
+         call env%error("cannot read record "//trim(int_to_string(irec + 2))//&
+            & " of the Hessian file '"//trim(filename)//"' ("//trim(iomsg)//")", &
+            & source)
+         return
+      end if
+      irec = irec + 1
+      if (index(line, '$end') > 0) then
+         terminator = .true.
+         exit
+      end if
+      ! Split the record into blank/comma separated tokens and parse each of
+      ! them individually, so that a corrupt token is reported with its
+      ! position instead of silently ending the list directed read.
+      ntoken = 0
+      i = 1
+      do while (i <= len(line))
+         if (is_separator(line(i:i))) then
+            i = i + 1
+            cycle
+         end if
+         istart = i
+         do while (i <= len(line))
+            if (is_separator(line(i:i))) exit
+            i = i + 1
+         end do
+         iend = i - 1
+         ntoken = ntoken + 1
+         if (ntoken > hessian_max_record) then
+            close(unit)
+            call env%error("record "//trim(int_to_string(irec + 1))//" of the "//&
+               & "Hessian file '"//trim(filename)//"' holds more than "//&
+               & trim(int_to_string(hessian_max_record))//" values", source)
+            return
+         end if
+         token = line(istart:iend)
+         read(token, *, iostat=ios) values(ntoken)
+         if (ios /= 0) then
+            close(unit)
+            call env%error("record "//trim(int_to_string(irec + 1))//" of the "//&
+               & "Hessian file '"//trim(filename)//"' holds the token '"//&
+               & trim(token)//"', which is not a number", source)
+            return
+         end if
+      end do
+      do itoken = 1, ntoken
+         nvals = nvals + 1
+         if (nvals > n3*n3) cycle
+         irow = (nvals - 1)/n3 + 1
+         icol = nvals - (irow - 1)*n3
+         ! `rdhess` reads row `irow` into the column `icol` of the matrix, so
+         ! the same assignment is used here
+         work(icol, irow) = values(itoken)
+      end do
+   end do
+   close(unit)
+
+   if (terminator .and. nvals < n3*n3) then
+      call env%error("the Hessian file '"//trim(filename)//"' ends after "//&
+         & trim(int_to_string(nvals))//" values, but the matrix of 3N = "//&
+         & trim(int_to_string(n3))//" needs "//trim(int_to_string(n3*n3)), &
+         & source)
+      return
+   end if
+   if (nvals /= n3*n3) then
+      call env%error("the Hessian file '"//trim(filename)//"' holds "//&
+         & trim(int_to_string(nvals))//" values, but the matrix of 3N = "//&
+         & trim(int_to_string(n3))//" needs "//trim(int_to_string(n3*n3))//&
+         & "; the file describes a different molecule", source)
+      return
+   end if
+
+   do irow = 1, n3
+      do icol = 1, n3
+         if (.not. landscape_value_present(work(icol, irow))) then
+            call env%error("the Hessian file '"//trim(filename)//"' holds a "//&
+               & "non-finite matrix element at row "//trim(int_to_string(irow))//&
+               & ", column "//trim(int_to_string(icol)), source)
+            return
+         end if
+      end do
+   end do
+
+   asym = maxval(abs(work - transpose(work)))
+   scale = max(1.0_wp, maxval(abs(work)))
+   if (asym > hessian_symmetry_tol*scale) then
+      call env%error("the Hessian read from '"//trim(filename)//"' is not "//&
+         & "symmetric: max |h(i,j) - h(j,i)| = "//trim(real_to_string(asym))//&
+         & " Eh/bohr^2", source)
+      return
+   end if
+
+   hess = work
+   ok = .true.
+
+end subroutine landscape_read_hessian_file
+
+!> Write a dense Hessian in the TURBOMOLE format of xtb.
+!>
+!> The file holds the **complete** square matrix (row `i` carries the `n3`
+!> elements `h(i, 1:n3)`), not the lower triangle alone: the packed array is
+!> filled with `packed(lin(i,j)) = hess(i,j)` for `j <= i` and `lin(j,i)`
+!> mirrors it for `j > i`, and the records are written five columns at a time -
+!> exactly like `wrhess` (`src/freq/io.f90:53`) writes the `hessian` file of
+!> `--hess`.  The writer is not `wrhess` itself because that routine cannot
+!> report an unwritable target (`persistentEnv%io%writeFile` leaves the unit at
+!> -1 and the following `write` terminates the program); the format is kept
+!> identical, which the unit test `hessian-file-roundtrip` verifies by
+!> comparing the output of both writers byte by byte.
+subroutine landscape_write_hessian_file(env, filename, hess, ok)
+   character(len=*), parameter :: source = 'landscape_write_hessian_file'
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Name of the Hessian file
+   character(len=*), intent(in) :: filename
+   !> Dense Hessian (3n, 3n) in hartree/bohr^2
+   real(wp), intent(in) :: hess(:, :)
+   !> True if the matrix was written
+   logical, intent(out) :: ok
+
+   real(wp), allocatable :: packed(:)
+   character(len=128) :: iomsg
+   integer :: unit, n3, i, j, mincol, maxcol, ios
+   logical :: opened
+
+   ok = .false.
+   if (size(hess, 1) /= size(hess, 2) .or. size(hess, 1) <= 0) then
+      call env%error("the Hessian to write must be a non-empty square matrix", &
+         & source)
+      return
+   end if
+   n3 = size(hess, 1)
+
+   call open_hessian_for_write(unit, trim(filename), opened)
+   if (.not. opened) then
+      call env%error("cannot write Hessian file '"//trim(filename)//"'", source)
+      return
+   end if
+
+   allocate(packed(n3*(n3 + 1)/2), source=0.0_wp)
+   do i = 1, n3
+      do j = 1, i
+         packed(lin(i, j)) = hess(i, j)
+      end do
+   end do
+
+   write(unit, '(a)') hessian_header
+   do i = 1, n3
+      maxcol = 0
+      do while (maxcol < n3)
+         mincol = maxcol + 1
+         maxcol = min(maxcol + 5, n3)
+         write(unit, hessian_format, iostat=ios, iomsg=iomsg) &
+            & (packed(lin(i, j)), j=mincol, maxcol)
+         if (ios /= 0) then
+            close(unit)
+            call env%error("cannot write record "//trim(int_to_string(i))//&
+               & " of the Hessian file '"//trim(filename)//"' ("//&
+               & trim(iomsg)//")", source)
+            return
+         end if
+      end do
+   end do
+   close(unit)
+   ok = .true.
+
+end subroutine landscape_write_hessian_file
+
+!> Open a Hessian file for reading, namespaced name first.
+!>
+!> Mirrors `persistentEnv%io%readFile` (`src/type/iohandler.f90:202`): the
+!> namespaced name is tried first, then the name as given, so a run with
+!> `--namespace` finds both the file it wrote itself and the plain default
+!> name.
+subroutine open_hessian_for_read(unit, filename, opened)
+   !> Unit of the opened file, -1 if it could not be opened
+   integer, intent(out) :: unit
+   !> Name of the Hessian file
+   character(len=*), intent(in) :: filename
+   !> True if the file was opened
+   logical, intent(out) :: opened
+
+   character(len=:), allocatable :: name
+   integer :: ios
+
+   unit = -1
+   opened = .false.
+   name = get_namespace(filename)
+   open(newunit=unit, file=name, status='old', action='read', iostat=ios)
+   if (ios == 0) then
+      opened = .true.
+      return
+   end if
+   unit = -1
+   if (name == filename) return
+   open(newunit=unit, file=filename, status='old', action='read', iostat=ios)
+   if (ios == 0) opened = .true.
+   if (.not. opened) unit = -1
+
+end subroutine open_hessian_for_read
+
+!> Open a Hessian file for writing under the namespace of the run.
+subroutine open_hessian_for_write(unit, filename, opened)
+   !> Unit of the opened file, -1 if it could not be opened
+   integer, intent(out) :: unit
+   !> Name of the Hessian file
+   character(len=*), intent(in) :: filename
+   !> True if the file was opened
+   logical, intent(out) :: opened
+
+   character(len=:), allocatable :: name
+   integer :: ios
+
+   unit = -1
+   name = get_namespace(filename)
+   open(newunit=unit, file=name, action='write', iostat=ios)
+   opened = ios == 0
+   if (.not. opened) unit = -1
+
+end subroutine open_hessian_for_write
+
+!> True if the character separates the values of a Hessian record.
+!>
+!> Blank and comma are the separators of the format; tab and the carriage
+!> return of a CRLF line ending are accepted as well, so a file produced on a
+!> different platform is read instead of being rejected as corrupt.
+pure function is_separator(char) result(separator)
+   !> Character to test
+   character(len=1), intent(in) :: char
+   !> True for blank, comma, tab and carriage return
+   logical :: separator
+
+   separator = char == ' ' .or. char == ',' .or. char == achar(9) .or. &
+      & char == achar(13)
+
+end function is_separator
+
+!> Decimal representation of an integer for an error message.
+pure function int_to_string(value) result(string)
+   !> Value to convert
+   integer, intent(in) :: value
+   !> Decimal string
+   character(len=:), allocatable :: string
+
+   character(len=16) :: buffer
+
+   write(buffer, '(i0)') value
+   string = trim(buffer)
+
+end function int_to_string
+
+!> Scientific representation of a real for an error message.
+pure function real_to_string(value) result(string)
+   !> Value to convert
+   real(wp), intent(in) :: value
+   !> Scientific string
+   character(len=:), allocatable :: string
+
+   character(len=32) :: buffer
+
+   write(buffer, '(es16.8)') value
+   string = trim(buffer)
+
+end function real_to_string
 
 end module xtb_landscape_hessian

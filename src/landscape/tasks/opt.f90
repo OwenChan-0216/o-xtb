@@ -112,7 +112,7 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
    ! The provider factory reports an unknown `hessian_source`; the caller must
    ! abort instead of silently running with the default provider.
    call new_landscape_hessian_provider(env, settings%hessian_source, hp, &
-      & settings%engine%hess_acc)
+      & sccacc=settings%engine%hess_acc, filename=settings%hessian_file)
    if (.not. allocated(hp)) return
    call engine%set_hessian_provider(hp)
    call engine%set_calculator(calc)
