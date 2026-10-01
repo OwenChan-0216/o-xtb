@@ -104,8 +104,10 @@ module xtb_prog_main
    !> landscape task suite
    use xtb_landscape, only: run_landscape
    use xtb_landscape_settings, only: landscape_opt_settings, &
-      & landscape_scan_settings, landscape_vib_settings, &
+      & landscape_scan_settings, landscape_vib_settings, landscape_ts_settings, &
       & landscape_opt_algorithm_from_name, landscape_conv_level_known, &
+      & landscape_ts_method_known, landscape_ts_method_from_name, &
+      & landscape_ts_init_mode_known, landscape_ts_ninit_known, &
       & landscape_scan_coord_from_name, landscape_scan_coord_known, &
       & landscape_scan_coord_natoms, landscape_scan_mode_known, &
       & p_landscape_scan_coord_distance, p_landscape_restart_off, &
@@ -145,6 +147,7 @@ contains
       type(landscape_opt_settings) :: lset
       type(landscape_scan_settings) :: lsset
       type(landscape_vib_settings) :: lvset
+      type(landscape_ts_settings) :: ltset
       type(landscape_result) :: lres
 !  store important names and stuff like that in FORTRAN strings
       character(len=:), allocatable :: fname    ! geometry input file
@@ -241,7 +244,7 @@ contains
       ! read the command line arguments
       call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset, lvset)
+         & lsset, lvset, ltset)
 
 
       ! No solvation available for PTB!
@@ -584,7 +587,7 @@ contains
             call env%terminate('This is an internal error, please define your runtypes!')
          case (p_run_prescc,p_run_scc, p_run_grad, p_run_opt, p_run_hess, p_run_ohess, p_run_bhess, &
                p_run_md, p_run_omd, p_run_path, p_run_screen, &
-               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt, p_run_lscan, p_run_lvib)
+               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt, p_run_lscan, p_run_lts, p_run_lvib)
             if (set%mode_extrun == p_ext_gfnff) then
                fnv = xfind(p_fname_param_gfnff)
             elseif (set%mode_extrun .eq. p_ext_ptb) then
@@ -959,6 +962,27 @@ contains
          ! Report the lowest scan point: `res` feeds the TOTAL ENERGY line and
          ! xtbout.json, while `xtbscan.log` is written by the scan task from
          ! the de-biased energies of all scan points.
+         res%e_total = lres%energy
+         res%gnorm = lres%gnorm
+         call env%checkpoint("Landscape task terminated")
+      end if
+
+      ! ------------------------------------------------------------------------
+      ! landscape suite (transition state search with src/landscape)
+      if (set%runtyp == p_run_lts) then
+         ! M4 hard constraint 1: the electronic temperature is frozen for the
+         ! whole run and recorded.  The settings carry it explicitly (rather
+         ! than reading the inherited engine control) because the task copies
+         ! it into the engine control it hands to the engine.
+         ltset%engine%acc = set%acc
+         ltset%etemp = set%etemp
+         call start_timing(3)
+         call run_landscape(env, mol, chk, calc, ltset, lres)
+         call stop_timing(3)
+         ! Report the converged stationary point: `res` feeds the TOTAL
+         ! ENERGY line (`write_energy`) and xtbout.json, while `xtbts.xyz` is
+         ! written by the landscape task from `lres%energy`.  Without this
+         ! write-back the reported energy is the one of the starting geometry.
          res%e_total = lres%energy
          res%gnorm = lres%gnorm
          call env%checkpoint("Landscape task terminated")
@@ -1368,7 +1392,7 @@ contains
 !> Parse command line arguments and forward them to settings
    subroutine parseArguments(env, args, inputFile, paramFile, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset, lvset)
+         & lsset, lvset, ltset)
 
       use xtb_mctc_global, only: persistentEnv
 
@@ -1431,6 +1455,9 @@ contains
 
       !> Landscape frequency settings (`--lvib`, `--lvib-hessian`, ...)
       type(landscape_vib_settings), intent(inout) :: lvset
+
+      !> Landscape transition state settings (`--lts`, `--lts-method`, ...)
+      type(landscape_ts_settings), intent(inout) :: ltset
 
 !$    integer :: omp_get_num_threads, nproc
       integer :: nFlags
@@ -2443,6 +2470,443 @@ contains
                lsset%hessian_file = sec
             else
                call env%error("The --lscan-hessian-file flag requires a file name", source)
+            end if
+
+         case ('--lts')
+            ! Landscape suite: transition state search (src/landscape/saddle);
+            ! the method, trust radius and Hessian backend are set by the
+            ! dedicated `--lts-*` flags below.
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+
+         case ('--lts-method')
+            ! Transition state search method
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_ts_method_known(sec)) then
+                  ltset%method = landscape_ts_method_from_name(sec)
+               else
+                  call env%error("Unknown landscape transition state method '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lts-method flag requires a method name", source)
+            end if
+
+         case ('--lts-trust')
+            ! Initial trust radius of the P-RFO step (bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%trust = ddum
+               else
+                  call env%error("The --lts-trust flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-trust flag requires a number", source)
+            end if
+
+         case ('--lts-trust-max')
+            ! Upper bound of the trust radius (bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%trust_max = ddum
+               else
+                  call env%error("The --lts-trust-max flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-trust-max flag requires a number", source)
+            end if
+
+         case ('--lts-hlow')
+            ! Curvature floor of the downhill modes (hartree/bohr^2)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%hlow = ddum
+               else
+                  call env%error("The --lts-hlow flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-hlow flag requires a number", source)
+            end if
+
+         case ('--lts-max-steps')
+            ! Maximum number of macro iterations
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%max_steps = idum2
+               else
+                  call env%error("The --lts-max-steps flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-max-steps flag requires an integer", source)
+            end if
+
+         case ('--lts-level')
+            ! Convergence thresholds of the search
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_conv_level_known(sec)) then
+                  call ltset%set_conv_level(sec)
+               else
+                  call env%error("Unknown landscape convergence level '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lts-level flag requires a level name", source)
+            end if
+
+         case ('--lts-mode-overlap-min')
+            ! Mode following guard threshold
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%mode_overlap_min = ddum
+               else
+                  call env%error("The --lts-mode-overlap-min flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-mode-overlap-min flag requires a number", source)
+            end if
+
+         case ('--lts-alpha')
+            ! Uphill/downhill trust radius fraction of the B-P-RFO
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%alpha = ddum
+               else
+                  call env%error("The --lts-alpha flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-alpha flag requires a number", source)
+            end if
+
+         case ('--lts-micro-cycles')
+            ! Maximum number of restricted-step micro iterations
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%max_micro_cycles = idum2
+               else
+                  call env%error("The --lts-micro-cycles flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-micro-cycles flag requires an integer", source)
+            end if
+
+         case ('--lts-target-mode')
+            ! Which negative mode is followed (1-based)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%target_mode = idum2
+               else
+                  call env%error("The --lts-target-mode flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-target-mode flag requires an integer", source)
+            end if
+
+         case ('--lts-init-mode')
+            ! Source of the initial transition vector
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_ts_init_mode_known(sec)) then
+                  ltset%init_mode = sec
+               else
+                  call env%error("Unknown landscape initial mode '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lts-init-mode flag requires 'h0' or 'force'", source)
+            end if
+
+         case ('--lts-delta')
+            ! Dimer separation, the distance of each image from the midpoint
+            ! (bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%delta = ddum
+               else
+                  call env%error("The --lts-delta flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-delta flag requires a number", source)
+            end if
+
+         case ('--lts-dr')
+            ! Finite difference step of the dimer translation probe (bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%dR = ddum
+               else
+                  call env%error("The --lts-dr flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-dr flag requires a number", source)
+            end if
+
+         case ('--lts-rot-max-iter')
+            ! Maximum number of dimer rotations per macro iteration
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%rot_max_iter = idum2
+               else
+                  call env%error("The --lts-rot-max-iter flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-rot-max-iter flag requires an integer", source)
+            end if
+
+         case ('--lts-rot-alpha')
+            ! Damping factor of the dimer rotation angle (Eq. 13)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%rot_alpha = ddum
+               else
+                  call env%error("The --lts-rot-alpha flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-rot-alpha flag requires a number", source)
+            end if
+
+         case ('--lts-rot-frms')
+            ! RMS torque below which the dimer rotation is converged
+            ! (hartree/bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%rot_f_rms_th = ddum
+               else
+                  call env%error("The --lts-rot-frms flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-rot-frms flag requires a number", source)
+            end if
+
+         case ('--lts-ninit')
+            ! Source of the initial dimer axis
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_ts_ninit_known(sec)) then
+                  ltset%n_init = sec
+               else
+                  call env%error("Unknown landscape dimer initial axis '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lts-ninit flag requires 'random' or 'force'", source)
+            end if
+
+         case ('--lts-seed')
+            ! Seed of the random initial dimer axis (PLAN N10)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%seed = idum2
+               else
+                  call env%error("The --lts-seed flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-seed flag requires an integer", source)
+            end if
+
+         case ('--lts-step-max')
+            ! Hard bound of the dimer translation displacement (bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%step_max = ddum
+               else
+                  call env%error("The --lts-step-max flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-step-max flag requires a number", source)
+            end if
+
+         case ('--lts-translate-max-iter')
+            ! Maximum number of quick-min displacement updates per dimer
+            ! translation
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%translate_max_iter = idum2
+               else
+                  call env%error("The --lts-translate-max-iter flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-translate-max-iter flag requires an integer", source)
+            end if
+
+         case ('--lts-recalc')
+            ! Exact Hessian every N macro steps (0 disables)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%recalc = idum2
+               else
+                  call env%error("The --lts-recalc flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-recalc flag requires an integer", source)
+            end if
+
+         case ('--lts-no-verify')
+            ! Skip the frequency confirmation of the stationary point
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%verify_ts = .false.
+
+         case ('--lts-no-rigid')
+            ! Keep the rigid body components in the Cartesian step
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%remove_rigid = .false.
+
+         case ('--lts-restart')
+            ! Wavefunction restart policy of the engine
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               select case(sec)
+               case('off')
+                  ltset%engine%restart_mode = p_landscape_restart_off
+               case('pin')
+                  ltset%engine%restart_mode = p_landscape_restart_pin
+               case('warm')
+                  ltset%engine%restart_mode = p_landscape_restart_warm
+               case default
+                  call env%error("The --lts-restart flag requires off, pin or warm", source)
+               end select
+            else
+               call env%error("The --lts-restart flag requires off, pin or warm", source)
+            end if
+
+         case ('--lts-hessian')
+            ! Hessian backend of the search
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_hessian_source_known(sec)) then
+                  ltset%hessian_source = sec
+               else
+                  call env%error("Unknown landscape Hessian source '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lts-hessian flag requires a source name", source)
+            end if
+
+         case ('--lts-hessian-file')
+            ! File read by `--lts-hessian file`
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               ltset%hessian_file = sec
+            else
+               call env%error("The --lts-hessian-file flag requires a file name", source)
+            end if
+
+         case ('--lts-step')
+            ! Finite difference step of the confirmation Hessian (bohr); the
+            ! client side of M4 hard constraint 2 (H1).
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%engine%hess_step = ddum
+               else
+                  call env%error("The --lts-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-step flag requires a number", source)
+            end if
+
+         case ('--lts-sccacc')
+            ! SCC accuracy of the displaced single points of the confirmation
+            ! Hessian (H1)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%engine%hess_acc = ddum
+               else
+                  call env%error("The --lts-sccacc flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-sccacc flag requires a number", source)
+            end if
+
+         case ('--lts-step0')
+            ! Upper bound of the first dimer translation (bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%step0 = ddum
+               else
+                  call env%error("The --lts-step0 flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-step0 flag requires a number", source)
+            end if
+
+         case ('--lts-escape-step')
+            ! Displacement along the lowest internal mode when the start
+            ! geometry is a minimum (MEDIUM-1 of the review round 2); 0
+            ! disables the escape.
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%escape_step = ddum
+               else
+                  call env%error("The --lts-escape-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-escape-step flag requires a number", source)
             end if
 
          case ('--lvib')

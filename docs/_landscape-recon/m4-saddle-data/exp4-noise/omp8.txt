@@ -1,0 +1,54 @@
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_DENORMAL
+ERROR STOP 1
+
+Error termination. Backtrace:
+#0  0x14daae6218c2 in ???
+#1  0x14daae6223b9 in ???
+#2  0x14daae623792 in ???
+#3  0x598fe9e7f4ac in ???
+#4  0x598fe9e7de2e in ???
+#5  0x14daae3c5249 in ???
+#6  0x14daae3c5304 in ???
+#7  0x598fe9e7de60 in ???
+#8  0xffffffffffffffff in ???
+# Testing: landscape-optimize-xtb
+  Starting water-gfn2-minimization ... (1/8)
+       ... water-gfn2-minimization [PASSED]
+  Starting water-gfn2-output-files ... (2/8)
+       ... water-gfn2-output-files [PASSED]
+  Starting water-gfn2-determinism ... (3/8)
+       ... water-gfn2-determinism [FAILED]
+  Message: the off restart policy is not bitwise reproducible (energy)
+  Starting gfn2-singlepoint-determinism ... (4/8)
+       ... gfn2-singlepoint-determinism [FAILED]
+  Message: off restart policy is not bitwise reproducible (energy)
+  Starting model-initial-hessian ... (5/8)
+       ... model-initial-hessian [PASSED]
+  Starting hessian-cost-accounting ... (6/8)
+       ... hessian-cost-accounting [PASSED]
+  Starting scf-non-convergence ... (7/8)
+       ... scf-non-convergence [PASSED]
+  Starting missing-geometry ... (8/8)
+       ... missing-geometry [PASSED]
+2 test(s) failed!
+ landscape water: 6 steps, converged T
+ landscape water: final gmax    1.016481E-05 Eh/bohr
+ landscape water: energy evaluations 7
+ landscape water: r(OH)    0.95922/   0.95921 A, HOH  107.2245
+ wrote landscape_unittestopt.xyz
+ wrote landscape_unittest.trj
+ landscape water: energy run 1      -5.070544447713
+ landscape water: energy run 2      -5.070544447713
+ gfn2 single point [off ]: energy 1      -5.066171489935
+ gfn2 single point [off ]: energy 2      -5.066171489935
+ gfn2 single point [off ]: gradient difference   2.1511E-16 Eh/bohr
+ gfn2 gradient [off ]: energy    -5.06617148993454
+ gfn2 gradient [off ]: atom 1  -1.9249234886945779E-19  -3.3568813603555587E-04   4.8332890135997043E-02
+ gfn2 gradient [off ]: atom 2   5.1453657905075031E-20  -5.6723537257012159E-04  -1.5609314719022714E-02
+ gfn2 gradient [off ]: atom 3   1.4103869096438274E-19   9.0292350860567139E-04  -3.2723575416974328E-02
+ landscape model hessian: bfgs model seed     6 steps, converged T
+ landscape model hessian: bfgs identity seed 6 steps, converged T
+ landscape model hessian: rfo  model seed     6 steps, converged T
+ landscape model hessian: rfo  numerical seed 7 steps, converged T
+ landscape rfo cost: 43 single points for 7 steps (18
+  = 6N in the Hessian)

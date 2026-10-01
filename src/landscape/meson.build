@@ -31,6 +31,10 @@ srcs += files(
   'optimize/diis.f90',
   'optimize/rfo.f90',
   'optimize/driver.f90',
+  'saddle/eigenfollow.f90',
+  'saddle/bprfo.f90',
+  'saddle/prfo.f90',
+  'saddle/dimer.f90',
   'tasks/sp.f90',
   'tasks/opt.f90',
   'scan/relax_scan.f90',
@@ -41,6 +45,7 @@ srcs += files(
   'vib/modes.f90',
   'vib/thermo.f90',
   'tasks/vib.f90',
+  'tasks/ts.f90',
   'landscape_driver.f90',
   'landscape_api.f90',
 )

@@ -31,6 +31,7 @@ module xtb_landscape_results
    public :: landscape_step, landscape_result, landscape_convergence_report
    public :: landscape_result_add_step, landscape_report_add, landscape_result_trim
    public :: landscape_print_step, landscape_result_write, landscape_report_write
+   public :: p_landscape_bound_trust, p_landscape_bound_step_max
 
    !> Result of a vibrational analysis (`vib` task, PLAN section 5.4).
    !>
@@ -62,6 +63,14 @@ module xtb_landscape_results
       real(wp) :: zpe = 0.0_wp
    end type landscape_vib_result
 
+   !> Semantics of `landscape_step%trust_radius`: a genuine trust radius
+   !> (the minimisers, P-RFO and B-P-RFO).
+   integer, parameter :: p_landscape_bound_trust = 0
+   !> Semantics of `landscape_step%trust_radius`: the dimer has no trust
+   !> radius, so the recorded value is the upper bound `step_max` of its
+   !> translation.
+   integer, parameter :: p_landscape_bound_step_max = 1
+
    !> Bookkeeping of a single macro step of an optimisation.
    type :: landscape_step
       !> Macro iteration index (1-based)
@@ -78,8 +87,12 @@ module xtb_landscape_results
       real(wp) :: dispnorm = 0.0_wp
       !> Maximum absolute displacement component (bohr)
       real(wp) :: disp_max = 0.0_wp
-      !> Trust radius active in this step (bohr)
+      !> Bound active in this step (bohr): the trust radius for the trust
+      !> region methods, the translation bound `step_max` for the dimer.  The
+      !> meaning is given by `bound_kind`.
       real(wp) :: trust_radius = 0.0_wp
+      !> What `trust_radius` means, one of `p_landscape_bound_*`
+      integer :: bound_kind = p_landscape_bound_trust
       !> Algorithm that actually produced this step, one of the
       !> `p_landscape_opt_*` identifiers.  A value of `p_landscape_opt_sd`
       !> in a run of another algorithm means the configured direction was
@@ -142,6 +155,19 @@ module xtb_landscape_results
       !> rational step was replaced and the run did not use the configured
       !> method throughout.
       integer :: n_fallback = 0
+      !> Number of imaginary modes of the saddle point confirmation (-1 if
+      !> the confirmation was not performed, e.g. for the minimisation tasks)
+      integer :: n_imag = -1
+      !> Most negative (imaginary) frequency of the confirmation (cm^-1)
+      real(wp) :: imag_freq = 0.0_wp
+      !> True if the confirmation found exactly one imaginary mode, i.e. the
+      !> located stationary point really is a first order saddle point.  A
+      !> converged search that ended on a minimum or a higher order saddle has
+      !> `is_saddle = .false.` and is reported as a failure by the task.
+      logical :: is_saddle = .false.
+      !> Effective electronic temperature of the run (kelvin, read back from
+      !> the calculator); zero when the task does not touch the engine
+      real(wp) :: etemp = 0.0_wp
       !> Human readable termination message
       character(len=:), allocatable :: message
       !> Recorded macro steps
@@ -316,9 +342,17 @@ subroutine landscape_print_step(step, unit)
    !> Output unit
    integer, intent(in) :: unit
 
+   character(len=:), allocatable :: bound_label
+
    if (step%istep <= 1) then
+      ! The last column is the active bound: a trust radius for the trust
+      ! region methods, the translation ceiling `step_max` for the dimer (which
+      ! has no trust radius).  The label makes that distinction visible instead
+      ! of reporting `step_max` under a `trust/bohr` header.
+      bound_label = "trust/bohr"
+      if (step%bound_kind == p_landscape_bound_step_max) bound_label = "stepmax/bohr"
       write(unit, '(1x,a)') "   iter            energy/Eh        dE/(kcal/mol) "//&
-         & "  gmax/(Eh/bohr)  dmax/bohr     trust/bohr"
+         & "  gmax/(Eh/bohr)  dmax/bohr     "//bound_label
    end if
    write(unit, '(1x,i6,1x,f20.12,1x,f12.4,1x,es13.6,1x,es13.6,1x,es13.6)') &
       & step%istep, step%energy, step%delta_e*autokcal, step%gmax, &
@@ -344,6 +378,12 @@ subroutine landscape_result_write(self, unit)
    write(unit, '(1x,a,f20.12,a)') "final energy:   ", self%energy, " Eh"
    write(unit, '(1x,a,es15.6,a)') "final gradient: ", self%gnorm, " Eh/bohr"
    write(unit, '(1x,a,es15.6,a)') "max gradient:   ", self%gmax, " Eh/bohr"
+   ! M4 hard constraint 1: the effective (read back) electronic temperature is
+   ! part of the result object, not only of the printed engine report.  It is
+   ! zero for the tasks that never touched an xTB calculator.
+   if (self%etemp > 0.0_wp) then
+      write(unit, '(1x,a,f12.3,a)') "etemp:          ", self%etemp, " K"
+   end if
    write(unit, '(1x,a)') repeat('-', 62)
 
 end subroutine landscape_result_write

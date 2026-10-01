@@ -1,0 +1,357 @@
+      -----------------------------------------------------------      
+     |                   =====================                   |     
+     |                           x T B                           |     
+     |                   =====================                   |     
+     |                         S. Grimme                         |     
+     |          Mulliken Center for Theoretical Chemistry        |     
+     |                    University of Bonn                     |     
+      -----------------------------------------------------------      
+
+   * xtb version 6.7.1 (unknown-commit) compiled by '@Linux' on 2026/10/01
+
+   xtb is free software: you can redistribute it and/or modify it under
+   the terms of the GNU Lesser General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   xtb is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU Lesser General Public License for more details.
+   
+   Cite this work as:
+   * C. Bannwarth, E. Caldeweyher, S. Ehlert, A. Hansen, P. Pracht,
+     J. Seibert, S. Spicher, S. Grimme, WIREs Comput. Mol. Sci., 2020, 11,
+     e01493. DOI: 10.1002/wcms.1493
+   
+   for GFN2-xTB:
+   * C. Bannwarth, S. Ehlert and S. Grimme., J. Chem. Theory Comput., 2019,
+     15, 1652-1671. DOI: 10.1021/acs.jctc.8b01176
+   for GFN1-xTB:
+   * S. Grimme, C. Bannwarth, P. Shushkov, J. Chem. Theory Comput., 2017,
+     13, 1989-2009. DOI: 10.1021/acs.jctc.7b00118
+   for GFN0-xTB:
+   * P. Pracht, E. Caldeweyher, S. Ehlert, S. Grimme, ChemRxiv, 2019, preprint.
+     DOI: 10.26434/chemrxiv.8326202.v1
+   for GFN-FF:
+   * S. Spicher and S. Grimme, Angew. Chem. Int. Ed., 2020, 59, 15665-15673.
+     DOI: 10.1002/anie.202004239
+   
+   for ALPB and GBSA implicit solvation:
+   * S. Ehlert, M. Stahn, S. Spicher, S. Grimme, J. Chem. Theory Comput.,
+     2021, 17, 4250-4261. DOI: 10.1021/acs.jctc.1c00471
+   
+   for ddCOSMO and CPCM-X implicit solvation:
+   * M. Stahn, S. Ehlert, S. Grimme, J. Phys. Chem. A,
+     2023, XX, XXXX-XXXX. DOI: 10.1021/acs.jpca.3c04382
+   
+   for DFT-D4:
+   * E. Caldeweyher, C. Bannwarth and S. Grimme, J. Chem. Phys., 2017,
+     147, 034112. DOI: 10.1063/1.4993215
+   * E. Caldeweyher, S. Ehlert, A. Hansen, H. Neugebauer, S. Spicher,
+     C. Bannwarth and S. Grimme, J. Chem. Phys., 2019, 150, 154122.
+     DOI: 10.1063/1.5090222
+   * E. Caldeweyher, J.-M. Mewes, S. Ehlert and S. Grimme, Phys. Chem. Chem. Phys.
+     2020, 22, 8499-8512. DOI: 10.1039/D0CP00502A
+   
+   for sTDA-xTB:
+   * S. Grimme and C. Bannwarth, J. Chem. Phys., 2016, 145, 054103.
+     DOI: 10.1063/1.4959605
+   
+   in the mass-spec context:
+   * V. Asgeirsson, C. Bauer and S. Grimme, Chem. Sci., 2017, 8, 4879.
+     DOI: 10.1039/c7sc00601b
+   * J. Koopman and S. Grimme, ACS Omega 2019, 4, 12, 15120-15133.
+     DOI: 10.1021/acsomega.9b02011
+   
+   for metadynamics refer to:
+   * S. Grimme, J. Chem. Theory Comput., 2019, 155, 2847-2862
+     DOI: 10.1021/acs.jctc.9b00143
+   
+   for SPH calculations refer to:
+   * S. Spicher and S. Grimme, J. Chem. Theory Comput., 2021, 17, 1701-1714
+     DOI: 10.1021/acs.jctc.0c01306
+   
+   for ONIOM refer to:
+   * C. Plett, A. Katbashev, S. Ehlert, S. Grimme, M. Bursch,
+     Phys. Chem. Chem. Phys., 2023, 25, 17860-17868. DOI: 10.1039/D3CP02178E
+   
+   for DIPRO refer to:
+   * J. Kohn, N. Gildemeister, S. Grimme, D. Fazzi, A. Hansen,
+     J. Chem. Phys. 159, 144106 (2023). DOI: 10.1063/5.0167484
+   
+   for PTB refer to:
+   * S. Grimme, M. Mueller, A. Hansen, J. Chem. Phys., 2023, 158, 124111.
+     DOI: 10.1063/5.0137838
+   
+   for O1NumHess refer to:
+   * B. Wang, S. Luo, Z. Wang, W. Liu,
+     J. Chem. Theory Comput. 21, 10893-10909.
+     DOI: 10.1021/acs.jctc.5c01354
+   
+   with help from (in alphabetical order)
+   P. Atkinson, C. Bannwarth, F. Bohle, G. Brandenburg, E. Caldeweyher,
+   M. Checinski, S. Dohm, S. Ehlert, S. Ehrlich, M. Friede, T. Froitzheim,
+   I. Gerasimov, C. Hölzer, A. Katbashev, J. Kohn, J. Koopman, C. Lavigne,
+   S. Lehtola, F. März, M. Müller, F. Musil, H. Neugebauer, J. Pisarek,
+   C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
+   M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
+   
+ * started run on 2026/10/01 at 17:59:37.124     
+   ID    Z sym.   atoms
+    1    1 H      1
+    2    6 C      2
+    3    7 N      3
+
+           -------------------------------------------------
+          |                Calculation Setup                |
+           -------------------------------------------------
+
+          program call               : /tmp/xtb-land/build/xtb /tmp/hcn.xyz --gfn 2 --lts --norestart --lts-method prfo --lts-init-mode force --lts-max-steps 20
+          coordinate file            : /tmp/hcn.xyz
+          omp threads                :                     1
+          random seed                :            1128157556
+
+
+           -------------------------------------------------
+          |                 G F N 2 - x T B                 |
+           -------------------------------------------------
+
+        Reference                      10.1021/acs.jctc.8b01176
+      * Hamiltonian:
+        H0-scaling (s, p, d)           1.850000    2.230000    2.230000
+        zeta-weighting                 0.500000
+      * Dispersion:
+        s8                             2.700000
+        a1                             0.520000
+        a2                             5.000000
+        s9                             5.000000
+      * Repulsion:
+        kExp                           1.500000    1.000000
+        rExp                           1.000000
+      * Coulomb:
+        alpha                          2.000000
+        third order                    shell-resolved
+        anisotropic                    true
+        a3                             3.000000
+        a5                             4.000000
+        cn-shift                       1.200000
+        cn-exp                         4.000000
+        max-rad                        5.000000
+
+
+          ...................................................
+          :                      SETUP                      :
+          :.................................................:
+          :  # basis functions                   9          :
+          :  # atomic orbitals                   9          :
+          :  # shells                            5          :
+          :  # electrons                        10          :
+          :  max. iterations                   250          :
+          :  Hamiltonian                  GFN2-xTB          :
+          :  restarted?                      false          :
+          :  GBSA solvation                  false          :
+          :  PC potential                    false          :
+          :  electronic temp.          300.0000000     K    :
+          :  accuracy                    1.0000000          :
+          :  -> integral cutoff          0.2500000E+02      :
+          :  -> integral neglect         0.1000000E-07      :
+          :  -> SCF convergence          0.1000000E-05 Eh   :
+          :  -> wf. convergence          0.1000000E-03 e    :
+          :  Broyden damping             0.4000000          :
+          :  net charge                          0          :
+          :  unpaired electrons                  0          :
+          ...................................................
+
+ iter      E             dE          RMSdq      gap      omega  full diag
+   1     -5.4370270 -0.543703E+01  0.924E+00    3.43       0.0  T
+   2     -5.4108003  0.262267E-01  0.781E+00    3.24       1.0  T
+   3     -5.5208273 -0.110027E+00  0.369E+00    3.06       1.0  T
+   4     -5.5252177 -0.439043E-02  0.405E-01    2.77       1.0  T
+   5     -5.5251681  0.496605E-04  0.265E-01    2.80       1.0  T
+   6     -5.5252290 -0.608970E-04  0.511E-02    2.79       1.1  T
+   7     -5.5252328 -0.385303E-05  0.298E-02    2.80       1.9  T
+   8     -5.5252351 -0.221811E-05  0.249E-03    2.79      23.2  T
+   9     -5.5252351  0.191190E-08  0.974E-04    2.79      59.3  T
+  10     -5.5252351 -0.226407E-08  0.137E-04    2.79     420.5  T
+
+   *** convergence criteria satisfied after 10 iterations ***
+
+         #    Occupation            Energy/Eh            Energy/eV
+      -------------------------------------------------------------
+         1        2.0000           -0.6742171             -18.3464
+         2        2.0000           -0.5645468             -15.3621
+         3        2.0000           -0.5142060             -13.9923
+         4        2.0000           -0.4991877             -13.5836
+         5        2.0000           -0.4081485             -11.1063 (HOMO)
+         6                         -0.3054536              -8.3118 (LUMO)
+         7                         -0.2302300              -6.2649
+         8                          0.1802277               4.9042
+         9                          0.8740291              23.7835
+      -------------------------------------------------------------
+                  HL-Gap            0.1026949 Eh            2.7945 eV
+             Fermi-level           -0.3568011 Eh           -9.7091 eV
+
+ SCC (total)                   0 d,  0 h,  0 min,  0.001 sec
+ SCC setup                      ...        0 min,  0.000 sec (  6.285%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.789%)
+ classical contributions        ...        0 min,  0.000 sec (  0.913%)
+ integral evaluation            ...        0 min,  0.000 sec (  9.666%)
+ iterations                     ...        0 min,  0.001 sec ( 65.452%)
+ molecular gradient             ...        0 min,  0.000 sec ( 12.401%)
+ printout                       ...        0 min,  0.000 sec (  3.004%)
+
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+         ::                     SUMMARY                     ::
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+         :: total energy              -5.408091043665 Eh    ::
+         :: gradient norm              0.115592655222 Eh/a0 ::
+         :: HOMO-LUMO gap              2.794470805333 eV    ::
+         ::.................................................::
+         :: SCC energy                -5.525235054566 Eh    ::
+         :: -> isotropic ES            0.006253223633 Eh    ::
+         :: -> anisotropic ES          0.001380233168 Eh    ::
+         :: -> anisotropic XC          0.016936581210 Eh    ::
+         :: -> dispersion             -0.000462743698 Eh    ::
+         :: repulsion energy           0.117144010901 Eh    ::
+         :: add. restraining           0.000000000000 Eh    ::
+         :: total charge              -0.000000000000 e     ::
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+ landscape: transition state search (prfo)
+ initial trust radius:        3.779500E-01 bohr
+ maximum trust radius:        1.889700E+00 bohr
+ maximum number of steps:  20
+ restart policy:           off
+ Hessian source:           numerical
+ electronic temperature:        300.000 K (frozen for the whole run)
+ transition vector from the largest gradient component:    -0.075427 (component 7
+ )
+    iter            energy/Eh        dE/(kcal/mol)   gmax/(Eh/bohr)  dmax/bohr     trust/bohr
+      1      -5.017898275642     244.8497  1.970335E+00  2.727097E-01  2.834625E-01
+   shifts: lambda_p=  2.566047E+00 lambda_n= -8.347970E-02 lifted=T followed=F
+      2      -3.401630010623    1014.2236  7.479463E+00  2.065419E-01  2.125969E-01
+   shifts: lambda_p=  1.488900E+01 lambda_n= -1.287936E-01 lifted=T followed=T
+      3       0.161801291905    2236.0869  1.873475E+01  1.543236E-01  1.594477E-01
+   shifts: lambda_p=  4.959374E+01 lambda_n= -2.296995E-01 lifted=T followed=T
+      4       6.103002104049    3728.1598  3.784756E+01  1.158491E-01  1.195857E-01
+   shifts: lambda_p=  1.232911E+02 lambda_n= -3.916048E-01 lifted=T followed=T
+      5      14.634363635975    5353.5102  6.787827E+01  8.709124E-02  8.968931E-02
+   shifts: lambda_p=  2.681298E+02 lambda_n= -4.923749E-01 lifted=T followed=T
+      6      25.857336163334    7042.5216  1.134112E+02  6.499603E-02  6.726698E-02
+   shifts: lambda_p=  5.484387E+02 lambda_n= -4.399534E-01 lifted=T followed=T
+      7      39.782899492078    8738.4229  1.810900E+02  4.815288E-02  5.045023E-02
+   shifts: lambda_p=  1.088724E+03 lambda_n= -3.623338E-01 lifted=T followed=T
+      8      56.321951994225   10378.4121  2.793468E+02  3.560250E-02  3.783768E-02
+   shifts: lambda_p=  2.117642E+03 lambda_n= -3.141071E-01 lifted=T followed=T
+      9      75.251525267126   11878.4866  4.172260E+02  2.639444E-02  2.837826E-02
+   shifts: lambda_p=  4.013992E+03 lambda_n= -2.927671E-01 lifted=T followed=T
+     10      96.166862273211   13124.5721  6.023594E+02  1.964460E-02  2.128369E-02
+   shifts: lambda_p=  7.337907E+03 lambda_n= -2.882121E-01 lifted=T followed=T
+     11     118.450810200516   13983.3884  8.383179E+02  1.466741E-02  1.596277E-02
+   shifts: lambda_p=  1.280944E+04 lambda_n= -2.980256E-01 lifted=T followed=T
+     12     141.301679062539   14339.1367  1.122242E+03  1.097297E-02  1.197208E-02
+   shifts: lambda_p=  2.119072E+04 lambda_n= -3.288830E-01 lifted=T followed=T
+     13     163.827337704568   14135.0642  1.444002E+03  8.215694E-03  8.979058E-03
+   shifts: lambda_p=  3.306433E+04 lambda_n= -3.945958E-01 lifted=T followed=T
+     14     185.177261968507   13397.2798  1.787567E+03  6.151619E-03  6.734293E-03
+   shifts: lambda_p=  4.857699E+04 lambda_n= -5.079749E-01 lifted=T followed=T
+     15     204.665972621308   12229.3506  2.134143E+03  4.605783E-03  5.050720E-03
+   shifts: lambda_p=  6.727808E+04 lambda_n= -6.729859E-01 lifted=T followed=T
+     16     221.849676472404   10782.9370  2.465936E+03  3.448671E-03  3.788040E-03
+   shifts: lambda_p=  8.815859E+04 lambda_n= -8.832861E-01 lifted=T followed=T
+     17     236.541199220530    9219.0697  2.769142E+03  2.582798E-03  2.841030E-03
+   shifts: lambda_p=  1.098870E+05 lambda_n= -1.124517E+00 lifted=T followed=T
+     18     248.773147808629    7675.6636  3.035356E+03  1.934815E-03  2.130773E-03
+   shifts: lambda_p=  1.311285E+05 lambda_n= -1.378383E+00 lifted=T followed=T
+     19     258.733592883460    6250.2737  3.261390E+03  1.449754E-03  1.889700E-03
+   shifts: lambda_p=  1.508084E+05 lambda_n= -1.627207E+00 lifted=T followed=T
+     20     268.200755195584    5940.7340  3.483935E+03  1.284798E-03  1.889700E-03
+   shifts: lambda_p=  1.682406E+05 lambda_n= -1.857301E+00 lifted=T followed=T
+ --------------------------------------------------------------
+ landscape: maximum number of steps reached
+ converged:      F
+ steps:          20
+ energy calls:   21
+ cache misses:   381
+ final energy:       268.200755195584 Eh
+ final gradient:    5.180987E+03 Eh/bohr
+ max gradient:      3.483935E+03 Eh/bohr
+ --------------------------------------------------------------
+ convergence history
+ criteria (gmax,grms,dmax,drms):  F F T T
+    iter        energy            gnorm          trust
+      1      -5.017898275642    2.709868E+00    2.834625E-01
+      2      -3.401630010623    1.044974E+01    2.125969E-01
+      3       0.161801291905    2.640702E+01    1.594477E-01
+      4       6.103002104049    5.381949E+01    1.195857E-01
+      5      14.634363635975    9.745318E+01    8.968931E-02
+      6      25.857336163334    1.642967E+02    6.726698E-02
+      7      39.782899492078    2.641911E+02    5.045023E-02
+      8      56.321951994225    4.094839E+02    3.783768E-02
+      9      75.251525267126    6.134894E+02    2.837826E-02
+     10      96.166862273211    8.875951E+02    2.128369E-02
+     11     118.450810200516    1.237354E+03    1.596277E-02
+     12     141.301679062539    1.658881E+03    1.197208E-02
+     13     163.827337704568    2.137396E+03    8.979058E-03
+     14     185.177261968507    2.649074E+03    6.734293E-03
+     15     204.665972621308    3.165781E+03    5.050720E-03
+     16     221.849676472404    3.660807E+03    3.788040E-03
+     17     236.541199220530    4.113409E+03    2.841030E-03
+     18     248.773147808629    4.510927E+03    2.130773E-03
+     19     258.733592883460    4.848528E+03    1.889700E-03
+     20     268.200755195584    5.180987E+03    1.889700E-03
+ saddle confirmation - imaginary modes: 1
+ most negative frequency:       -435151.91 cm^-1
+ wrote xtbts.xyz
+ wrote xtbts.log
+ landscape engine: energy evaluations 399
+ landscape engine: cache hits         0
+Note: The following floating-point exceptions are signalling: IEEE_INVALID_FLAG IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+ERROR STOP 
+
+Error termination. Backtrace:
+#0  0x816086218c2 in ???
+#1  0x816086223b9 in ???
+#2  0x81608623727 in ???
+#3  0x5eb2855ae6a1 in ???
+#4  0x5eb2854aa3ac in ???
+#5  0x5eb28548a00a in ???
+#6  0x8160831e249 in ???
+#7  0x8160831e304 in ???
+#8  0x5eb28548a090 in ???
+#9  0xffffffffffffffff in ???
+abnormal termination of xtb
+ landscape engine: Hessians           21
+ landscape engine: Hessian-vector     0
+ landscape engine: unconverged SCC    0
+ landscape engine: restart policy     off
+ landscape engine: SCC accuracy              1.000000
+ landscape engine: etemp                   300.000 K
+ landscape engine: hessian source     numerical
+ landscape task terminated: maximum number of steps reached
+########################################################################
+[ERROR] Program stopped due to fatal error
+-22- Landscape task terminated
+-21- landscape_ts: transition state search did not converge: maximum number of steps reached
+-20- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-19- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-18- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-17- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-16- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-15- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-14- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-13- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-12- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-11- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-10- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-9- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-8- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-7- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-6- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-5- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-4- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-3- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-2- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+-1- landscape_prfo_step: the downhill subspace has a negative curvature; the downhill modes were lifted to hlow
+########################################################################

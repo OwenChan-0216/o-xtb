@@ -1,0 +1,8 @@
+H3 injection (review 31 section 5.2(e)): the linear zero-mode selection of
+src/landscape/vib/modes.f90 is replaced by 'the n_zero lowest |freq| modes'.
+
+reference run (uninjected), number of FAILED cases: 0
+injected  run             , number of FAILED cases: 0
+
+diff of the two tester outputs (empty = behaviourally identical):
+(end of diff)

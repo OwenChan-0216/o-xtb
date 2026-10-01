@@ -221,6 +221,8 @@ module xtb_landscape_engine
       procedure :: hvp => engine_hvp
       !> Print the cost counters
       procedure :: report => engine_report
+      !> Effective electronic temperature read back from the calculator
+      procedure :: effective_etemp => engine_effective_etemp
       !> Release all allocatable components
       procedure :: destroy => engine_destroy
    end type landscape_engine
@@ -765,6 +767,30 @@ subroutine engine_hvp(self, env, mol, chk, vector, hvec, fail, delta)
    self%n_hvp = self%n_hvp + 1
 
 end subroutine engine_hvp
+
+!> Effective electronic temperature of the engine (kelvin).
+!>
+!> The value is read back from the xTB calculator whenever one is attached, so
+!> it is the temperature the SCF actually used (the one pushed by
+!> `push_calculator_etemp`); without a calculator the control value is
+!> returned.  The task layer records this value in its result object instead
+!> of echoing the setting, so a missing push is visible from the result as well
+!> (M4 hard constraint 1).
+function engine_effective_etemp(self) result(etemp)
+   !> Engine
+   class(landscape_engine), intent(in) :: self
+   !> Effective temperature (kelvin)
+   real(wp) :: etemp
+
+   etemp = self%ctrl%etemp
+   if (allocated(self%calc)) then
+      select type (calc => self%calc)
+      type is (TxTBCalculator)
+         etemp = calc%etemp
+      end select
+   end if
+
+end function engine_effective_etemp
 
 !> Print the cost counters of the engine.
 subroutine engine_report(self, unit)

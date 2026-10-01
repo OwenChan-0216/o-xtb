@@ -93,6 +93,17 @@ module xtb_landscape_vib_modes
    !> separate the rotations/translations from the internal modes.
    real(wp), parameter :: zero_mode_tol = 1.0e-2_wp
 
+   !> Minimum overlap of a Hessian eigenvector with the analytic rigid body
+   !> subspace for the mode to count as a translation/rotation of a linear
+   !> molecule.  The eigenvectors of the rigid body block are exactly that
+   !> subspace, so a clean mode has overlap ~1 and a genuine internal mode ~0;
+   !> 0.5 separates the two with a comfortable margin.
+   real(wp), parameter :: rigid_overlap_tol = 0.5_wp
+
+   !> Norm below which a candidate rigid body vector is linearly dependent on
+   !> the ones already accepted (relative to unit vectors)
+   real(wp), parameter :: rigid_dependent_tol = 1.0e-8_wp
+
 contains
 
 !> Analyse a Hessian: frequencies, normal modes, reduced masses.
@@ -118,9 +129,13 @@ subroutine landscape_vib_analysis(env, mol, hessian, settings, vib, fail)
    logical, intent(out) :: fail
 
    real(wp), allocatable :: work(:, :), ev(:), freq_cm(:)
-   real(wp), allocatable :: atmass_amu(:)
+   real(wp), allocatable :: atmass_amu(:), overlap(:)
+   real(wp), allocatable :: rbasis(:, :)
    integer, allocatable :: order(:)
-   integer :: n3, n_zero, n_zero_found, n_zero_seen, i, k, nlog
+   logical, allocatable :: selected(:)
+   integer :: n3, n_zero, n_zero_found, i, k, nlog
+   integer :: n_rigid, ibest, nsel, kz
+   real(wp) :: best
    logical :: linear, extra_zero
 
    fail = .false.
@@ -168,26 +183,82 @@ subroutine landscape_vib_analysis(env, mol, hessian, settings, vib, fail)
    allocate(freq_cm(n3), order(n3))
    freq_cm = autorcm*ev
 
-   ! Zero modes first, in ascending eigenvalue order (`syev` gives ascending).
-   ! For a **linear** molecule the existing implementation takes the `n_zero`
-   ! lowest eigenvalues unconditionally and does not test them against the
-   ! threshold (`src/hessian.F90:437-447`): the projection is skipped there, so
-   ! the translations and rotations of the numerical Hessian are lifted by the
-   ! noise of the differentiation, and rejecting the matrix would make every
-   ! linearly shaped molecule unusable.
+   ! Zero modes first.
+   !
+   ! The classification differs for a linear molecule.  Its rigid body space
+   ! is still six dimensional in principle but only five independent
+   ! directions exist (3 translations + 2 rotations), and `projectHessian` is
+   ! skipped there (exactly like xtb), so the *numerical* Hessian lifts those
+   ! five null directions by the noise of the differentiation.  Taking the
+   ! `n_zero` lowest eigenvalues unconditionally (the behaviour of the
+   ! existing implementation, `src/hessian.F90:437-447`) then swallows genuine
+   ! imaginary modes: measured on linear H2O the two real imaginary bends
+   ! (-3.618e-1 Eh/bohr^2, i.e. -3093 cm^-1) are below the lifted rotations and
+   ! were reported as "zero modes" (V1 of `29-m4-independent-review.md`).
+   !
+   ! The zero modes are therefore identified by their **character**: an
+   ! eigenvector that lies in the analytic rigid body subspace (built in the
+   ! same mass weighted space as the eigenvectors) is a translation or a
+   ! rotation regardless of how far the numerical noise lifted its eigenvalue,
+   ! whereas a genuine internal mode is orthogonal to that subspace.  For a
+   ! clean Hessian (CO2, HCN, H2) the five rigid eigenvectors are also the five
+   ! lowest ones, so the selection - and therefore the projected Hessian and
+   ! every frequency - is bitwise identical to the previous behaviour.
+   allocate(selected(n3), source=.false.)
    n_zero_found = 0
    extra_zero = .false.
    if (linear) then
-      n_zero_found = n_zero
-      do i = 1, n_zero
-         order(i) = i
+      call landscape_vib_rigid_basis(mol, rbasis, n_rigid)
+      allocate(overlap(n3), source=0.0_wp)
+      do i = 1, n3
+         overlap(i) = landscape_vib_rigid_overlap(work(:, i), rbasis, n_rigid)
       end do
+      nsel = 0
+      do while (nsel < n_zero)
+         ibest = 0
+         best = rigid_overlap_tol
+         do i = 1, n3
+            if (selected(i)) cycle
+            if (overlap(i) >= best) then
+               best = overlap(i)
+               ibest = i
+            end if
+         end do
+         if (ibest == 0) exit
+         selected(ibest) = .true.
+         nsel = nsel + 1
+      end do
+      n_zero_found = nsel
+      if (n_zero_found < n_zero) then
+         ! The rigid body subspace was not recovered (a badly distorted
+         ! Hessian).  Fill the missing zero modes from the lowest remaining
+         ! eigenvalues - the previous fallback - but record explicitly that
+         ! the classification is not reliable, instead of silently swallowing
+         ! a possibly imaginary mode.
+         call env%warning("the rigid body modes of the linear molecule could "//&
+            & "not all be identified from the Hessian eigenvectors; filling the "//&
+            & "zero mode set with the lowest remaining modes", source)
+         do while (n_zero_found < n_zero)
+            ibest = 0
+            best = huge(1.0_wp)
+            do i = 1, n3
+               if (selected(i)) cycle
+               if (abs(freq_cm(i)) < best) then
+                  best = abs(freq_cm(i))
+                  ibest = i
+               end if
+            end do
+            if (ibest == 0) exit
+            selected(ibest) = .true.
+            n_zero_found = n_zero_found + 1
+         end do
+      end if
    else
       do i = 1, n3
          if (abs(freq_cm(i)) >= zero_mode_tol) cycle
          if (n_zero_found < n_zero) then
             n_zero_found = n_zero_found + 1
-            order(n_zero_found) = i
+            selected(i) = .true.
          else
             extra_zero = .true.
          end if
@@ -201,23 +272,23 @@ subroutine landscape_vib_analysis(env, mol, hessian, settings, vib, fail)
       return
    end if
 
-   ! Internal modes, in ascending eigenvalue order.  Only the first `n_zero`
-   ! modes below the threshold are the projected zero modes recorded above, so
-   ! the skip has to count them: skipping every mode below the threshold would
-   ! leave the tail of `order` unassigned and index the mode matrix with an
-   ! undefined subscript.
-   k = n_zero
-   n_zero_seen = 0
+   ! Lay out the modes: the zero modes in ascending eigenvalue order, then the
+   ! internal modes in ascending eigenvalue order.  Every mode is assigned
+   ! exactly once (`selected` marks the zero modes), so the matrix is never
+   ! indexed with an unassigned slot.
+   kz = 0
    do i = 1, n3
-      if (.not. linear .and. abs(freq_cm(i)) < zero_mode_tol) then
-         n_zero_seen = n_zero_seen + 1
-         if (n_zero_seen <= n_zero) cycle
-      end if
-      if (linear .and. i <= n_zero) cycle
+      if (.not. selected(i)) cycle
+      kz = kz + 1
+      order(kz) = i
+   end do
+   k = n_zero
+   do i = 1, n3
+      if (selected(i)) cycle
       k = k + 1
       order(k) = i
    end do
-   if (k /= n3) then
+   if (k /= n3 .or. kz /= n_zero) then
       ! Cannot happen with the sorting above; a violation would index the mode
       ! matrix with an unassigned slot, so it is checked instead of assumed.
       call env%error("internal error of the frequency analysis: the mode "//&
@@ -375,5 +446,119 @@ pure function landscape_vib_linear_geometry(xyz, tol) result(linear)
    linear = any(moments < tol)
 
 end function landscape_vib_linear_geometry
+
+!> Orthonormal basis of the rigid body directions in the mass weighted space.
+!>
+!> The three translations are `sqrt(m_a) e_c` on atom `a`; the rotations are
+!> `sqrt(m_a) (e_c x (x_a - x_cm))` about the mass weighted centre of mass
+!> `x_cm`.  Mass weighting makes the basis the null space of the mass weighted
+!> Hessian `massWeightHessian` produces (`H r = 0` implies
+!> `H_mw (sqrt(m) r) = 0`), so the eigenvectors of that matrix can be tested
+!> against it directly.  The columns are Gram-Schmidt orthogonalised and a
+!> linearly dependent rotation (the one about the molecular axis of a linear
+!> molecule, or all rotations of a single atom) is dropped; the result has
+!> `n_rigid` = 3 for a single atom (the translations span all of `R^3`), 5 for a
+!> linear molecule and 6 otherwise.  A geometry with fewer than three atoms is
+!> handled without rotation axes.
+subroutine landscape_vib_rigid_basis(mol, basis, n_rigid)
+   !> Molecular structure
+   type(TMolecule), intent(in) :: mol
+   !> Orthonormal basis (3N rows, up to 6 columns)
+   real(wp), allocatable, intent(out) :: basis(:, :)
+   !> Number of valid columns
+   integer, intent(out) :: n_rigid
+
+   real(wp), allocatable :: raw(:, :), col(:)
+   real(wp) :: centre(3), rvec(3), mtot, proj, nrm
+   integer :: n3, iat, ic, a, k, c
+
+   n3 = 3*mol%n
+   allocate(basis(n3, 6), source=0.0_wp)
+   allocate(raw(n3, 6), source=0.0_wp)
+   n_rigid = 0
+
+   ! translations
+   do c = 1, 3
+      do iat = 1, mol%n
+         raw(3*(iat - 1) + c, c) = 1.0_wp
+      end do
+   end do
+
+   ! rotations about the mass weighted centre of mass
+   if (mol%n >= 2) then
+      centre = 0.0_wp
+      mtot = 0.0_wp
+      do iat = 1, mol%n
+         centre = centre + mol%atmass(iat)*mol%xyz(:, iat)
+         mtot = mtot + mol%atmass(iat)
+      end do
+      if (mtot > 0.0_wp) centre = centre/mtot
+      do iat = 1, mol%n
+         rvec = mol%xyz(:, iat) - centre
+         ic = 3*(iat - 1)
+         raw(ic + 1, 4) = 0.0_wp
+         raw(ic + 2, 4) = -rvec(3)
+         raw(ic + 3, 4) = rvec(2)
+         raw(ic + 1, 5) = rvec(3)
+         raw(ic + 2, 5) = 0.0_wp
+         raw(ic + 3, 5) = -rvec(1)
+         raw(ic + 1, 6) = -rvec(2)
+         raw(ic + 2, 6) = rvec(1)
+         raw(ic + 3, 6) = 0.0_wp
+      end do
+   end if
+
+   ! mass weight (the same factor as `massWeightHessian`)
+   do iat = 1, mol%n
+      ic = 3*(iat - 1)
+      raw(ic + 1:ic + 3, :) = raw(ic + 1:ic + 3, :)*sqrt(mol%atmass(iat))
+   end do
+
+   ! normalise first, so the Gram-Schmidt tolerance is relative to unit
+   ! vectors and a dependent rotation is dropped by an absolute test
+   do k = 1, 6
+      nrm = sqrt(sum(raw(:, k)**2))
+      if (nrm > 0.0_wp) raw(:, k) = raw(:, k)/nrm
+   end do
+
+   allocate(col(n3))
+   do k = 1, 6
+      col = raw(:, k)
+      do a = 1, n_rigid
+         proj = dot_product(basis(:, a), col)
+         col = col - proj*basis(:, a)
+      end do
+      nrm = sqrt(dot_product(col, col))
+      if (nrm <= rigid_dependent_tol) cycle
+      n_rigid = n_rigid + 1
+      basis(:, n_rigid) = col/nrm
+   end do
+
+end subroutine landscape_vib_rigid_basis
+
+!> Overlap of a unit vector with the rigid body subspace, in `[0, 1]`.
+!>
+!> `sqrt(sum_a (u . b_a)^2)` for the orthonormal basis `b_a`; 1 means the
+!> vector is a rigid body motion, 0 that it is orthogonal to all of them.
+pure function landscape_vib_rigid_overlap(u, basis, n_rigid) result(ov)
+   !> Unit vector (e.g. a Hessian eigenvector)
+   real(wp), intent(in) :: u(:)
+   !> Orthonormal rigid body basis
+   real(wp), intent(in) :: basis(:, :)
+   !> Number of valid basis columns
+   integer, intent(in) :: n_rigid
+   !> Overlap in `[0, 1]`
+   real(wp) :: ov
+
+   real(wp) :: s
+   integer :: a
+
+   s = 0.0_wp
+   do a = 1, n_rigid
+      s = s + dot_product(basis(:, a), u)**2
+   end do
+   ov = sqrt(max(s, 0.0_wp))
+
+end function landscape_vib_rigid_overlap
 
 end module xtb_landscape_vib_modes

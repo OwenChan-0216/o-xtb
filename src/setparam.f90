@@ -210,6 +210,7 @@ module xtb_setparam
    integer, parameter :: p_run_modef  =  13
    integer, parameter :: p_run_mdopt  =  14
    integer, parameter :: p_run_metaopt=  15
+   integer, parameter :: p_run_lts    =  19
    integer, parameter :: p_run_lvib   =  21
    integer, parameter :: p_run_vip    = 100
    integer, parameter :: p_run_vea    = 101

@@ -58,6 +58,7 @@ tests = [
   'landscape-failure',
   'landscape-scan',
   'landscape-vib',
+  'landscape-saddle',
   'latticepoint',
   'molecule',
   'model-hessian',
@@ -309,4 +310,90 @@ test('landscape scan atom range', python, env: xtbenv, args: [
   landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
   'outside 1..3', '--gfn', '2', '--lscan', '--lscan-coord', 'distance',
   '--lscan-atoms', '1,9', '--lscan-step', '0.1', '--lscan-nstep', '2',
+])
+
+# CLI level smoke test of the `--lts` run type.  The input is a bent HCN, a
+# guess for the HCN/HNC transition state (the linear equilibrium geometry is
+# already a minimum and converges immediately with zero imaginary modes); the
+# search must reach a stationary point with exactly one imaginary mode and
+# write `xtbts.xyz` and `xtbts.log` (mirrors `xtb/landscape-ts-prfo`).
+hcn_xyz = meson.current_build_dir() / 'landscape_hcn.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("3\\nbent HCN (transition state guess)\\nH 0.0 1.05 0.0\\nC 0.0 0.0 0.0\\nN 1.156 0.0 0.0\\n")',
+  hcn_xyz,
+  check: true,
+)
+test('landscape ts prfo', python, env: landscape_env, args: [
+  landscape_cli_check, 'ts', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-ts',
+])
+# the CLI `--etemp` must reach the transition state engine (the `main.F90`
+# sync guard of M4 hard constraint 1; mirrors `xtb/landscape-ts-etemp`)
+test('landscape ts etemp', python, env: landscape_env, args: [
+  landscape_cli_check, 'tsetemp', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-ts-etemp',
+])
+# the dimer search locates the same transition state without a Hessian, from
+# the deterministic `force` initial axis (mirrors `xtb/landscape-ts-dimer`)
+test('landscape ts dimer', python, env: landscape_env, args: [
+  landscape_cli_check, 'dimer', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-ts-dimer',
+])
+# a search that lands on a minimum (0 imaginary modes) must fail with a
+# non-zero status (mirrors `xtb/landscape-ts-minimum`, H2); the escape out of a
+# minimum is disabled so the input really produces a minimum
+hnc_xyz = meson.current_build_dir() / 'landscape_hnc.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("3\\nlinear HNC (a minimum)\\nN 0.0 1.156 0.0\\nC 0.0 0.0 0.0\\nH 0.0 -1.05 0.0\\n")',
+  hnc_xyz,
+  check: true,
+)
+test('landscape ts minimum', python, env: landscape_env, args: [
+  landscape_cli_check, 'tsminimum', xtb_exe, hnc_xyz,
+  landscape_cli_dir / 'landscape-cli-ts-minimum',
+])
+# the same minimum start succeeds with the default escape walk (MEDIUM-1 of
+# `31-m4-review-round2.md`; mirrors `xtb/landscape-ts-escape`)
+test('landscape ts escape', python, env: landscape_env, args: [
+  landscape_cli_check, 'tsescape', xtb_exe, hnc_xyz,
+  landscape_cli_dir / 'landscape-cli-ts-escape',
+])
+# the `--lts` output files honour `--namespace` (mirrors
+# `xtb/landscape-ts-namespace`, M3)
+test('landscape ts namespace', python, env: landscape_env, args: [
+  landscape_cli_check, 'tsnamespace', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-ts-namespace',
+])
+test('landscape ts step missing', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, hcn_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'The --lts-step flag requires a number', '--gfn', '2', '--lts', '--lts-step',
+])
+test('landscape ts sccacc missing', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, hcn_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'The --lts-sccacc flag requires a number', '--gfn', '2', '--lts', '--lts-sccacc',
+])
+test('landscape ts step0 missing', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, hcn_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'The --lts-step0 flag requires a number', '--gfn', '2', '--lts', '--lts-method',
+  'dimer', '--lts-step0',
+])
+test('landscape ts escape step missing', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, hcn_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'The --lts-escape-step flag requires a number', '--gfn', '2', '--lts', '--lts-escape-step',
+])
+test('landscape ts dimer ninit unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, hcn_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'Unknown landscape dimer initial axis', '--gfn', '2', '--lts', '--lts-method', 'dimer',
+  '--lts-ninit', 'bogus',
+])
+test('landscape ts dimer seed missing', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, hcn_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'The --lts-seed flag requires an integer', '--gfn', '2', '--lts', '--lts-method', 'dimer',
+  '--lts-seed',
+])
+test('landscape ts method unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, hcn_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'Unknown landscape transition state method', '--gfn', '2', '--lts', '--lts-method', 'bogus',
 ])

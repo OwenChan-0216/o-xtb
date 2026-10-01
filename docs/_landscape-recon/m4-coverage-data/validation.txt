@@ -1,0 +1,73 @@
+M4 coverage fix round - validation (2026-10, OMP_NUM_THREADS=1)
+
+build: cmake --build /tmp/xtb-land/build -j  -> 0 error
+
+$ ctest --test-dir /tmp/xtb-land/build -R landscape
+100% tests passed, 0 tests failed out of 51
+
+Total Test time (real) =   1.59 sec
+
+$ ctest --test-dir /tmp/xtb-land/build -N -R landscape | tail -1
+Total Tests: 51
+
+$ grep -oE 'add_test\("[^"]+"' test/unit/CMakeLists.txt | sort | uniq -d
+(empty = no duplicate test names)
+
+$ ctest -R 'Singlepoint|GFN|model-hessian|optimizer|Argparser|CAPI'
+100% tests passed, 0 tests failed out of 12
+
+Total Test time (real) =   0.24 sec
+
+
+$ xtb-tester landscape-vib  (17 cases, see landscape-vib-cases.txt)
+       ... mass-weight-roundtrip [PASSED]
+       ... linear-detection [PASSED]
+       ... diatomic-analytic-frequency [PASSED]
+       ... rosenbrock-analytic-hessian [PASSED]
+       ... projection-required [PASSED]
+       ... water-modes-gfn2 [PASSED]
+       ... water-vs-trproj [PASSED]
+       ... co2-linear-modes [PASSED]
+       ... linear-saddle-imaginary [PASSED]
+       ... linear-rigid-fallback [PASSED]
+       ... extra-zero-modes [PASSED]
+       ... etemp-control [PASSED]
+       ... hessian-file-roundtrip [PASSED]
+       ... hessian-file-provider [PASSED]
+       ... hessian-file-failures [PASSED]
+       ... odlr-unsupported [PASSED]
+       ... vib-task-water [PASSED]
+
+=== M3 linear-molecule regression (m3/) ===
+CO2/HCN --lvib vs --hess, both print 4 internal + 5 projected zero modes and 'linear molecule: T'.
+
+$ diff of (eigval/TR/internal) lines vs the recorded m4-final-fix-data/m3 data
+  co2-lvib: 0 diff lines
+  co2-hess: 0 diff lines
+  hcn-lvib: 0 diff lines
+  hcn-hess: 0 diff lines
+
+CO2 eigval:
+eigval :        0.00     0.00     0.00     0.00     0.00   601.26
+eigval :      601.26  1423.54  2590.79
+eigval :        0.00     0.00     0.00     0.00     0.00   601.26
+eigval :      601.26  1423.54  2590.79
+eigval :        0.00     0.00     0.00     0.00     0.00   601.26
+eigval :      601.26  1423.54  2590.79
+HCN eigval:
+eigval :        0.00     0.00     0.00     0.00     0.00   776.70
+eigval :      776.70  2295.63  3286.95
+eigval :        0.00     0.00     0.00     0.00     0.00   776.70
+eigval :      776.70  2295.63  3286.95
+eigval :        0.00     0.00     0.00     0.00     0.00   776.70
+eigval :      776.70  2295.63  3286.95
+
+TR lines (identical lvib/hess):
+      2          TR   0.430E+25             1481.212      4.968     35.818
+      2          TR   0.893E+25             1481.212      4.968     37.271
+
+=== ROT rows (thermo) identical lvib vs hess ===
+-- co2 --
+      2          ROT   257.                  592.485      1.987     13.017
+-- hcn --
+      2          ROT   136.                  592.485      1.987     11.752

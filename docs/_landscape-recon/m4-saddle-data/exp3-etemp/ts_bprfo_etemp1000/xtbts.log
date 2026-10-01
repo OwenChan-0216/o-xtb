@@ -1,0 +1,26 @@
+ landscape transition state search: bprfo
+ electronic temperature (frozen):     1000.000 K
+ initial trust radius:    3.779500E-01 bohr
+ Hessian source: numerical
+ termination: converged
+ --------------------------------------------------------------
+ landscape: converged
+ converged:      T
+ steps:          6
+ energy calls:   7
+ cache misses:   115
+ final energy:        -5.387373532592 Eh
+ final gradient:    2.818293E-07 Eh/bohr
+ max gradient:      1.635052E-07 Eh/bohr
+ --------------------------------------------------------------
+ convergence history
+ criteria (gmax,grms,dmax,drms):  T T T T
+    iter        energy            gnorm          trust
+      1      -5.399420988329    7.172304E-02    2.834625E-01
+      2      -5.391417448179    4.387936E-02    2.125969E-01
+      3      -5.388170498390    1.964944E-02    1.594477E-01
+      4      -5.387377381129    3.558145E-03    1.195857E-01
+      5      -5.387373532080    2.976621E-05    8.968931E-02
+      6      -5.387373532592    2.818293E-07    1.569563E-01
+ confirmation imaginary modes: 1
+ most negative frequency:         -1426.12 cm^-1

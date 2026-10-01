@@ -14,6 +14,11 @@ mode mirrors one CMake test one-to-one:
   vib    <exe> <input> <rundir>       -> xtb/landscape-vib-cli
   vibnamespace <exe> <input> <rundir> -> xtb/landscape-vib-namespace
   vibetemp <exe> <input> <rundir>     -> xtb/landscape-vib-etemp
+  ts     <exe> <input> <rundir>       -> xtb/landscape-ts-prfo
+  tsetemp <exe> <input> <rundir>      -> xtb/landscape-ts-etemp
+  dimer  <exe> <input> <rundir>       -> xtb/landscape-ts-dimer
+  tsminimum <exe> <input> <rundir>    -> xtb/landscape-ts-minimum
+  tsnamespace <exe> <input> <rundir>  -> xtb/landscape-ts-namespace
   maxsteps <exe> <input> <rundir>     -> xtb/landscape-scan-max-steps
   scanhess <exe> <input> <rundir>     -> xtb/landscape-scan-hessian
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
@@ -320,6 +325,235 @@ def check_vib_etemp(exe, inp, rundir):
         )
 
 
+def check_ts(exe, inp, rundir):
+    """`--lts` locates a first order saddle point and writes its two files.
+
+    Mirrors the CMake script of `xtb/landscape-ts-prfo`.  The input is a bent
+    HCN, a guess for the HCN/HNC transition state; P-RFO converges in a few
+    steps to a stationary point with exactly one imaginary mode, which is the
+    definition of the requested saddle point.  The frozen electronic
+    temperature is part of the output (M4 hard constraint 1).
+    """
+    for name in ("xtbts.xyz", "xtbts.log"):
+        path = os.path.join(rundir, name)
+        if os.path.exists(path):
+            os.remove(path)
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart"], rundir
+    )
+    if status != 0:
+        fail("xtb --lts terminated with status %d" % status, output)
+    if "landscape: converged" not in output:
+        fail("the transition state search did not converge", output)
+    if "saddle confirmation - imaginary modes: 1" not in output:
+        fail("the located point is not a first order saddle point", output)
+    if not re.search(r"landscape engine: etemp +300[.]000 K", output):
+        fail("the frozen electronic temperature was not reported", output)
+    for name in ("xtbts.xyz", "xtbts.log"):
+        path = os.path.join(rundir, name)
+        if not os.path.exists(path):
+            fail("%s was not written" % name)
+        if os.path.getsize(path) == 0:
+            fail("%s is empty" % name)
+    with open(os.path.join(rundir, "xtbts.log")) as handle:
+        log = handle.read()
+    if "confirmation imaginary modes: 1" not in log:
+        fail("the log does not report the imaginary mode count", log)
+    # the restricted step branch has to reach the same kind of stationary point
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--lts", "--lts-method", "bprfo", "--norestart"], rundir
+    )
+    if status != 0:
+        fail("xtb --lts --lts-method bprfo terminated with status %d" % status, output)
+    if "landscape: converged" not in output:
+        fail("the B-PRFO search did not converge", output)
+    if "saddle confirmation - imaginary modes: 1" not in output:
+        fail("the B-PRFO point is not a first order saddle point", output)
+
+
+def check_dimer(exe, inp, rundir):
+    """`--lts --lts-method dimer` locates a saddle point without a Hessian.
+
+    Mirrors the CMake script of `xtb/landscape-ts-dimer`.  The search starts
+    from the deterministic `force` initial axis (the largest Cartesian
+    gradient component direction, PLAN section 6.3), converges to a first
+    order saddle point of the bent HCN, writes `xtbts.xyz`/`xtbts.log` and
+    prints its rotation/torque and curvature diagnostics together with the
+    frozen electronic temperature.
+    """
+    for name in ("xtbts.xyz", "xtbts.log"):
+        path = os.path.join(rundir, name)
+        if os.path.exists(path):
+            os.remove(path)
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "dimer", "--lts-ninit", "force",
+         "--norestart"],
+        rundir,
+    )
+    if status != 0:
+        fail("xtb --lts --lts-method dimer terminated with status %d" % status, output)
+    if "dimer initial axis: force" not in output:
+        fail("the deterministic initial axis was not used", output)
+    if "landscape: converged" not in output:
+        fail("the dimer search did not converge", output)
+    if "saddle confirmation - imaginary modes: 1" not in output:
+        fail("the dimer point is not a first order saddle point", output)
+    if not re.search(r"landscape engine: etemp +300[.]000 K", output):
+        fail("the frozen electronic temperature was not reported", output)
+    if not re.search(r"dimer rotation: iterations [0-9]+, torque rms", output):
+        fail("the rotation/torque diagnostic is missing", output)
+    if "dimer curvature:" not in output:
+        fail("the curvature diagnostic is missing", output)
+    for name in ("xtbts.xyz", "xtbts.log"):
+        path = os.path.join(rundir, name)
+        if not os.path.exists(path):
+            fail("%s was not written" % name)
+        if os.path.getsize(path) == 0:
+            fail("%s is empty" % name)
+    with open(os.path.join(rundir, "xtbts.log")) as handle:
+        log = handle.read()
+    if "confirmation imaginary modes: 1" not in log:
+        fail("the log does not report the imaginary mode count", log)
+    if "dimer" not in log:
+        fail("the log does not identify the dimer method", log)
+
+
+def check_ts_minimum(exe, inp, rundir):
+    """A search that converges to a minimum is not a transition state.
+
+    Mirrors the CMake script of `xtb/landscape-ts-minimum` (H2 of
+    `29-m4-independent-review.md`): from a linear HNC the P-RFO search lands on
+    the molecule's own minimum (0 imaginary modes) when the escape out of a
+    minimum is disabled (`--lts-escape-step 0`); the run must abort with a
+    non-zero status, print the diagnosis, and still write `xtbts.xyz`/
+    `xtbts.log` for debugging.  With the default escape the same input finds
+    the saddle point (`check_ts_escape`).
+    """
+    for name in ("xtbts.xyz", "xtbts.log"):
+        path = os.path.join(rundir, name)
+        if os.path.exists(path):
+            os.remove(path)
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--lts-escape-step", "0"],
+        rundir,
+    )
+    if status == 0:
+        fail("a minimum was accepted as a transition state", output)
+    if "saddle confirmation - imaginary modes: 0" not in output:
+        fail("the imaginary mode count is not reported", output)
+    if "confirmation: minimum" not in output:
+        fail("the minimum was not named as such", output)
+    if "not a first order saddle point" not in output:
+        fail("the failure was not reported", output)
+    for name in ("xtbts.xyz", "xtbts.log"):
+        if not os.path.exists(os.path.join(rundir, name)):
+            fail("%s was not written despite the failure" % name)
+
+
+def check_ts_escape(exe, inp, rundir):
+    """The escape walk turns a minimum start into a successful search.
+
+    Mirrors the CMake script of `xtb/landscape-ts-escape` (MEDIUM-1 of
+    `31-m4-review-round2.md`): from the same linear minimum as
+    `check_ts_minimum`, the driver walks the geometry along the lowest
+    internal mode until its curvature turns negative and the search then
+    reaches the HCN/HNC saddle point with exactly one imaginary mode.
+    """
+    for name in ("xtbts.xyz", "xtbts.log"):
+        path = os.path.join(rundir, name)
+        if os.path.exists(path):
+            os.remove(path)
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart"], rundir
+    )
+    if status != 0:
+        fail("the escaped search terminated with status %d" % status, output)
+    if not re.search(r"escape from a minimum: +[0-9]+ push", output):
+        fail("the escape walk out of the minimum was not reported", output)
+    if not re.search(r"escape from a minimum: +0[.]200000 bohr", output):
+        fail("the configured escape displacement was not reported", output)
+    if not re.search(r"selected mode, rigid body overlap: +0[.]000000", output):
+        fail("a rigid body direction was followed", output)
+    if "saddle confirmation - imaginary modes: 1" not in output:
+        fail("the escaped search did not reach a first order saddle", output)
+    if "confirmation: first order saddle point" not in output:
+        fail("the saddle confirmation is missing", output)
+    for name in ("xtbts.xyz", "xtbts.log"):
+        if not os.path.exists(os.path.join(rundir, name)):
+            fail("%s was not written" % name)
+    with open(os.path.join(rundir, "xtbts.log")) as handle:
+        log = handle.read()
+    if "confirmation imaginary modes: 1" not in log:
+        fail("the log does not report the imaginary mode count", log)
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--lts", "--lts-method", "bprfo", "--norestart"], rundir
+    )
+    if status != 0:
+        fail("the escaped B-PRFO search terminated with status %d" % status, output)
+    if not re.search(r"escape from a minimum: +[0-9]+ push", output):
+        fail("the B-PRFO escape walk was not reported", output)
+    if "saddle confirmation - imaginary modes: 1" not in output:
+        fail("the escaped B-PRFO search did not reach a saddle", output)
+
+
+def check_ts_namespace(exe, inp, rundir):
+    """`--namespace ns --lts` writes `ns.xtbts.xyz`/`ns.xtbts.log`.
+
+    Mirrors the CMake script of `xtb/landscape-ts-namespace` (M3 of
+    `29-m4-independent-review.md`): the file names pass through
+    `get_namespace` exactly like `--lscan` and `--lvib`, so a namespaced run
+    does not collide with a plain one.
+    """
+    for name in ("landscape6.xtbts.xyz", "landscape6.xtbts.log"):
+        path = os.path.join(rundir, name)
+        if os.path.exists(path):
+            os.remove(path)
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "landscape6"],
+        rundir,
+    )
+    if status != 0:
+        fail("xtb --lts --namespace terminated with status %d" % status, output)
+    for name in ("landscape6.xtbts.xyz", "landscape6.xtbts.log"):
+        if not os.path.exists(os.path.join(rundir, name)):
+            fail("%s was not written (namespace not applied)" % name)
+
+
+def check_ts_etemp(exe, inp, rundir):
+    """The CLI `--etemp` must reach the transition state engine.
+
+    Mirrors the CMake script of `xtb/landscape-ts-etemp`: the settings carry the
+    frozen temperature and `main.F90` has to synchronise them from `set%etemp`,
+    so a missing sync would leave the task at 300 K.  Both the frozen value and
+    the value read back from the calculator are checked against 5000 K.
+    """
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--etemp", "5000",
+         "--norestart"],
+        rundir,
+    )
+    if status != 0:
+        fail("xtb --lts --etemp 5000 terminated with status %d" % status, output)
+    if not re.search(r"electronic temperature: +5000[.]000 K", output):
+        fail("the frozen electronic temperature is not 5000 K", output)
+    if not re.search(r"landscape engine: etemp +5000[.]000 K", output):
+        fail("--etemp 5000 did not reach the engine control (missing CLI sync)", output)
+    # MEDIUM-3: the result field itself (`etemp:` of `landscape_result%write_log`
+    # and the frozen value of `xtbts.log`) must carry the effective temperature
+    if not re.search(r"etemp: +5000[.]000 K", output):
+        fail("the result object does not carry the effective etemp", output)
+    with open(os.path.join(rundir, "xtbts.log")) as handle:
+        log = handle.read()
+    if not re.search(r"electronic temperature \(frozen\): +5000[.]000 K", log):
+        fail("xtbts.log does not carry the effective etemp", log)
+
+
 def check_maxsteps(exe, inp, rundir):
     """`--lscan-max-steps` reaches the inner relaxation (M2 leftovers M-1/M-2).
 
@@ -404,6 +638,18 @@ def main():
         check_vib_namespace(exe, inp, rundir)
     elif mode == "vibetemp":
         check_vib_etemp(exe, inp, rundir)
+    elif mode == "ts":
+        check_ts(exe, inp, rundir)
+    elif mode == "tsetemp":
+        check_ts_etemp(exe, inp, rundir)
+    elif mode == "tsminimum":
+        check_ts_minimum(exe, inp, rundir)
+    elif mode == "tsescape":
+        check_ts_escape(exe, inp, rundir)
+    elif mode == "tsnamespace":
+        check_ts_namespace(exe, inp, rundir)
+    elif mode == "dimer":
+        check_dimer(exe, inp, rundir)
     elif mode == "maxsteps":
         check_maxsteps(exe, inp, rundir)
     elif mode == "scanhess":

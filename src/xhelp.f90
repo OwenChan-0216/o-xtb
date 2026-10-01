@@ -356,6 +356,108 @@ subroutine help(iunit)
    "--lopt-hessian-file NAME",&
    "    file read by --lopt-hessian file (TURBOMOLE Hessian layout)", &
    "",&
+   "--lts",&
+   "    transition state search with the landscape task suite (src/landscape);", &
+   "    writes xtbts.xyz and xtbts.log and confirms the imaginary mode count", &
+   "",&
+   "--lts-method NAME",&
+   "    search method, one of prfo (default), bprfo (restricted step) or dimer", &
+   "    (first derivatives only, no Hessian)", &
+   "",&
+   "--lts-trust VALUE",&
+   "    initial trust radius of the step in bohr (default 0.37795)", &
+   "",&
+   "--lts-trust-max VALUE",&
+   "    upper bound of the trust radius in bohr (default 1.8897)", &
+   "",&
+   "--lts-hlow VALUE",&
+   "    curvature floor of the downhill modes in hartree/bohr^2 (default 0.01)", &
+   "",&
+   "--lts-max-steps N",&
+   "    maximum number of macro iterations (default 256)", &
+   "",&
+   "--lts-level LEVEL",&
+   "    convergence thresholds, one of superloose, loose, normal, tight, vtight", &
+   "",&
+   "--lts-mode-overlap-min VALUE",&
+   "    mode following guard: reselect the transition vector below this overlap (default 0.3)", &
+   "",&
+   "--lts-alpha VALUE",&
+   "    fraction of the trust radius assigned to the uphill subspace by bprfo (default 0.5)", &
+   "",&
+   "--lts-micro-cycles N",&
+   "    maximum number of restricted step micro iterations (default 50)", &
+   "",&
+   "--lts-target-mode N",&
+   "    which negative mode is followed, 1 = most negative (default 1)", &
+   "",&
+   "--lts-init-mode MODE",&
+   "    initial transition vector, h0 (most negative Hessian mode, default) or force", &
+   "    (largest Cartesian gradient component direction)", &
+   "",&
+   "--lts-escape-step VALUE",&
+   "    displacement along the lowest internal mode in bohr (default 0.2), applied", &
+   "    when the start geometry is a minimum so P-RFO has a direction to ascend", &
+   "    along; 0 disables the escape", &
+   "",&
+   "--lts-delta VALUE",&
+   "    dimer separation, the distance of each image from the midpoint in bohr",&
+   "    (default 0.018897, i.e. 0.01 angstrom)", &
+   "",&
+   "--lts-dr VALUE",&
+   "    finite difference step of the dimer translation probe in bohr (default 0.0018897)", &
+   "",&
+   "--lts-rot-max-iter N",&
+   "    maximum number of dimer rotations per macro iteration (default 5)", &
+   "",&
+   "--lts-rot-alpha VALUE",&
+   "    damping of the dimer rotation angle of Eq. 13, 1 = undamped (default 0.5)", &
+   "",&
+   "--lts-rot-frms VALUE",&
+   "    RMS torque below which the dimer rotation converged, in hartree/bohr (default 2.65e-4)", &
+   "",&
+   "--lts-ninit MODE",&
+   "    initial dimer axis, random (default, seeded by --lts-seed) or force",&
+   "    (largest Cartesian gradient component direction)", &
+   "",&
+   "--lts-seed N",&
+   "    seed of the random initial dimer axis (default 42)", &
+   "",&
+   "--lts-step-max VALUE",&
+   "    maximum dimer translation step in bohr (default 0.28346)", &
+   "",&
+   "--lts-step0 VALUE",&
+   "    upper bound of the first dimer translation in bohr (default 0.37795);", &
+   "    the dR curvature probe can shorten the actual first displacement", &
+   "",&
+   "--lts-translate-max-iter N",&
+   "    maximum number of quick-min displacement updates per dimer translation (default 1)", &
+   "",&
+   "--lts-recalc N",&
+   "    recompute the exact Hessian every N macro steps, 0 disables (default 1)", &
+   "",&
+   "--lts-no-verify",&
+   "    skip the frequency confirmation of the located stationary point", &
+   "",&
+   "--lts-no-rigid",&
+   "    keep the rigid body (translation/rotation) components in the Cartesian step", &
+   "",&
+   "--lts-restart MODE",&
+   "    wavefunction restart policy of the engine, off (default), pin or warm", &
+   "",&
+   "--lts-hessian SOURCE",&
+   "    Hessian backend, one of numerical (default), model (Lindh-D2) or file", &
+   "",&
+   "--lts-hessian-file NAME",&
+   "    file read by --lts-hessian file (TURBOMOLE Hessian layout)", &
+   "",&
+   "--lts-step VALUE",&
+   "    finite difference step of the numerical confirmation Hessian in bohr (default 0.005);", &
+   "    a mode inside 0 +/- 3 cm^-1 is re-decided with 0.002 bohr and sccacc 0.1", &
+   "",&
+   "--lts-sccacc VALUE",&
+   "    SCC accuracy of the displaced single points of the confirmation Hessian (default 0.3)", &
+   "",&
    "--lvib",&
    "    harmonic frequencies, normal modes and thermochemistry with the landscape task", &
    "    suite (src/landscape); writes vibspectrum, vib_normal_modes, g98.out and hessian", &

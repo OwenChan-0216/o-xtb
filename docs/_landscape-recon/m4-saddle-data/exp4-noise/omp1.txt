@@ -1,0 +1,40 @@
+# Testing: landscape-optimize-xtb
+  Starting water-gfn2-minimization ... (1/8)
+       ... water-gfn2-minimization [PASSED]
+  Starting water-gfn2-output-files ... (2/8)
+       ... water-gfn2-output-files [PASSED]
+  Starting water-gfn2-determinism ... (3/8)
+       ... water-gfn2-determinism [PASSED]
+  Starting gfn2-singlepoint-determinism ... (4/8)
+       ... gfn2-singlepoint-determinism [PASSED]
+  Starting model-initial-hessian ... (5/8)
+       ... model-initial-hessian [PASSED]
+  Starting hessian-cost-accounting ... (6/8)
+       ... hessian-cost-accounting [PASSED]
+  Starting scf-non-convergence ... (7/8)
+       ... scf-non-convergence [PASSED]
+  Starting missing-geometry ... (8/8)
+       ... missing-geometry [PASSED]
+ landscape water: 6 steps, converged T
+ landscape water: final gmax    1.016481E-05 Eh/bohr
+ landscape water: energy evaluations 7
+ landscape water: r(OH)    0.95922/   0.95921 A, HOH  107.2245
+ wrote landscape_unittestopt.xyz
+ wrote landscape_unittest.trj
+ landscape water: energy run 1      -5.070544447713
+ landscape water: energy run 2      -5.070544447713
+ gfn2 single point [off ]: energy 1      -5.066171489935
+ gfn2 single point [off ]: energy 2      -5.066171489935
+ gfn2 single point [off ]: gradient difference   0.0000E+00 Eh/bohr
+ gfn2 gradient [off ]: energy    -5.06617148993454
+ gfn2 gradient [off ]: atom 1  -4.7720256282932121E-18  -3.3568813603533556E-04   4.8332890135997043E-02
+ gfn2 gradient [off ]: atom 2   1.5654249220389476E-17  -5.6723537257037313E-04  -1.5609314719022646E-02
+ gfn2 gradient [off ]: atom 3  -1.0882223592096268E-17   9.0292350860571389E-04  -3.2723575416974404E-02
+ gfn2 single point [warm]: energy difference   9.6811E-13 hartree
+ gfn2 single point [warm]: gradient difference   3.9159E-07 Eh/bohr
+ landscape model hessian: bfgs model seed     6 steps, converged T
+ landscape model hessian: bfgs identity seed 6 steps, converged T
+ landscape model hessian: rfo  model seed     6 steps, converged T
+ landscape model hessian: rfo  numerical seed 7 steps, converged T
+ landscape rfo cost: 43 single points for 7 steps (18
+  = 6N in the Hessian)

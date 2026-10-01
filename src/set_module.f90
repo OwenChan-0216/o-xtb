@@ -1067,6 +1067,9 @@ subroutine set_runtyp(typ)
    case('lscan')
       set%runtyp = p_run_lscan
 
+   case('lts')
+      set%runtyp = p_run_lts
+
    case('lvib')
       set%runtyp = p_run_lvib
 

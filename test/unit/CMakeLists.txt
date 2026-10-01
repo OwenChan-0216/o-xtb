@@ -47,6 +47,7 @@ set(
   "landscape-failure"
   "landscape-scan"
   "landscape-vib"
+  "landscape-saddle"
   "latticepoint"
   "molecule"
   "model-hessian"
@@ -881,6 +882,418 @@ add_test("xtb/landscape-scan-hessian"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-scanhess
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scanhess.cmake")
 
+# Landscape suite: end-to-end smoke test of the `--lts` run type.
+#
+# The input is a bent HCN, a guess for the HCN/HNC transition state (the linear
+# equilibrium geometry is already a minimum and would converge immediately with
+# zero imaginary modes).  The search must converge to a stationary point with
+# exactly one imaginary mode and write `xtbts.xyz` and `xtbts.log`.
+set(LANDSCAPE-HCN "${CMAKE_CURRENT_BINARY_DIR}/landscape_hcn.xyz")
+file(WRITE "${LANDSCAPE-HCN}"
+  "3\nbent HCN (transition state guess)\n"
+  "H  0.0000000  1.0500000  0.0000000\n"
+  "C  0.0000000  0.0000000  0.0000000\n"
+  "N  1.1560000  0.0000000  0.0000000\n")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+foreach(name "xtbts.xyz" "xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method prfo --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: converged")
+  message(FATAL_ERROR "the transition state search did not converge\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the located point is not a first order saddle point\n${output}")
+endif()
+# H4 of `29-m4-independent-review.md`: on a clean molecule the rigid body round
+# off must not be counted as negative curvature, so the `hlow` lift stays off.
+if(output MATCHES "lifted=T")
+  message(FATAL_ERROR "the curvature lift engaged on a clean run\n${output}")
+endif()
+# M5: the final transition vector is reported at the converged geometry
+if(NOT output MATCHES "final transition vector")
+  message(FATAL_ERROR "the final transition vector was not reported\n${output}")
+endif()
+if(NOT output MATCHES "landscape engine: etemp +300[.]000 K")
+  message(FATAL_ERROR "the frozen electronic temperature was not reported\n${output}")
+endif()
+foreach(name "xtbts.xyz" "xtbts.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written")
+  endif()
+  file(SIZE "${RUNDIR}/${name}" size)
+  if(size EQUAL 0)
+    message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+file(READ "${RUNDIR}/xtbts.log" log)
+if(NOT log MATCHES "confirmation imaginary modes: 1")
+  message(FATAL_ERROR "the log does not report the imaginary mode count\n${log}")
+endif()
+# the restricted step branch must reach the same kind of stationary point
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method bprfo --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-method bprfo terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: converged")
+  message(FATAL_ERROR "the B-PRFO search did not converge\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the B-PRFO point is not a first order saddle point\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-ts-prfo"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ts
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts.cmake")
+
+# Landscape suite: the CLI `--etemp` reaches the transition state engine (the
+# `main.F90` sync guard of M4 hard constraint 1).  A missing sync would leave
+# the settings at 300 K, so the printed frozen and effective temperatures are
+# checked against the requested 5000 K.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_etemp.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method prfo --etemp 5000
+          --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --etemp 5000 terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "electronic temperature: +5000[.]000 K")
+  message(FATAL_ERROR "the frozen electronic temperature is not 5000 K\n${output}")
+endif()
+if(NOT output MATCHES "landscape engine: etemp +5000[.]000 K")
+  message(FATAL_ERROR "--etemp 5000 did not reach the engine control\n${output}")
+endif()
+# MEDIUM-3 of `31-m4-review-round2.md`: the *result* field has to carry the
+# effective value as well.  `landscape_result%write_log` prints it as
+# `etemp:`, which is a different line from the two settings/engine echoes above,
+# so deleting `result%etemp = engine%effective_etemp()` in the task turns this
+# test red (the line disappears).
+if(NOT output MATCHES "etemp: +5000[.]000 K")
+  message(FATAL_ERROR "the result object does not carry the effective etemp\n${output}")
+endif()
+file(READ "${RUNDIR}/xtbts.log" log)
+if(NOT log MATCHES "electronic temperature [(]frozen[)]: +5000[.]000 K")
+  message(FATAL_ERROR "xtbts.log does not carry the effective etemp\n${log}")
+endif()
+]=])
+add_test("xtb/landscape-ts-etemp"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ts-etemp
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_etemp.cmake")
+
+# Landscape suite: the dimer search locates the same transition state without
+# ever building a Hessian.  It is started from the deterministic `force`
+# initial axis (the largest gradient component direction, PLAN section 6.3);
+# the run has to converge to a first order saddle point, write the two files
+# and print its rotation/torque diagnostics and the frozen temperature.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_dimer.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+foreach(name "xtbts.xyz" "xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method dimer
+          --lts-ninit force --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-method dimer terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "dimer initial axis: force")
+  message(FATAL_ERROR "the deterministic initial axis was not used\n${output}")
+endif()
+if(NOT output MATCHES "landscape: converged")
+  message(FATAL_ERROR "the dimer search did not converge\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the dimer point is not a first order saddle point\n${output}")
+endif()
+if(NOT output MATCHES "landscape engine: etemp +300[.]000 K")
+  message(FATAL_ERROR "the frozen electronic temperature was not reported\n${output}")
+endif()
+# the rotation and translation diagnostics of the dimer
+if(NOT output MATCHES "dimer rotation: iterations [0-9]+, torque rms")
+  message(FATAL_ERROR "the rotation/torque diagnostic is missing\n${output}")
+endif()
+if(NOT output MATCHES "dimer curvature:")
+  message(FATAL_ERROR "the curvature diagnostic is missing\n${output}")
+endif()
+foreach(name "xtbts.xyz" "xtbts.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written")
+  endif()
+  file(SIZE "${RUNDIR}/${name}" size)
+  if(size EQUAL 0)
+    message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+file(READ "${RUNDIR}/xtbts.log" log)
+if(NOT log MATCHES "confirmation imaginary modes: 1")
+  message(FATAL_ERROR "the log does not report the imaginary mode count\n${log}")
+endif()
+if(NOT log MATCHES "dimer")
+  message(FATAL_ERROR "the log does not identify the dimer method")
+endif()
+]=])
+add_test("xtb/landscape-ts-dimer"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ts-dimer
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_dimer.cmake")
+
+# Landscape suite: the dimer-only CLI options reach the settings (the unit
+# tests cover their effect); a missing or unknown value must abort with the
+# documented message.
+add_test("xtb/landscape-ts-dimer-ninit-unknown"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lts --lts-method dimer --lts-ninit bogus"
+  "-DPATTERN=Unknown landscape dimer initial axis"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-ts-dimer-delta-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lts --lts-method dimer --lts-delta"
+  "-DPATTERN=The --lts-delta flag requires a number"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-ts-dimer-seed-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lts --lts-method dimer --lts-seed"
+  "-DPATTERN=The --lts-seed flag requires an integer"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-ts-method-unknown"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lts --lts-method bogus"
+  "-DPATTERN=Unknown landscape transition state method"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
+# Landscape suite: H2 of the independent review.  A search that converges to a
+# *minimum* (0 imaginary modes) is not a transition state; it must abort with a
+# non-zero exit status and a readable diagnosis while still writing the
+# geometry and the log for debugging.  The input is a linear HNC, whose own
+# minimum traps the P-RFO search when the escape from a minimum is disabled
+# (`--lts-escape-step 0`, which is what this test pins: `xtb/landscape-ts-escape`
+# is the same input with the default escape, where the walk out of the minimum
+# turns the search into a successful one).
+set(LANDSCAPE-HNC "${CMAKE_CURRENT_BINARY_DIR}/landscape_hnc.xyz")
+file(WRITE "${LANDSCAPE-HNC}"
+  "3\nlinear HNC (a minimum)\n"
+  "N  0.0000000  1.1560000  0.0000000\n"
+  "C  0.0000000  0.0000000  0.0000000\n"
+  "H  0.0000000 -1.0500000  0.0000000\n")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_minimum.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+foreach(name "xtbts.xyz" "xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method prfo --norestart
+          --lts-escape-step 0
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(status EQUAL 0)
+  message(FATAL_ERROR "a minimum was accepted as a transition state\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 0")
+  message(FATAL_ERROR "the imaginary mode count is not reported\n${output}")
+endif()
+if(NOT output MATCHES "confirmation: minimum")
+  message(FATAL_ERROR "the minimum was not named as such\n${output}")
+endif()
+if(NOT output MATCHES "not a first order saddle point")
+  message(FATAL_ERROR "the failure was not reported\n${output}")
+endif()
+foreach(name "xtbts.xyz" "xtbts.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written despite the failure")
+  endif()
+endforeach()
+]=])
+add_test("xtb/landscape-ts-minimum"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HNC}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ts-minimum
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_minimum.cmake")
+
+# Landscape suite: MEDIUM-1 of `31-m4-review-round2.md`.  From a *minimum* the
+# P-RFO/B-PRFO model step descends, so following the lowest internal mode does
+# not climb; the driver walks the geometry along that mode until its curvature
+# turns negative and then starts the search.  The same linear HNC input as
+# `xtb/landscape-ts-minimum` therefore reaches the HCN/HNC saddle point here
+# (1 imaginary mode, exit 0) instead of falling back to the minimum.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_escape.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+foreach(name "xtbts.xyz" "xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method prfo --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the escaped search terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "escape from a minimum: +[0-9]+ push")
+  message(FATAL_ERROR "the escape walk out of the minimum was not reported\n${output}")
+endif()
+if(NOT output MATCHES "escape from a minimum: +0[.]200000 bohr")
+  message(FATAL_ERROR "the configured escape displacement was not reported\n${output}")
+endif()
+if(NOT output MATCHES "selected mode, rigid body overlap: +0[.]000000")
+  message(FATAL_ERROR "a rigid body direction was followed\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the escaped search did not reach a first order saddle\n${output}")
+endif()
+if(NOT output MATCHES "confirmation: first order saddle point")
+  message(FATAL_ERROR "the saddle confirmation is missing\n${output}")
+endif()
+foreach(name "xtbts.xyz" "xtbts.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written")
+  endif()
+endforeach()
+file(READ "${RUNDIR}/xtbts.log" log)
+if(NOT log MATCHES "confirmation imaginary modes: 1")
+  message(FATAL_ERROR "the log does not report the imaginary mode count\n${log}")
+endif()
+# the restricted step branch of the same escape has to reach the same saddle
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method bprfo --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the escaped B-PRFO search terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "escape from a minimum: +[0-9]+ push")
+  message(FATAL_ERROR "the B-PRFO escape walk was not reported\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the escaped B-PRFO search did not reach a saddle\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-ts-escape"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HNC}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ts-escape
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_escape.cmake")
+
+# Landscape suite: the `--lts` output files honour `--namespace` (M3 of the
+# review), exactly like `--lscan` and `--lvib`: `--namespace landscape6 --lts`
+# must write `landscape6.xtbts.xyz`/`landscape6.xtbts.log` with a single
+# prefix.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_namespace.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+foreach(name "landscape6.xtbts.xyz" "landscape6.xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method prfo --norestart
+          --namespace landscape6
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --namespace terminated with status ${status}\n${output}")
+endif()
+foreach(name "landscape6.xtbts.xyz" "landscape6.xtbts.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written (namespace not applied)")
+  endif()
+endforeach()
+]=])
+add_test("xtb/landscape-ts-namespace"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ts-namespace
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_namespace.cmake")
+
+# Landscape suite: H1 of the review.  `--lts-step`, `--lts-sccacc` and
+# `--lts-step0` are the client side of the finite difference tightening and of
+# the dimer first translation; a missing value has to abort with the documented
+# message instead of silently keeping the default.
+add_test("xtb/landscape-ts-step-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lts --lts-step"
+  "-DPATTERN=The --lts-step flag requires a number"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-ts-sccacc-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lts --lts-sccacc"
+  "-DPATTERN=The --lts-sccacc flag requires a number"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-ts-step0-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lts --lts-method dimer --lts-step0"
+  "-DPATTERN=The --lts-step0 flag requires a number"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-ts-escape-step-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lts --lts-escape-step"
+  "-DPATTERN=The --lts-escape-step flag requires a number"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
 set_tests_properties(
   "xtb/Singlepoint"
   "xtb/GFN0-xTB"
@@ -947,6 +1360,12 @@ set_tests_properties(
   "xtb/landscape-vib-namespace"
   "xtb/landscape-scan-max-steps"
   "xtb/landscape-scan-hessian"
+  "xtb/landscape-ts-prfo"
+  "xtb/landscape-ts-etemp"
+  "xtb/landscape-ts-dimer"
+  "xtb/landscape-ts-minimum"
+  "xtb/landscape-ts-escape"
+  "xtb/landscape-ts-namespace"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

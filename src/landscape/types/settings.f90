@@ -41,7 +41,7 @@ module xtb_landscape_settings
 
    public :: landscape_settings, landscape_sp_settings, landscape_opt_settings
    public :: landscape_scan_settings, landscape_scan_coord_settings
-   public :: landscape_vib_settings
+   public :: landscape_vib_settings, landscape_ts_settings
    public :: landscape_engine_control
    public :: p_landscape_opt_sd, p_landscape_opt_cg, p_landscape_opt_lbfgs
    public :: p_landscape_opt_bfgs
@@ -60,6 +60,11 @@ module xtb_landscape_settings
    public :: landscape_scan_coord_name, landscape_scan_coord_from_name
    public :: landscape_scan_coord_natoms, landscape_scan_coord_known
    public :: landscape_scan_mode_known
+   public :: p_landscape_ts_prfo, p_landscape_ts_bprfo, p_landscape_ts_dimer
+   public :: landscape_ts_method_name, landscape_ts_method_from_name
+   public :: landscape_ts_method_known
+   public :: landscape_ts_init_mode_known
+   public :: landscape_ts_ninit_known
 
    !> Minimisation algorithm identifiers (`landscape_opt_settings%algorithm`)
    integer, parameter :: p_landscape_opt_sd = 1
@@ -85,6 +90,11 @@ module xtb_landscape_settings
    integer, parameter :: p_landscape_scan_coord_distance = 1
    integer, parameter :: p_landscape_scan_coord_angle = 2
    integer, parameter :: p_landscape_scan_coord_dihedral = 3
+
+   !> Transition state search methods (`landscape_ts_settings%method`)
+   integer, parameter :: p_landscape_ts_prfo = 1
+   integer, parameter :: p_landscape_ts_bprfo = 2
+   integer, parameter :: p_landscape_ts_dimer = 3
 
    !> Immutable run-time control of one landscape engine instance.
    !>
@@ -380,6 +390,159 @@ module xtb_landscape_settings
       procedure :: task => landscape_vib_settings_task
    end type landscape_vib_settings
 
+   !> Settings of a transition state search (`ts` task, PLAN section 5.3.6 / 6.3).
+   !>
+   !> Both stages of M4 are implemented here: the P-RFO / B-P-RFO eigenvector
+   !> following search (`method = prfo` / `bprfo`) and the dimer search of
+   !> Henkelman & Jonsson (`method = dimer`).  The dimer ignores the Hessian
+   !> fields and uses its own block (`delta`, `dR`, `rot_dtheta`,
+   !> `rot_max_iter`, `rot_alpha`, `rot_f_rms_th`, `step0`, `step_max`,
+   !> `translate_max_iter`, `n_init`, `seed`), so a single settings object
+   !> describes every method; the deterministic seeding rule of PLAN N10 is
+   !> documented on `seed`.  `init_mode` selects the initial mode of the
+   !> eigenvector following methods, `n_init` the initial axis of the dimer.
+   !>
+   !> The force thresholds are the inherited four convergence criteria
+   !> (`g_max`, `g_rms`, `d_max`, `d_rms`); their values were **not**
+   !> re-calibrated for transition states in this round, so the question of
+   !> PLAN experiment 4 (gradient noise vs. reachable force threshold) stays
+   !> open and is marked `[待校准]` here.
+   !>
+   !> Units: `trust`, `trust_min`, `trust_max`, `hlow`-related lengths in bohr,
+   !> `hlow` and `evals_eps` in hartree/bohr^2, `imag_cutoff` in cm^-1,
+   !> `etemp` in kelvin, `delta`, `dR`, `step0` and `step_max` in bohr,
+   !> `rot_dtheta` in rad and `rot_f_rms_th` in hartree/bohr.
+   type, extends(landscape_settings) :: landscape_ts_settings
+      !> Search method, one of `p_landscape_ts_*`
+      integer :: method = p_landscape_ts_prfo
+      !> Initial trust radius of the P-RFO step (bohr), the `--lts trust=0.1`
+      !> shortcut of PLAN section 6.3
+      real(wp) :: trust = 3.7795e-1_wp
+      !> Lower bound of the trust radius (bohr)
+      real(wp) :: trust_min = 1.8897e-3_wp
+      !> Upper bound of the trust radius (bohr)
+      real(wp) :: trust_max = 1.8897_wp
+      !> Trust radius shrink factor after a rejected or poorly predicted step
+      real(wp) :: eta_shrink = 0.75_wp
+      !> Trust radius expansion factor after a well predicted step
+      real(wp) :: eta_expand = 1.75_wp
+      !> Curvature floor (hartree/bohr^2) applied to the downhill modes when
+      !> the Hessian has more than one negative eigenvalue
+      !> (`b_i -> max(b_i, hlow)`, PLAN section 6.3)
+      real(wp) :: hlow = 1.0e-2_wp
+      !> Relative denominator guard of the two shifts (hartree/bohr^2)
+      real(wp) :: evals_eps = 1.0e-10_wp
+      !> Margin between the `lambda_n` bracket and the smallest downhill
+      !> eigenvalue (hartree/bohr^2)
+      real(wp) :: mu_margin = 1.0e-8_wp
+      !> Maximum number of bisections of the `lambda_n` secular equation
+      integer :: max_bisect_it = 60
+      !> Which negative mode is followed (1-based, 1 = most negative) -
+      !> the `tsroot` semantics that xtb does not provide
+      integer :: target_mode = 1
+      !> Mode following guard: an overlap `|V^T v|` below this value
+      !> reselects the transition vector and emits a warning
+      real(wp) :: mode_overlap_min = 0.3_wp
+      !> Fraction of the trust radius assigned to the uphill subspace by the
+      !> restricted-step B-P-RFO
+      real(wp) :: alpha = 0.5_wp
+      !> Maximum number of restricted-step micro cycles of the B-P-RFO
+      integer :: max_micro_cycles = 50
+      !> Recompute the exact Hessian every `recalc` macro steps (0 disables)
+      integer :: recalc = 1
+      !> Hessian update formula, one of `p_landscape_hess_update_*`; Bofill is
+      !> the consensus default for path/TS optimisation
+      integer :: hessian_update = p_landscape_hess_update_bofill
+      !> Project translations and rotations out of every Cartesian step
+      logical :: remove_rigid = .true.
+      !> Confirm the converged structure with a frequency analysis
+      logical :: verify_ts = .true.
+      !> Eckart projection of the confirmation Hessian
+      logical :: project_tr = .true.
+      !> Linearity threshold of the confirmation analysis (bohr^2)
+      real(wp) :: linear_tol = 1.0e-4_wp
+      !> Imaginary frequency cutoff of the confirmation (cm^-1)
+      real(wp) :: imag_cutoff = -20.0_wp
+      !> Electronic temperature (kelvin) frozen for the whole run; the task
+      !> copies it into `engine%etemp` and prints the effective value read back
+      !> from the calculator (M4 hard constraint 1)
+      real(wp) :: etemp = 300.0_wp
+      !> Initial transition vector source, `h0` (most negative Hessian mode) or
+      !> `force` (largest Cartesian gradient component direction)
+      character(len=16) :: init_mode = 'h0'
+      !> Displacement along the lowest internal mode applied before the search
+      !> when the start geometry is a **minimum** (bohr, Cartesian).
+      !>
+      !> P-RFO maximises along the followed mode and minimises the rest, so it
+      !> can only start uphill if the followed mode has a direction to climb: on
+      !> a minimum the search first has to be moved off the stationary point
+      !> (MEDIUM-1 of `31-m4-review-round2.md`).  A displacement of the order of
+      !> 0.1 - 0.3 `bohr*amu^0.5` along the lowest mode is the usual recipe; the
+      !> mode vector of this module is a plain Cartesian (mass independent) unit
+      !> vector, so the value is given as a Cartesian length in bohr.  For a
+      !> mass weighted step `d_mw` the corresponding Cartesian length is
+      !> `d_mw / ||M^(1/2) v||`, which for the HCN bend (`||M^(1/2) v|| = 1.07`)
+      !> maps the default 0.2 bohr to 0.21 `amu^0.5*bohr`.  The escape is only
+      !> attempted when there is no significantly negative curvature at all;
+      !> `0` disables it.
+      real(wp) :: escape_step = 2.0e-1_wp
+      !> Half separation of the two dimer images (bohr), i.e. the distance of
+      !> each image from the common midpoint.  This is the pysisyphus
+      !> convention of PLAN section 5.3.6 (`1.8897e-2` bohr = 1e-2 Angstrom),
+      !> not the VASP one where `DdR` denotes twice that value.  The
+      !> `[待校准]` marker is retired: report 28 section 6.4 measured that
+      !> `delta x 8` changes the dimer curvature by 0.0013 % and the analytic
+      !> Mueller-Brown check pins the value to 0.07 %, so the convention only
+      !> has to be the documented one.
+      real(wp) :: delta = 1.8897e-2_wp
+      !> Finite difference step of the force along the translation direction
+      !> (bohr), the `dR = 1e-3` Angstrom of Henkelman & Jonsson
+      real(wp) :: dR = 1.8897e-3_wp
+      !> Finite difference angle of the dimer rotation (rad), the
+      !> `delta theta = 1e-4` rad of Henkelman & Jonsson
+      real(wp) :: rot_dtheta = 1.0e-4_wp
+      !> Damping factor applied to the rotation angle of Eq. 13 (1 = the full
+      !> angle of the two term Fourier model)
+      real(wp) :: rot_alpha = 0.5_wp
+      !> Maximum number of dimer rotations per macro iteration
+      integer :: rot_max_iter = 5
+      !> RMS of the perpendicular force difference below which the dimer axis
+      !> is considered aligned with the lowest curvature mode (hartree/bohr);
+      !> exhausting `rot_max_iter` without reaching it emits the VASP
+      !> diagnostic warning (PLAN section 6.3)
+      real(wp) :: rot_f_rms_th = 2.65e-4_wp
+      !> Upper bound of the first dimer translation (bohr): together with
+      !> `step_max` it fixes the mobility of the quick-min propagation
+      !> (`--lts` dimer), `tau = min(step0, step_max)/|F^dagger|`.  The actual
+      !> first displacement can be shorter because the `dR` curvature probe
+      !> limits the mobility to `1/|kappa|` (measured on GFN2 HCN: 0.1032 bohr
+      !> instead of `min(step0, step_max) = 0.28346`)
+      real(wp) :: step0 = 3.7795e-1_wp
+      !> Upper bound of every dimer translation step (bohr)
+      real(wp) :: step_max = 2.8346e-1_wp
+      !> Maximum number of quick-min displacement updates per dimer
+      !> translation (1 = the single translation per macro iteration of
+      !> Henkelman & Jonsson)
+      integer :: translate_max_iter = 1
+      !> Source of the initial dimer axis, either `random` (uniform random
+      !> direction, reproducible through `seed`) or `force` (the largest
+      !> Cartesian gradient component direction, a deterministic substitute)
+      character(len=16) :: n_init = 'random'
+      !> Seed of the dimer initial axis (`random_seed`), the only place in the
+      !> suite where a random number is allowed (PLAN N10); the generator
+      !> state is set from this seed before every draw, so a run is exactly
+      !> reproducible
+      integer :: seed = 42
+      !> Write `xtbts.xyz` and `xtbts.log`
+      logical :: write_files = .true.
+      !> File name prefix of the two output files; the default `xtb` yields
+      !> `<prefix>ts.xyz` = `xtbts.xyz`, the same scheme as `<prefix>opt.xyz`
+      character(len=64) :: output_prefix = 'xtb'
+   contains
+      !> This type implements the transition state search task
+      procedure :: task => landscape_ts_settings_task
+   end type landscape_ts_settings
+
 contains
 
 !> Evaluate the four convergence measures of a displacement based optimisation.
@@ -607,6 +770,103 @@ function landscape_vib_settings_task(self) result(name)
    name = 'vib'
 
 end function landscape_vib_settings_task
+
+!> Task name of the transition state search
+function landscape_ts_settings_task(self) result(name)
+   !> Settings instance
+   class(landscape_ts_settings), intent(in) :: self
+   !> Task name
+   character(len=:), allocatable :: name
+
+   name = 'ts'
+
+end function landscape_ts_settings_task
+
+!> Human readable name of a transition state search method identifier
+pure function landscape_ts_method_name(method) result(name)
+   !> Method identifier
+   integer, intent(in) :: method
+   !> Lower case method name
+   character(len=:), allocatable :: name
+
+   select case (method)
+   case (p_landscape_ts_prfo)
+      name = 'prfo'
+   case (p_landscape_ts_bprfo)
+      name = 'bprfo'
+   case (p_landscape_ts_dimer)
+      name = 'dimer'
+   case default
+      name = 'unknown'
+   end select
+
+end function landscape_ts_method_name
+
+!> Reverse lookup of a transition state search method from its name.
+!>
+!> Returns 0 for an unknown name, which is not a valid method identifier; the
+!> caller is responsible for reporting the error.
+function landscape_ts_method_from_name(name) result(method)
+   !> Lower case method name
+   character(len=*), intent(in) :: name
+   !> Method identifier, 0 for an unknown name
+   integer :: method
+
+   select case (trim(name))
+   case ('prfo')
+      method = p_landscape_ts_prfo
+   case ('bprfo')
+      method = p_landscape_ts_bprfo
+   case ('dimer')
+      method = p_landscape_ts_dimer
+   case default
+      method = 0
+   end select
+
+end function landscape_ts_method_from_name
+
+!> True if `name` names one of the supported transition state methods.
+function landscape_ts_method_known(name) result(known)
+   !> Method name
+   character(len=*), intent(in) :: name
+   !> True if the name resolves to a method identifier
+   logical :: known
+
+   known = landscape_ts_method_from_name(name) /= 0
+
+end function landscape_ts_method_known
+
+!> True if `name` names a supported initial transition vector source.
+function landscape_ts_init_mode_known(name) result(known)
+   !> Init mode name
+   character(len=*), intent(in) :: name
+   !> True if the name is supported
+   logical :: known
+
+   select case (trim(name))
+   case ('h0', 'force')
+      known = .true.
+   case default
+      known = .false.
+   end select
+
+end function landscape_ts_init_mode_known
+
+!> True if `name` names a supported dimer initial axis source.
+function landscape_ts_ninit_known(name) result(known)
+   !> Initial axis name
+   character(len=*), intent(in) :: name
+   !> True if the name is supported
+   logical :: known
+
+   select case (trim(name))
+   case ('random', 'force')
+      known = .true.
+   case default
+      known = .false.
+   end select
+
+end function landscape_ts_ninit_known
 
 !> Name of an internal coordinate type identifier.
 pure function landscape_scan_coord_name(ctype) result(name)

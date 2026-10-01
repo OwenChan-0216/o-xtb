@@ -36,6 +36,10 @@ list(APPEND srcs
   "${dir}/optimize/diis.f90"
   "${dir}/optimize/rfo.f90"
   "${dir}/optimize/driver.f90"
+  "${dir}/saddle/eigenfollow.f90"
+  "${dir}/saddle/bprfo.f90"
+  "${dir}/saddle/prfo.f90"
+  "${dir}/saddle/dimer.f90"
   "${dir}/tasks/sp.f90"
   "${dir}/tasks/opt.f90"
   "${dir}/scan/relax_scan.f90"
@@ -46,6 +50,7 @@ list(APPEND srcs
   "${dir}/vib/modes.f90"
   "${dir}/vib/thermo.f90"
   "${dir}/tasks/vib.f90"
+  "${dir}/tasks/ts.f90"
   "${dir}/landscape_driver.f90"
   "${dir}/landscape_api.f90"
 )

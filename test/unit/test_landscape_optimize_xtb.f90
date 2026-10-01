@@ -216,6 +216,7 @@ subroutine test_gfn2_determinism(error)
    type(landscape_engine_control) :: ctrl
    real(wp) :: energy1, energy2, grad1(3, nat), grad2(3, nat), difference
    logical :: fail
+   integer :: i
 
    ! default policy: off -> cold start before each evaluation
    call setup(env, mol, chk, calc)
@@ -234,6 +235,13 @@ subroutine test_gfn2_determinism(error)
    write(stdout, '(1x,a,f20.12)') "gfn2 single point [off ]: energy 2 ", energy2
    write(stdout, '(1x,a,es12.4,a)') "gfn2 single point [off ]: gradient difference ", &
       & maxval(abs(grad1 - grad2)), " Eh/bohr"
+   ! full precision gradient dump: the cross-thread-count noise probe of PLAN
+   ! experiment 4 compares this column between binaries run with different
+   ! OMP_NUM_THREADS
+   write(stdout, '(1x,a,f20.14)') "gfn2 gradient [off ]: energy ", energy1
+   do i = 1, nat
+      write(stdout, '(1x,a,i0,3(1x,es24.16))') "gfn2 gradient [off ]: atom ", i, grad1(:, i)
+   end do
 
    call check(error, energy1 == energy2, &
       & "off restart policy is not bitwise reproducible (energy)")

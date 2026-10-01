@@ -34,11 +34,13 @@ module xtb_landscape_driver
    use xtb_type_restart, only : TRestart
    use xtb_type_calculator, only : TCalculator
    use xtb_landscape_settings, only : landscape_settings, landscape_opt_settings, &
-      & landscape_sp_settings, landscape_scan_settings, landscape_vib_settings
+      & landscape_sp_settings, landscape_scan_settings, landscape_vib_settings, &
+      & landscape_ts_settings
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_tasks_opt, only : landscape_optimize
    use xtb_landscape_tasks_scan, only : landscape_scan
    use xtb_landscape_tasks_vib, only : landscape_vib
+   use xtb_landscape_tasks_ts, only : landscape_ts
    use xtb_landscape_sp, only : landscape_single_point
    implicit none(type, external)
    private
@@ -104,6 +106,14 @@ subroutine landscape_run(env, mol, chk, calc, settings, result)
          call landscape_vib(env, mol, chk, calc, vib, result)
       class default
          call env%error("the 'vib' task requires landscape_vib_settings", source)
+         return
+      end select
+   case ('ts')
+      select type (ts => settings)
+      type is (landscape_ts_settings)
+         call landscape_ts(env, mol, chk, calc, ts, result)
+      class default
+         call env%error("the 'ts' task requires landscape_ts_settings", source)
          return
       end select
    case default

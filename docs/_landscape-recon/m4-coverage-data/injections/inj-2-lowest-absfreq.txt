@@ -1,0 +1,15 @@
+INJECTION 2: linear branch -> 'the n_zero lowest |freq| modes'
+  = the variant recorded in 32-m4-final-fix-report.md section 5 row 2(e).
+  It is NOT equivalent to the old logic (it is an alternative rule that is
+  correct on the physical linear-H2O Hessian), but the new synthetic test
+  of the fallback branch distinguishes it as well.
+
+$ OMP_NUM_THREADS=1 ctest -R landscape
+11/51 Test  #62: xtb/landscape-vib ........................***Failed    0.07 sec
+98% tests passed, 1 tests failed out of 51
+
+$ xtb-tester landscape-vib
+       ... linear-rigid-fallback [FAILED]
+  Message: the rigid body fallback did not warn
+  Starting extra-zero-modes ... (11/17)
+       ... extra-zero-modes [PASSED]

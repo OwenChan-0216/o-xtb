@@ -1,0 +1,125 @@
+ERROR STOP 1
+
+Error termination. Backtrace:
+#0  0x136c2d2218c2 in ???
+#1  0x136c2d2223b9 in ???
+#2  0x136c2d223792 in ???
+#3  0x558b153324ac in ???
+#4  0x558b15330e2e in ???
+#5  0x136c2ce3e249 in ???
+#6  0x136c2ce3e304 in ???
+#7  0x558b15330e60 in ???
+#8  0xffffffffffffffff in ???
+# Testing: landscape-saddle
+  Starting method-names ... (1/39)
+       ... method-names [PASSED]
+  Starting spectrum-ascending ... (2/39)
+       ... spectrum-ascending [PASSED]
+  Starting mode-select-negative ... (3/39)
+       ... mode-select-negative [PASSED]
+  Starting mode-select-no-negative ... (4/39)
+       ... mode-select-no-negative [PASSED]
+  Starting mode-select-lowest-internal ... (5/39)
+       ... mode-select-lowest-internal [PASSED]
+  Starting mode-follow-argmax ... (6/39)
+       ... mode-follow-argmax [PASSED]
+  Starting mode-follow-sign ... (7/39)
+       ... mode-follow-sign [PASSED]
+  Starting mode-follow-low-overlap ... (8/39)
+       ... mode-follow-low-overlap [PASSED]
+  Starting mode-phase ... (9/39)
+       ... mode-phase [PASSED]
+  Starting rigid-basis-orthonormal ... (10/39)
+       ... rigid-basis-orthonormal [PASSED]
+  Starting rigid-linear-basis ... (11/39)
+       ... rigid-linear-basis [PASSED]
+  Starting rigid-projection ... (12/39)
+       ... rigid-projection [PASSED]
+  Starting prfo-shifts ... (13/39)
+       ... prfo-shifts [PASSED]
+  Starting prfo-lambda-n ... (14/39)
+       ... prfo-lambda-n [PASSED]
+  Starting prfo-lambda-n-no-root ... (15/39)
+       ... prfo-lambda-n-no-root [FAILED]
+  Message: a shift that does not solve the secular equation was returned
+  Starting prfo-trust-clip ... (16/39)
+       ... prfo-trust-clip [PASSED]
+  Starting prfo-hlow-lift ... (17/39)
+       ... prfo-hlow-lift [PASSED]
+  Starting prfo-noise-negative ... (18/39)
+       ... prfo-noise-negative [PASSED]
+  Starting prfo-negative-downhill ... (19/39)
+       ... prfo-negative-downhill [PASSED]
+  Starting prfo-invalid ... (20/39)
+       ... prfo-invalid [PASSED]
+  Starting prfo-rigid-projection ... (21/39)
+       ... prfo-rigid-projection [PASSED]
+  Starting bprfo-radius-split ... (22/39)
+       ... bprfo-radius-split [PASSED]
+  Starting mb-prfo-saddle ... (23/39)
+       ... mb-prfo-saddle [PASSED]
+  Starting mb-bprfo-saddle ... (24/39)
+       ... mb-bprfo-saddle [PASSED]
+  Starting mb-methods-agree ... (25/39)
+       ... mb-methods-agree [PASSED]
+  Starting ts-curvature-band ... (26/39)
+       ... ts-curvature-band [PASSED]
+  Starting driver-rigid-projection ... (27/39)
+       ... driver-rigid-projection [PASSED]
+  Starting dimer-curvature ... (28/39)
+       ... dimer-curvature [PASSED]
+  Starting dimer-translation-force ... (29/39)
+       ... dimer-translation-force [PASSED]
+  Starting dimer-rotation-angle ... (30/39)
+       ... dimer-rotation-angle [PASSED]
+  Starting dimer-rotation-alignment ... (31/39)
+       ... dimer-rotation-alignment [PASSED]
+  Starting dimer-rotation-warning ... (32/39)
+       ... dimer-rotation-warning [PASSED]
+  Starting dimer-velocity-update ... (33/39)
+       ... dimer-velocity-update [PASSED]
+  Starting dimer-mobility ... (34/39)
+       ... dimer-mobility [PASSED]
+  Starting dimer-initial-axis ... (35/39)
+       ... dimer-initial-axis [PASSED]
+  Starting dimer-invalid ... (36/39)
+       ... dimer-invalid [PASSED]
+  Starting dimer-mb-saddle ... (37/39)
+       ... dimer-mb-saddle [PASSED]
+  Starting dimer-no-hessian ... (38/39)
+       ... dimer-no-hessian [PASSED]
+  Starting dimer-reproducible ... (39/39)
+       ... dimer-reproducible [PASSED]
+1 test(s) failed!
+   prfo steps      5 converged T, gmax   9.6478E-06, dist   9.9244E-06
+   converged point     -0.82201148440244     0.62431195862073
+   bprfo steps      4 converged T, gmax   1.0395E-06, dist   1.0595E-06
+   converged point     -0.82200261954216     0.62431287984356
+   prfo steps      5 converged T, gmax   9.6478E-06, dist   9.9244E-06
+   converged point     -0.82201148440244     0.62431195862073
+   bprfo steps      4 converged T, gmax   1.0395E-06, dist   1.0595E-06
+   converged point     -0.82200261954216     0.62431287984356
+   prfo vs bprfo RMSD (bohr):   6.3022E-06
+   rigid drift (projected / raw):   7.4793E-16 /   2.3094E-01
+   dimer curvature (force/analytic):   2.4345E-02 /   2.4363E-02
+   dimer curvature (force/analytic):   1.3893E+00 /   1.3905E+00
+   dimer rotation angle (Eq. 13 / Eq. 6 / exact):   1.0000E-03 /   9.5000E-04 /   1.0000E-03
+   dimer rotation angle (Eq. 13 / Eq. 6 / exact):   2.9998E-01 /   3.4200E-01 /   3.0000E-01
+   dimer torque rms before/after rotation:   1.5112E-03 /   1.0126E-07, converged=T
+   dimer random axis: seed 42 vs seed 7, max difference   7.5828E-01
+   dimer warning: landscape_dimer_rotate: dimer rotation did not converge; consider increasing delta or tightening SCF
+   dimer converged point     -0.82210682351632     0.62433970738754
+   prfo steps      6 converged T, gmax   2.1482E-06, dist   2.0929E-06
+   converged point     -0.82200127898338     0.62431070709809
+   dimer steps   10 converged T, gmax   1.0413E-04, dist   1.0526E-04, rmsd(prfo)   7.7397E-05
+   dimer warning: landscape_dimer_rotate: dimer rotation did not converge; consider increasing delta or tightening SCF
+   dimer converged point     -0.82210682351632     0.62433970738754
+   dimer Hessian requests    0 (steps 10, converged T
+ )
+   dimer warning: landscape_dimer_rotate: dimer rotation did not converge; consider increasing delta or tightening SCF
+   dimer converged point     -0.82210682351632     0.62433970738754
+   dimer warning: landscape_dimer_rotate: dimer rotation did not converge; consider increasing delta or tightening SCF
+   dimer converged point     -0.82210682351632     0.62433970738754
+   dimer warning: landscape_dimer_rotate: dimer rotation did not converge; consider increasing delta or tightening SCF
+   dimer converged point     -0.82210682330653     0.62433970748929
+   dimer seed 2 vs 7: geometry difference   2.0979E-10, converged both T / T

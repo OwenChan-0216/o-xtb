@@ -1,0 +1,7 @@
+xtb --lvib 'hessian' file (linear H2O, unprojected, non-mass-weighted)
+eigenvalues (Eh/bohr^2): -3.618137e-01 -3.618137e-01 -1.128044e-10 1.147507e-10 1.147508e-10 1.910051e-02 1.910051e-02 4.460603e-01 1.323732e+00
+negative count (<-1e-6): 2
+
+--lvib reported internal modes: +707.64 +707.64 +3419.67 +3609.10 cm^-1, imaginary modes: 0
+=> the two genuine imaginary bends are consumed as 'zero modes'; the two rotations
+   (+1.9e-2 Eh/bohr^2) are printed as if they were vibrations.

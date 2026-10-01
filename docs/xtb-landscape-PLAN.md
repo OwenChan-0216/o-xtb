@@ -659,12 +659,12 @@ M0/M1 **不**添加空的 stub 类型（避免死代码 / 占位实现）；"预
 
 | 字段 | 单位 | 默认 | 对照 / 理由 |
 |---|---|---|---|
-| `delta` | bohr | 1.8897e-2 | Henkelman 的 dimer separation ΔR=1e-2 Å（R04 §30）；**注意定义歧义**（VASP 的 DdR 是两像间距，pysisyphus 的 length 是中点到像，R04 Contradictions #1）→ 本计划取「中点→像」（与 pysisyphus 一致），文档中写明 |
+| `delta` | bohr | 1.8897e-2 | Henkelman 的 dimer separation ΔR=1e-2 Å（R04 §30）；**注意定义歧义**（VASP 的 DdR 是两像间距，pysisyphus 的 length 是中点到像，R04 Contradictions #1）→ 本计划取「中点→像」（与 pysisyphus 一致），文档中写明。**[M4 修复轮 处置] `[待校准]` 结案**：报告 28 §6.4 实测 `delta×8` 只改曲率 0.0013 %，且解析 MB 校验到 0.07 %；不再依赖 VASP 翻倍的说法，统一采用 pysisyphus 约定并写入头注释 |
 | `hvp_step` | bohr | 5.0e-3 | HVP 差分步；MAPLE `delta=0.005 Å = 9.45e-3 bohr`（`dimer.py:105-139`），差异理由：与 xtb `step_hess` 一致便于审计 |
 | `rot_max_iter` | — | 5 | MAPLE 同值 |
 | `rot_alpha` | — | 0.5 | MAPLE 同值 |
 | `rot_f_max_th` / `rot_f_rms_th` | hartree/bohr | 5.29e-4 / 2.65e-4 | MAPLE `rot_f_max_th=1.0e-3, rot_f_rms_th=5.0e-4`（Ha/Å）换算 |
-| `step0` | bohr | 3.7795e-1 | MAPLE `step0=0.2 Å` |
+| `step0` | bohr | 3.7795e-1 | MAPLE `step0=0.2 Å`；**[M4 修复轮] 它只是首次平移的**上限**，`dR` 曲率探测可再缩短（GFN2 HCN 实测首步 0.1032，非 `min(step0,step_max)=0.28346`）；已补 `--lts-step0` |
 | `step_max` | bohr | 2.8346e-1 | MAPLE `step_max=0.15 Å` |
 | `trust_radius` | bohr | 2.8346e-1 | MAPLE 同值 |
 | `kappa_to_flip` | — | 0.0 | MAPLE 同值（`dimer.py:105-139`）；曲率判据 C<0（R04 §29 Eq.21） |
@@ -1177,17 +1177,99 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 **M4 硬约束（来自 M3 验证轮，报告 21 §3 与 §7 R2/R3）：**
 
 1. **`etemp` 必须冻结并记录**。电子温度是这套方法里最大的单一误差源：实测拉伸 H₂
-   的最低（也是唯一）曲率在 `etemp` 0→5000 K 之间漂移 **−31.4 %**（近简并 CH₃· −4.8 %、
+   的最低曲率在 `etemp` 0→5000 K 之间漂移 **−31.4 %**（近简并 CH₃· −4.8 %、
    O₂ −0.26 %），远大于 step/sccacc 的全部误差。`ts`/`irc` 的一次运行内不得改变
    `etemp`（引擎的 `landscape_engine_control%etemp` 会写入 xTB 计算器，见 §12.11），
    且必须在输出/重启文件里**记录实际生效值**（`engine_report` 已打印，`sp`/`opt`/`scan`/`vib`
    四个任务均调用，见 §12.11；`xtb/landscape-vib-etemp` 锁住 CLI 同步）。
+   **[M4 修复轮] 结果对象层面也已落地**（复核 29 M1）：`landscape_result%etemp`
+   由 `landscape_engine%effective_etemp()` 从计算器**读回**后写入（不再是从无赋值的死字段），
+   `xtb/landscape-ts-etemp` 与 `result%write_log` 一起锁住「结果值 == 打印值」。
+   **[M4 修复轮] 关于 −31.4 %**：那是旧线性分类把一条被抬升的转动当内模的结果；
+   H3 修复（见下）后拉伸 H₂ 的真内模是软伸缩，300→5000 K 只移动 **−0.86 %**
+   （实测 −1005.14 → −1013.83 cm⁻¹）。结论（etemp 必须冻结 + 记录生效值）不变。
 2. **虚频附近的 FD 不确定度**：默认 `step=0.005 bohr`/`sccacc=0.3` 已被验收，相对最严格
    设置（0.002/0.1）的频率误差 ≤0.10 cm⁻¹（H₂O）、≤0.35 cm⁻¹（CH₃OH）；步长 0.02 或
    `sccacc=1.0` 会退化到 1.7–4.4 cm⁻¹。**当某条曲率落在 0±3 cm⁻¹ 以内时，必须收紧到
    step 0.002（必要时 sccacc 0.1）后再判符号。**
+   **[M4 修复轮] 已实现**（复核 29 H1）：`tasks/ts.f90` 的 `landscape_ts_curvature_band_hit`
+   以 cm^-1 检测内模是否落在 `0±3 cm^-1`（与 Hessian 本征值的换算是
+   `|f| = sqrt(|λ|)·autorcm`，即本征值带宽 `(3/autorcm)^2 ≈ 3.4e-7 Eh/bohr^2`）；命中时
+   `confirm_saddle` 自动以 `step=0.002`、`sccacc=0.1` 重算一次 Hessian 并重新判符号，
+   打印两次结果。客户端口 `--lts-step`/`--lts-sccacc` 已添加（`--lvib` 同款 15 行模板）；
+   若 Hessian 来源不支持收紧（`model`/`file`）则发**明确 warning**，不再静默把带内模算成 0 虚频。
+   测试：单元 `ts-curvature-band`（含注入：令谓词恒假即红）+ CLI 缺值报错三条。
+   **[待校准 处置] `imag_cutoff = -20 cm⁻¹`** 保留原值（它是虚频计数阈值，与 3 cm⁻¹ 带是
+   两个不同概念）；带内模现在先重判再计数，故带内「虚频被吞」已消除。
 3. **不要用「与 `--hess` 逐位一致」做判据**：两条路径的投影约定不同（Eckart vs
    `trproj`），离驻点越远差越大（实测 0.076–5.21 cm⁻¹，§12.11）。
+
+**[M4 修复轮]（复核 29 的 4 HIGH + 8 MEDIUM）**：
+
+- **H2（非鞍点必须失败）**：`landscape_result%is_saddle` 显式区分「数值收敛」与「确是鞍点」；
+  `confirm_saddle` 在 `n_imag /= 1` 时置 `result%converged = .false.` 与 `result%message`，
+  任务末尾经 `env%error`/`env%check` 给出**非零退出码**；几何与 `xtbts.log` 仍写出以供排错。
+  三种结局（真鞍点 / 极小点 0 虚频 / 高阶鞍点 ≥2 虚频）分别打印并各自给出退出码。
+  测试：`xtb/landscape-ts-minimum`（线性 HNC → exit≠0）与单元注入。
+- **H3（线性分子虚频被吞）**：`vib/modes.f90` 的线性分支不再**无条件**取最低 `n_zero` 个本征值；
+  它用 Hessian 本征向量与**质量加权刚体子空间**（3 平动 + 2/1 转动，Gram-Schmidt）的重叠判零模，
+  显著非零（含显著负）的本征值不再被当零模。CO2/HCN 的 5 个零模与内模频率**逐条不变**
+  （重叠 ~1 恰好选中同样的 5 个最低模）；`q_ROT` 只依赖几何，与本次修改无关。
+  线性 H2O 的两条真虚弯曲模现在被报成 2 个虚频。
+- **H4（刚体噪声使 lifted 恒真）**：驱动在判 `nneg`/`hlow` **之前**对 Hessian 谱做刚体投影
+  （`landscape_project_hessian_rigid`），并用**噪声感知阈值** `landscape_curvature_noise_tol`
+  （相对 `max|λ|`）判定显著负曲率；lifted 只在确有显著负曲率时为真，警告去重（每轮最多一条）
+  并记录被抬升的本征值。清洁的 GFN2 HCN 上 `lifted=F`（修复前每步 `T`）。
+- **M 条**：`result%etemp` 真赋值（M1）；prfo `reset_result` 清 `conv`（M2）；`xtbts.*` 过
+  `get_namespace`（M3）；驱动级投影有 9 维驱动测试（M4）；收敛点重定相并打印最终过渡向量（M5）；
+  `--lts-step0` + `step0` 文档改为「上限」（M6）；dimer 步表 `trust/bohr` 列改标 `stepmax/bohr`（M7）；
+  `landscape_dimer_mobility` 对 κ<0 以 `1/|κ|` 限幅，速度被丢弃时回退一步力方向位移以消掉零步宏迭代（M8）。
+
+报告与数据：`docs/_landscape-recon/30-m4-fix-report.md`。
+
+**[M4 最终修复轮]（复核 31 的 3 条 MEDIUM + 几何依赖性）**：
+
+- **MEDIUM-1（从极小点起步时选中的是刚体零模）**：`saddle/eigenfollow.f90` 的
+  `landscape_select_transition_mode` 现在只用 `-landscape_curvature_noise_tol` 以内的
+  **显著负本征值**计数（`nneg`），并在 `nneg == 0` 时改为跟**最低内模**（第一个
+  `evals(i) > tol` 的模）—— 即 `landscape_lowest_internal_mode`，而不是恒定 `index = 1`。
+  升序谱的前 6（线性分子 5）个模是刚体零模（`P H P` 后 ~1e-17，正负由舍入决定），
+  旧代码的 `index = 1` 恰好选中它们，而步又被 `project_rigid` 抹掉，于是搜索退化为极小化。
+- **从极小点起步的真实行为（可测）**：**P-RFO / B-P-RFO 需要鞍点猜测或过渡向量**。
+  仅仅修正选模还不够：在（近）驻点极小点上，跟随模的上升分量 `-F_k/(b_k - λ_p)`
+  随梯度一同消失，初始模型步是**下降步**，搜索会回到极小点（实测 HCN 线性极小点：
+  3 步回到 E = −5.504066 Eh、0 虚频、exit 1）。因此驱动新增**逃逸行走**
+  `prfo.f90:escape_from_minimum`：当（a）谱中没有显著负曲率、（b）初始模型步不是上升步时，
+  沿最低内模以 `--lts-escape-step`（默认 0.2 bohr）为步长**上行推走**，每步重算 Hessian
+  并跟模，直到该模曲率变负为止（上限 `escape_max_walk = 3.0 bohr`），然后从这里开始搜索。
+  实测 HCN 线性极小点需要 7 次推走（1.4 bohr，曲率 +0.0824 → −0.0053 Eh/bohr²），
+  之后 prfo 5 步 / bprfo 7 步收敛到与弯曲猜测**同一个**鞍点（E = −5.38737353 Eh）。
+  CLI 级证据：`xtb/landscape-ts-escape`（同一线性 HNC 输入，prfo 与 bprfo 都要求 exit 0 +
+  1 虚频 + 日志里的逃逸记录）；`--lts-escape-step 0` 关闭逃逸后同一输入退化为 H2 的
+  「极小点不是鞍点」路径（`xtb/landscape-ts-minimum` 锁住该分支）。
+- **dimer 不需要 Hessian，因此从极小点起步反而直接可用**：dimer 只用一阶导（每个宏迭代
+  2 次单点），靠轴向转动找最低曲率方向，不依赖初始谱/选模。同一个线性极小点：
+  prfo/bprfo 需要逃逸行走，dimer **29 步**、exit 0、1 虚频、E = −5.387373461989 Eh
+  （`dimer Hessian requests: 0`，单元测试 `dimer-no-hessian` 亦锁住）。
+- **MEDIUM-2（`λ_n` 对分不验证残差）**：`landscape_rfo_downhill_shift` 现在同时校验
+  区间的**上端**：`residual(hi) > 0` 意味着方程在 `(-inf, min b_i)` 上无根（需要
+  `sum_{i≠k} F_i² ≲ mu_margin·(mu_margin − bmin)`，默认 `mu_margin = 1e-8` 时即
+  `|F_i| ≲ 1e-8`），此时**不再返回区间端点**，而是退回退化的 `λ_n = 0` 并 warning。
+  实测四个 M4 真实运行（弯曲 HCN 与逃逸后的 HCN，prfo/bprfo 共 19 次求解）：
+  `residual(hi) = −5e-4 … −2e-2`，返回根的残差 `|≤5e-16|`，即该失效模式从未触发；
+  `bmin ~ −2e-16`（投影噪声）无害。单元测试 `prfo-lambda-n-no-root` 用合成谱
+  （`diag(-0.5, -1e-16, 0.5)`、`F = [0, 1e-11, 1e-11]`）锁住回退行为。
+- **MEDIUM-3（`result%etemp` 无断言）**：`xtb/landscape-ts-etemp` 增加两条断言
+  （stdout 的 `etemp:` 行与 `xtbts.log` 的 `electronic temperature (frozen)` 行），
+  删掉 `tasks/ts.f90` 的 `result%etemp = engine%effective_etemp()` 即变红（实测）。
+- **几何依赖性的书面记录**：报告 26/27/28/30 都补了本节的两起点实测对照；数据在
+  `docs/_landscape-recon/m4-final-fix-data/`，报告 `32-m4-final-fix-report.md`。
+
+| 起点（GFN2） | prfo | bprfo | dimer |
+|---|---|---|---|
+| bent TS 猜测 H(0,1.05,0) Å | 4 步，1 虚频 −1426.12 cm⁻¹，exit 0，E=−5.387373532156 | 5 步，1 虚频，exit 0，E=−5.387373532550 | 15 步，1 虚频 −1425.24 cm⁻¹，exit 0，E=−5.387373500230 |
+| 线性极小点 H(−1.0,0,0) Å | 逃逸 7 push/1.4 bohr + 5 步，1 虚频 −1426.19 cm⁻¹，exit 0 | 逃逸 7 push + 7 步，1 虚频，exit 0 | 29 步，1 虚频 −1426.73 cm⁻¹，exit 0 |
+| 线性极小点 + `--lts-escape-step 0` | 3 步，0 虚频，exit 1（明确诊断） | — | — |
 
 ### 9.6 M5：NEB / CI-NEB / AutoNEB / String(GSM)
 

@@ -108,6 +108,8 @@ subroutine collect_landscape_vib(testsuite)
       new_unittest("water-modes-gfn2", test_water_modes), &
       new_unittest("water-vs-trproj", test_water_vs_trproj), &
       new_unittest("co2-linear-modes", test_co2_modes), &
+      new_unittest("linear-saddle-imaginary", test_linear_saddle), &
+      new_unittest("linear-rigid-fallback", test_linear_rigid_fallback), &
       new_unittest("extra-zero-modes", test_extra_zero_modes), &
       new_unittest("etemp-control", test_etemp_control), &
       new_unittest("hessian-file-roundtrip", test_hessian_file_roundtrip), &
@@ -488,6 +490,320 @@ subroutine test_co2_modes(error)
 
 end subroutine test_co2_modes
 
+!> A linear molecule whose Hessian has genuine imaginary modes reports them.
+!>
+!> Linear H2O is a second order saddle on a straight line: its two bending
+!> modes are really imaginary.  The pre-H3 classification took the `n_zero`
+!> lowest eigenvalues unconditionally for a linear molecule, so it swallowed
+!> the two bends as "zero modes" (and printed the lifted rotations as if they
+!> were vibrations), which made the `--lts` imaginary-mode confirmation
+!> meaningless for every linear saddle point (V1 / H3 of
+!> `29-m4-independent-review.md`).
+!>
+!> The fix identifies the rigid body modes by their overlap with the analytic
+!> translation/rotation subspace, so a genuinely imaginary bend - which is
+!> orthogonal to that subspace - is kept as an internal mode.
+subroutine test_linear_saddle(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(TMolecule) :: mol
+   type(TRestart) :: chk
+   type(TxTBCalculator) :: calc
+   type(landscape_vib_settings) :: settings
+   type(landscape_vib_result) :: vib
+   real(wp) :: xyz(3, 3), hess(9, 9)
+   logical :: fail
+
+   ! linear H2O on the x axis (bohr); the geometry of the w180 case
+   xyz(:, 1) = [0.0_wp, 0.0_wp, 0.0_wp]
+   xyz(:, 2) = [0.96_wp, 0.0_wp, 0.0_wp]
+   xyz(:, 3) = [-0.96_wp, 0.0_wp, 0.0_wp]
+   call init(env)
+   call init(mol, [character(len=1) :: "O", "H", "H"], xyz)
+   call newXTBCalculator(env, mol, calc, method=2)
+   call newWavefunction(env, mol, calc, chk)
+   call raw_hessian(env, mol, chk, calc, hess)
+
+   settings = landscape_vib_settings()
+   call landscape_vib_analysis(env, mol, hess, settings, vib, fail)
+   call check(error, .not. fail, "the linear H2O analysis failed")
+   if (allocated(error)) return
+   call check(error, vib%linear, "the linear H2O was not detected as linear")
+   if (allocated(error)) return
+   call check(error, vib%n_zero, 5, "a linear molecule has 5 zero modes")
+   if (allocated(error)) return
+   call check(error, vib%n_vib, 4, "a linear molecule has 3N-5 = 4 modes")
+   if (allocated(error)) return
+   ! the two degenerate bends are the imaginary pair
+   call check(error, vib%n_imag, 2, &
+      & "the two imaginary bends of linear H2O were not reported")
+   if (allocated(error)) return
+   ! ... and they are exactly those two modes, not just any two of the four
+   ! internal modes.  Pinning the value and the sign (not only the count) makes
+   ! the assertion sensitive to a classification that keeps the count but
+   ! reports a lifted rigid mode:
+   !   freq(6:9) = -10566.03, -10566.03, 20004.35, 21035.64 cm^-1
+   call check(error, vib%freq(6) < -1000.0_wp .and. vib%freq(7) < -1000.0_wp, &
+      & "the imaginary bends of linear H2O have the wrong sign or magnitude")
+   if (allocated(error)) return
+   call check(error, abs(vib%freq(6) - vib%freq(7)) < 1.0e-3_wp, &
+      & "the two imaginary bends of linear H2O are not degenerate")
+   if (allocated(error)) return
+   call check(error, abs(vib%freq(6) + 10566.03_wp) < 5.0_wp, &
+      & "the value of the imaginary bend of linear H2O changed")
+   if (allocated(error)) return
+   call check(error, vib%freq(8) > 0.0_wp .and. vib%freq(9) > vib%freq(8), &
+      & "the two highest modes of linear H2O are not the positive stretches")
+
+end subroutine test_linear_saddle
+
+!> A linear Hessian whose eigenvectors avoid the rigid body subspace reaches
+!> the fallback branch of the zero mode classification.
+!>
+!> The synthetic Hessian below is built from nine **prescribed** eigenvectors:
+!> four are exact rigid body directions (overlap 1) and five span the
+!> complement of those four rigid directions, so each of them carries only
+!> `1/sqrt(5) = 0.447` of one rigid direction - below the 0.5 overlap
+!> threshold.  A linear molecule needs `n_zero` = 5 zero modes, so the overlap
+!> based selection finds only four of them and has to fall back to the lowest
+!> remaining |frequency| mode, warning that the classification is unreliable.
+!>
+!> This is the only reachable case of the fallback path.  The test pins the
+!> warning, the zero mode count, and *which* mode was swallowed: the remaining
+!> eigenvector of smallest |frequency| (eigenvalue 0.15 hartree/bohr^2), whose
+!> own frequency therefore disappears from the internal mode list.
+subroutine test_linear_rigid_fallback(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(TMolecule) :: mol
+   type(landscape_vib_settings) :: settings
+   type(landscape_vib_result) :: vib
+   real(wp) :: xyz(3, 3), hess(9, 9), expect(4)
+   character(len=200) :: diag
+   integer :: nlog
+   logical :: fail
+
+   ! linear H2O on the x axis (bohr) - the geometry of `test_linear_saddle`
+   xyz(:, 1) = [0.0_wp, 0.0_wp, 0.0_wp]
+   xyz(:, 2) = [0.96_wp, 0.0_wp, 0.0_wp]
+   xyz(:, 3) = [-0.96_wp, 0.0_wp, 0.0_wp]
+   call init(env)
+   call init(mol, [character(len=1) :: "O", "H", "H"], xyz)
+
+   call build_avoiding_linear_hessian(mol, hess)
+   settings = landscape_vib_settings()
+   nlog = env%nLog
+   call landscape_vib_analysis(env, mol, hess, settings, vib, fail)
+
+   call check(error, .not. fail, "the analysis of the distorted linear Hessian failed")
+   if (allocated(error)) return
+   call check(error, vib%linear, "the distorted geometry was not detected as linear")
+   if (allocated(error)) return
+   call check(error, vib%n_zero, 5, "the linear molecule must still have 5 zero modes")
+   if (allocated(error)) return
+   call check(error, vib%n_vib, 4, "the linear molecule must still have 4 internal modes")
+   if (allocated(error)) return
+   ! the fallback has to warn - it is the only warning of the linear branch
+   call check(error, env%nLog > nlog, "the rigid body fallback did not warn")
+   if (allocated(error)) return
+   ! all five zero modes are reported as exactly zero
+   call check(error, maxval(abs(vib%freq(1:5))), 0.0_wp, &
+      & "the zero modes of the fallback are not exactly zero")
+   if (allocated(error)) return
+   ! four rigid directions were found; the missing zero mode is the remaining
+   ! eigenvector of smallest |frequency| (eigenvalue 0.15), so the four internal
+   ! modes are the other four prescribed eigenvectors, ascending
+   expect = autorcm*[-sqrt(0.4_wp), -sqrt(0.25_wp), sqrt(0.3_wp), sqrt(0.6_wp)]
+   write(diag, '("wrong zero mode filled: expected",4f11.2," got",4f11.2)') &
+      & expect, vib%freq(6:9)
+   call check(error, all(abs(vib%freq(6:9) - expect) < 1.0e-6_wp), trim(diag))
+   if (allocated(error)) return
+   call check(error, vib%n_imag, 2, "the two imaginary internal modes were lost")
+   if (allocated(error)) return
+   ! the swallowed mode (eigenvalue 0.15) kept no frequency of its own
+   call check(error, all(abs(abs(vib%freq(6:9)) - autorcm*sqrt(0.15_wp)) > 1.0_wp), &
+      & "the swallowed mode kept its own frequency")
+
+end subroutine test_linear_rigid_fallback
+
+!> Orthonormal basis of the rigid body directions in the mass weighted space.
+!>
+!> A test fixture that mirrors the (private) `landscape_vib_rigid_basis` of the
+!> module under test: the three translations are `sqrt(m_a) e_c`, the rotations
+!> `sqrt(m_a) (e_c x (x_a - x_cm))` about the mass weighted centre of mass,
+!> Gram-Schmidt orthogonalised.  It is duplicated here (rather than exported)
+!> so the production module surface is unchanged; the analysis is what the test
+!> exercises.  The columns are orthonormal, `n_rigid` is 5 for a linear
+!> molecule.
+subroutine rigid_body_basis(mol, basis, n_rigid)
+   !> Molecular structure
+   type(TMolecule), intent(in) :: mol
+   !> Orthonormal basis (3N rows, up to 6 columns)
+   real(wp), allocatable, intent(out) :: basis(:, :)
+   !> Number of valid columns
+   integer, intent(out) :: n_rigid
+
+   real(wp), allocatable :: raw(:, :), col(:)
+   real(wp) :: centre(3), rvec(3), mtot, proj, nrm
+   integer :: n3, iat, ic, a, k, c
+
+   n3 = 3*mol%n
+   allocate(basis(n3, 6), source=0.0_wp)
+   allocate(raw(n3, 6), source=0.0_wp)
+   n_rigid = 0
+
+   ! translations
+   do c = 1, 3
+      do iat = 1, mol%n
+         raw(3*(iat - 1) + c, c) = 1.0_wp
+      end do
+   end do
+
+   ! rotations about the mass weighted centre of mass
+   if (mol%n >= 2) then
+      centre = 0.0_wp
+      mtot = 0.0_wp
+      do iat = 1, mol%n
+         centre = centre + mol%atmass(iat)*mol%xyz(:, iat)
+         mtot = mtot + mol%atmass(iat)
+      end do
+      if (mtot > 0.0_wp) centre = centre/mtot
+      do iat = 1, mol%n
+         rvec = mol%xyz(:, iat) - centre
+         ic = 3*(iat - 1)
+         raw(ic + 1, 4) = 0.0_wp
+         raw(ic + 2, 4) = -rvec(3)
+         raw(ic + 3, 4) = rvec(2)
+         raw(ic + 1, 5) = rvec(3)
+         raw(ic + 2, 5) = 0.0_wp
+         raw(ic + 3, 5) = -rvec(1)
+         raw(ic + 1, 6) = -rvec(2)
+         raw(ic + 2, 6) = rvec(1)
+         raw(ic + 3, 6) = 0.0_wp
+      end do
+   end if
+
+   ! mass weight (the same factor as `massWeightHessian`)
+   do iat = 1, mol%n
+      ic = 3*(iat - 1)
+      raw(ic + 1:ic + 3, :) = raw(ic + 1:ic + 3, :)*sqrt(mol%atmass(iat))
+   end do
+
+   do k = 1, 6
+      nrm = sqrt(sum(raw(:, k)**2))
+      if (nrm > 0.0_wp) raw(:, k) = raw(:, k)/nrm
+   end do
+
+   allocate(col(n3))
+   do k = 1, 6
+      col = raw(:, k)
+      do a = 1, n_rigid
+         proj = dot_product(basis(:, a), col)
+         col = col - proj*basis(:, a)
+      end do
+      nrm = sqrt(dot_product(col, col))
+      if (nrm <= 1.0e-8_wp) cycle
+      n_rigid = n_rigid + 1
+      basis(:, n_rigid) = col/nrm
+   end do
+
+end subroutine rigid_body_basis
+
+!> Synthetic **mass weighted** Hessian of a linear molecule whose eigenvectors
+!> deliberately avoid the rigid body subspace (fixture of
+!> `test_linear_rigid_fallback`).
+!>
+!> The nine prescribed eigenvalues are all distinct, so the eigenvectors of the
+!> assembled matrix are exactly the prescribed ones.  The matrix is returned in
+!> the non mass weighted form (`h_ij = h_mw_ij*sqrt(m_i m_j)`) that
+!> `landscape_vib_analysis` mass weights back into `h_mw`.
+subroutine build_avoiding_linear_hessian(mol, hess)
+   !> Linear molecule
+   type(TMolecule), intent(in) :: mol
+   !> Non mass weighted Hessian as expected by `landscape_vib_analysis`
+   real(wp), intent(out) :: hess(:, :)
+   !> Eigenvalues of the nine prescribed eigenvectors, all distinct
+   real(wp), parameter :: lam(9) = [ &
+      & -0.4_wp, -0.25_wp, 0.15_wp, 0.3_wp, 0.6_wp, &
+      &  5.0_wp,  6.0_wp,  7.0_wp, 8.0_wp]
+
+   real(wp), allocatable :: rigid(:, :), comp(:, :), b(:, :), q(:, :)
+   real(wp) :: c5(5, 5), tmp(5), vec(9)
+   real(wp) :: nrm
+   integer :: n3, n_rigid, nc, ncomp, i, j, k, a
+
+   n3 = 3*mol%n
+   call rigid_body_basis(mol, rigid, n_rigid)
+
+   ! orthonormal basis of the complement of the rigid body subspace
+   allocate(comp(n3, n3), source=0.0_wp)
+   ncomp = 0
+   do k = 1, n3
+      vec = 0.0_wp
+      vec(k) = 1.0_wp
+      do a = 1, n_rigid
+         vec = vec - dot_product(rigid(:, a), vec)*rigid(:, a)
+      end do
+      do a = 1, ncomp
+         vec = vec - dot_product(comp(:, a), vec)*comp(:, a)
+      end do
+      nrm = sqrt(sum(vec**2))
+      if (nrm > 1.0e-10_wp) then
+         ncomp = ncomp + 1
+         comp(:, ncomp) = vec/nrm
+      end if
+   end do
+
+   ! an orthogonal 5x5 matrix with a constant first row 1/sqrt(5), so every
+   ! combination of the five basis vectors keeps the same 1/sqrt(5) of the
+   ! single rigid direction and the set stays orthonormal
+   c5 = 0.0_wp
+   c5(1, :) = 1.0_wp/sqrt(5.0_wp)
+   nc = 1
+   do k = 1, 5
+      tmp = 0.0_wp
+      tmp(k) = 1.0_wp
+      do a = 1, nc
+         tmp = tmp - dot_product(c5(a, :), tmp)*c5(a, :)
+      end do
+      nrm = sqrt(sum(tmp**2))
+      if (nrm > 1.0e-10_wp .and. nc < 5) then
+         nc = nc + 1
+         c5(nc, :) = tmp/nrm
+      end if
+   end do
+
+   ! the nine eigenvectors: five combinations of rigid(:,1) and the four
+   ! complement directions, then the four remaining rigid directions
+   allocate(b(n3, 5), source=0.0_wp)
+   b(:, 1) = rigid(:, 1)
+   b(:, 2:5) = comp(:, 1:4)
+   allocate(q(n3, n3), source=0.0_wp)
+   do k = 1, 5
+      do i = 1, 5
+         q(:, k) = q(:, k) + c5(i, k)*b(:, i)
+      end do
+   end do
+   do k = 6, 9
+      q(:, k) = rigid(:, k - 4)
+   end do
+
+   ! assemble the mass weighted Hessian and un-weight it for the analysis
+   hess = 0.0_wp
+   do k = 1, 9
+      do i = 1, n3
+         hess(i, :) = hess(i, :) + lam(k)*q(i, k)*q(:, k)
+      end do
+   end do
+   do i = 1, mol%n
+      do j = 1, mol%n
+         hess(3*(i - 1) + 1:3*i, 3*(j - 1) + 1:3*j) = &
+            & hess(3*(i - 1) + 1:3*i, 3*(j - 1) + 1:3*j)*sqrt(mol%atmass(i)*mol%atmass(j))
+      end do
+   end do
+
+end subroutine build_avoiding_linear_hessian
+
 !> A Hessian with more near-zero modes than the six projected ones keeps every
 !> mode: the additional ones become the lowest internal modes.
 !>
@@ -589,10 +905,15 @@ end subroutine test_extra_zero_modes
 !> that push the control field would be dead and the two runs below would
 !> return bitwise identical frequencies.
 !>
-!> The stretched H2 (2.4 A) is the near-degenerate case measured in
-!> `docs/_landscape-recon/21-m3-validation-experiments.md` section 3.1: the
-!> Fermi broadening of the sigma/sigma* gap moves its only mode by -31 %
-!> between 300 K and 5000 K, far more than any finite difference error.
+!> The stretched H2 (2.4 A) is the soft-mode case measured in
+!> `docs/_landscape-recon/21-m3-validation-experiments.md` section 3.1.  Its
+!> only internal mode is the soft (here imaginary) H-H stretch; the electronic
+!> temperature changes it by ~0.9 % between 300 K and 5000 K, which is far
+!> above the round off of the finite difference, so the assertion is the
+!> *change*, not an absolute frequency.  (The earlier version asserted a
+!> 100 cm^-1 threshold on a value that the pre-H3 classification reported for a
+!> *lifted rotation* instead of the real stretch; see
+!> `29-m4-independent-review.md` H3.)
 subroutine test_etemp_control(error)
    type(error_type), allocatable, intent(out) :: error
    type(TEnvironment) :: env
@@ -618,10 +939,10 @@ subroutine test_etemp_control(error)
    call stretched_h2_frequency(5000.0_wp, hot)
    if (allocated(error)) return
 
-   call check(error, cold > 100.0_wp, "the 300 K mode is not a vibration")
+   call check(error, abs(cold) > 1.0_wp, "the 300 K mode is not a vibration")
    if (allocated(error)) return
-   deviation = abs(hot - cold)/cold
-   call check(error, deviation > 0.1_wp, &
+   deviation = abs(hot - cold)/abs(cold)
+   call check(error, deviation > 1.0e-3_wp, &
       & "the electronic temperature did not change the Hessian")
 
 contains
