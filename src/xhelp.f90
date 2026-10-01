@@ -361,8 +361,9 @@ subroutine help(iunit)
    "    writes xtbts.xyz and xtbts.log and confirms the imaginary mode count", &
    "",&
    "--lts-method NAME",&
-   "    search method, one of prfo (default), bprfo (restricted step) or dimer", &
-   "    (first derivatives only, no Hessian)", &
+   "    search method, one of prfo (default), bprfo (restricted step), dimer", &
+   "    (first derivatives only, no Hessian), neb, cineb (climbing image NEB),", &
+   "    autoneb (incremental path building) or string / gsm (growing string)", &
    "",&
    "--lts-trust VALUE",&
    "    initial trust radius of the step in bohr (default 0.37795)", &
@@ -457,6 +458,85 @@ subroutine help(iunit)
    "",&
    "--lts-sccacc VALUE",&
    "    SCC accuracy of the displaced single points of the confirmation Hessian (default 0.3)", &
+   "",&
+   "--lts-product NAME",&
+   "    product endpoint of a chain-of-states search (neb, cineb, autoneb, string,", &
+   "    gsm): a single frame xyz with the same atoms in the same order", &
+   "",&
+   "--lts-images N",&
+   "    number of images of a band, the two fixed endpoints included (default 9);", &
+   "    for autoneb it is the requested final number of images", &
+   "",&
+   "--lts-kmin VALUE, --lts-kmax VALUE",&
+   "    lower/upper spring constant of the dynamic springs in hartree/bohr^2", &
+   "    (defaults 1e-2 and 1e-1, calibrated on the analytic LEPS surface)", &
+   "",&
+   "--lts-kdecay VALUE",&
+   "    decay factor of the dynamic spring formula (default 0.5)", &
+   "",&
+   "--lts-no-dynamic-k",&
+   "    use the single spring constant k_max for every image", &
+   "",&
+   "--lts-climb",&
+   "    switch on the climbing image stage (CI-NEB); implied by --lts-method", &
+   "    cineb, autoneb, string and gsm", &
+   "",&
+   "--lts-climb-switch VALUE",&
+   "    band force (hartree/bohr) below which the climbing image is ignited", &
+   "    (default 9.7234e-3, the standard 0.5 eV/angstrom)", &
+   "",&
+   "--lts-no-idpp",&
+   "    straight linear interpolation instead of the IDPP initial path", &
+   "",&
+   "--lts-no-align",&
+   "    do not Kabsch align the images before every band evaluation", &
+   "",&
+   "--lts-relax-ends",&
+   "    relax the two endpoints with the minimiser before the search", &
+   "",&
+   "--lts-max-displ VALUE",&
+   "    upper bound of one displacement component of a band step in bohr", &
+   "    (default 0.37795)", &
+   "",&
+   "--lts-frms-avg VALUE, --lts-frms-max VALUE",&
+   "    band convergence thresholds of the average and the largest per-image", &
+   "    force RMS in hartree/bohr (defaults 3e-4 and 1e-3)", &
+   "",&
+   "--lts-autoneb-nstart N",&
+   "    number of images of the coarse start path of an AutoNEB run (default 5)", &
+   "",&
+   "--lts-autoneb-max-paths N",&
+   "    hard upper bound of the number of images of an AutoNEB path (default 10);", &
+   "    a request above it is an error", &
+   "",&
+   "--lts-autoneb-max-depth N",&
+   "    hard upper bound of the number of image insertion stages (default 5)", &
+   "",&
+   "--lts-autoneb-restart NAME",&
+   "    multi-frame xyz path of an earlier AutoNEB run (its path_autoneb.xyz),", &
+   "    adopted as the initial path so the completed stages are not repeated", &
+   "",&
+   "--lts-string-nnodes N",&
+   "    target number of nodes of the growing string, endpoints included (default 9)", &
+   "",&
+   "--lts-string-grow-tol VALUE",&
+   "    norm threshold of the growth indicator of Eq. 7 in hartree/bohr (default 5e-3)", &
+   "",&
+   "--lts-string-ds VALUE",&
+   "    arc length increment of one growth step of the string in bohr (default 0.5)", &
+   "",&
+   "--lts-string-nu2 VALUE",&
+   "    curvature floor nu2 of the node spacing condition R > |gradV.tau|/(2 nu2)", &
+   "    in hartree/bohr^2 (default 0.05)", &
+   "",&
+   "--lts-string-grow-steps N",&
+   "    maximum perpendicular relaxation iterations of one frontier node (default 200)", &
+   "",&
+   "--lts-no-string-spline",&
+   "    central difference tangents of the string instead of the cubic spline tangent", &
+   "",&
+   "--lts-string-history",&
+   "    print the growth history (position and perpendicular force of every node)", &
    "",&
    "--lvib",&
    "    harmonic frequencies, normal modes and thermochemistry with the landscape task", &

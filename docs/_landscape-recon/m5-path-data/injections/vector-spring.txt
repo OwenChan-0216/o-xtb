@@ -1,0 +1,241 @@
+   step  1.000E-03  max |analytic - central|  4.25835E-05
+   step  1.000E-04  max |analytic - central|  4.25834E-07
+   step  1.000E-05  max |analytic - central|  4.28068E-09
+   err(1e-3)/err(1e-5) =         9947.8
+   H2 well: model      -0.154980938826 closed form      -0.154980938808
+   TS: model      -0.140638574121 Eh, max|g|   6.81E-09
+   analytic barrier       8.9985 kcal/mol
+   LEPS TS eigenvalues:    -1.004939   -0.000000   -0.000000   -0.000000   -0.000000    0.000000    0.003004    0.003004    1.895410
+   IDPP max |analytic - central|  5.13812E-11
+   max energy  linear      -0.003392062498  IDPP      -0.025687343521
+   max adjacent jump  linear        46.945712 kcal/mol, IDPP        27.444830 kcal/mol
+   improved tangent    0.85749   0.51450   0.00000   0.00000
+   naive tangent       0.85749   0.51450   0.00000   0.00000
+   max |aligned - reference|  2.63678E-16
+   misalignment aligned  1.85037E-17  unaligned  4.24099E+00
+   LEPS reference: r*     1.505269 bohr, E(TS)    -0.1406385741 Eh
+   barrier (analytic)     8.998500 kcal/mol
+   NEB highest image 5 E      -0.140277943412 barrier       9.2248   +0.2263
+   geometry r12    1.51943 r23    1.51941 r*    1.50527
+   CI-NEB image 5 ignited at 29 E      -0.140638545703 barrier       8.9985   +0.0000
+   iterations dynamic default     94  min spacing   0.496301  mean spacing   0.496997
+   static k  1.000E-05  iterations     31  converged T  barrier err/kcal       0.0000  min spacing   0.065108
+   static k  1.000E-04  iterations     31  converged T  barrier err/kcal       0.0000  min spacing   0.065275
+   static k  1.000E-03  iterations     31  converged T  barrier err/kcal       0.0001  min spacing   0.066959
+   static k  1.000E-02  iterations    231  converged T  barrier err/kcal      -0.5194  min spacing   0.430609
+   static k  1.000E-01  iterations     47  converged T  barrier err/kcal       1.1517  min spacing   0.484771
+   static k  1.000E+00  iterations     19  converged T  barrier err/kcal      54.1724  min spacing   0.337420
+   static k  1.000E+01  iterations     11  converged T  barrier err/kcal      85.8702  min spacing   0.264160
+   static k  1.000E+02  iterations     14  converged T  barrier err/kcal      86.1018  min spacing   0.263927
+   MB band converged in 56 iterations, highest image 4 at    -0.669051    0.597965 distance to saddle   1.5520E-01 barrier     101.2189   -4.8157
+   circle tangent error spline  1.69032E-04  central  4.90825E-02
+   reparameterised spacings     2.666667    2.666667    2.666667
+   growth off path  0.00000E+00  spacing  5.00000E-01
+   coarse band |dE|   1.772E-01  4.670E-02  1.748E-02  5.160E-02
+   coarse band |dR|   5.176E-01  4.368E-01  5.620E-01  5.995E-01
+   insertion at interval 1 (energy rule), 4 (length rule)
+   AutoNEB stages 5, images 9, saddle at   -0.66753   0.61187 distance  1.550E-01 barrier     102.2444   -3.7902
+   restart vs one shot max |dR|  0.00000E+00 bohr
+   PRFO steps    5  E    -0.1406385741  err/kcal    +0.0000  r12/r23    +1.505269   +1.505269  r*    +1.505269
+   converged point spectrum    -1.004938   -0.000000   -0.000000   -0.000000   -0.000000    0.000000    0.003004    0.003004    1.895411
+   AutoNEB stages 5, images 9, E    -0.1406383987  barrier       8.9986   +0.0001  r12/r23  +1.505123 +1.504790
+   AutoNEB vs NEB saddle RMSD     0.006252 bohr
+   AutoNEB vs P-RFO saddle RMSD     0.000154 bohr (aligned),     0.390317 bohr (raw)
+   string nodes   32 grow    1 E    -0.1406381082  barrier       6.7972   +0.0003
+   string r12/r23/r13     1.505073    1.504439    3.009512  converged F  f_avg  3.61328E-03  f_max  2.17416E-02
+   0.5 eV/angstrom =   0.0097234532 hartree/bohr, default   0.0097234000
+   switch  1.00000E+00  ignited at    0  E    -0.1406378547  barrier       8.9990   +0.0005  r12/r23   +1.50465  +1.50465
+   switch  3.47200E-02  ignited at   25  E    -0.1406379216  barrier       8.9989   +0.0004  r12/r23   +1.50586  +1.50586
+   switch  9.72340E-03  ignited at   29  E    -0.1406385457  barrier       8.9985   +0.0000  r12/r23   +1.50515  +1.50515
+   initial band avg  8.13168E-02 max  1.19741E-01  avg-only converged F
+   rotated align T  iter   46  barrier       9.1891   +0.1906  path RMSD +1.03586E-03
+   rotated align F  iter  512  converged F  barrier       1.5258  path RMSD  2.83670E-01  f_max  1.06839E-02
+   initial band idpp T  f_avg  8.13168E-02  f_max  1.19741E-01
+   initial band idpp F  f_avg  2.52372E-02  f_max  5.68717E-02
+   dynamic  1  k_min  1.000E-02  k_max  1.000E-01  converged T  iter   94  barrier err       0.2263
+   dynamic  1  k_min  2.083E-03  k_max  2.083E-02  converged T  iter   31  barrier err       0.0005
+   dynamic  0  k_min  1.000E-02  k_max  1.000E-02  converged T  iter  231  barrier err      -0.5194
+   ds   0.50 no path: the string growth stalled
+   ds   1.00 no path: the string made no progress towards the product
+   ds   1.50 no path: the string made no progress towards the product
+   ds   2.00 nodes    5  barrier       0.2599   -8.7386  converged F  msg the climbing node did not reach the force criterion
+    iter   f_rms_avg     f_rms_max     dE(hei)/kcal
+      0  8.13168E-02  1.19741E-01        81.1315 F
+      1  1.62453E+00  5.30872E+00       700.4263 F
+      2  8.02223E-02  1.14026E-01        80.9324 F
+      3  7.79892E-02  1.07622E-01        80.7457 F
+      4  1.02128E+00  2.45521E+00       325.9483 F
+      5  7.28446E-02  1.08796E-01        80.3133 F
+      6  6.64036E-02  1.07779E-01        79.9163 F
+      7  8.18462E-01  1.70249E+00       183.1419 F
+      8  5.66719E-02  1.04839E-01        78.9297 F
+      9  4.71974E-02  9.81507E-02        78.0710 F
+     10  3.24634E-01  8.83847E-01        81.7993 F
+     11  3.95518E-02  8.00439E-02        75.7087 F
+     12  3.52873E-02  5.74158E-02        73.9720 F
+     13  5.88119E-02  1.50087E-01        62.9083 F
+     14  2.77287E-02  4.01970E-02        65.9173 F
+     15  3.36513E-02  4.44462E-02        62.2523 F
+     16  3.91147E-02  5.22244E-02        57.8831 F
+     17  4.45654E-02  5.90068E-02        52.5357 F
+     18  4.97457E-02  6.54468E-02        46.0193 F
+     19  5.36213E-02  7.08159E-02        38.3172 F
+     20  5.40402E-02  7.29824E-02        29.8499 F
+     21  4.87221E-01  1.38971E+00       151.5107 F
+     22  3.77149E-02  6.62876E-02        22.2855 F
+     23  3.46411E-02  6.82265E-02        16.6322 F
+     24  1.19628E-01  4.54673E-01        89.0097 F
+     25  1.31338E-02  2.90859E-02        10.5660 F
+     26  6.45186E-03  2.86479E-02        10.6621 F
+     27  6.44659E-03  1.91091E-02         9.7173 F
+     28  9.84894E-03  3.87891E-02        10.5343 F
+     29  2.46229E-03  4.33331E-03         9.0179 F
+     30  1.18174E-03  2.45539E-03         9.0033 F
+     31  9.62202E-04  1.94804E-03         9.0018 F
+     32  2.88156E-03  8.43447E-03         9.0007 F
+     33  1.85310E-02  5.94550E-02         8.9997 F
+     34  2.29167E+00  7.99457E+00      1276.6006 F
+     35  1.82405E-02  5.80314E-02         8.9995 F
+     36  1.78419E-02  5.65862E-02         8.9995 F
+     37  3.08304E-03  7.19026E-03         9.0088 F
+     38  1.05669E-03  1.44230E-03         9.0154 F
+     39  8.63987E-04  2.06150E-03         9.0169 F
+     40  6.86462E-04  2.10838E-03         9.0175 F
+     41  9.81851E-04  2.16110E-03         9.0191 F
+     42  1.55691E-03  2.68897E-03         9.0225 F
+     43  2.26390E-03  4.73094E-03         9.0294 F
+     44  2.80283E-03  6.68598E-03         9.0446 F
+     45  3.60006E-03  7.53328E-03         9.0873 F
+     46  4.14599E-03  6.47636E-03         9.1711 F
+     47  1.54106E-03  2.98996E-03         9.1263 F
+     48  1.94325E-03  3.46797E-03         9.0479 F
+     49  6.19112E-03  1.91447E-02         9.0754 F
+     50  9.27334E-04  1.14879E-03         9.0728 F
+     51  6.67930E-04  9.11766E-04         9.0636 F
+     52  6.80595E-04  1.16111E-03         9.0562 F
+     53  1.92372E-03  3.12185E-03         9.0288 F
+     54  3.22129E-03  5.66781E-03         9.0115 F
+     55  5.21999E-03  9.14505E-03         8.9999 F
+     56  6.42150E-03  1.11405E-02         8.9996 F
+     57  5.14545E-03  1.04184E-02         9.0378 F
+     58  2.18293E-03  4.24147E-03         9.2555 F
+     59  3.90944E-03  5.72259E-03         9.3472 F
+     60  3.71565E-03  8.38635E-03         9.2192 F
+   first budget that passes   -1, unrestricted run   94 iterations
+   unconnected band iter  512  barrier 1645047.2954  f_avg  2.98588E+03  f_max  7.92282E+03
+# Testing: landscape-path
+  Starting leps-gradient ... (1/47)
+       ... leps-gradient [PASSED]
+  Starting leps-saddle ... (2/47)
+       ... leps-saddle [PASSED]
+  Starting leps-hessian ... (3/47)
+       ... leps-hessian [PASSED]
+  Starting idpp-gradient ... (4/47)
+       ... idpp-gradient [PASSED]
+  Starting idpp-vs-linear ... (5/47)
+       ... idpp-vs-linear [PASSED]
+  Starting idpp-invalid ... (6/47)
+       ... idpp-invalid [PASSED]
+  Starting improved-tangent ... (7/47)
+       ... improved-tangent [PASSED]
+  Starting naive-tangent-kink ... (8/47)
+       ... naive-tangent-kink [PASSED]
+  Starting spring-eq12 ... (9/47)
+       ... spring-eq12 [FAILED]
+  Message: the spring force is not k*(d_next-d_prev)*tau
+  Starting dynamic-springs ... (10/47)
+       ... dynamic-springs [PASSED]
+  Starting cineb-force ... (11/47)
+       ... cineb-force [PASSED]
+  Starting cineb-ignition ... (12/47)
+       ... cineb-ignition [PASSED]
+  Starting dual-criterion ... (13/47)
+       ... dual-criterion [PASSED]
+  Starting align-rotation ... (14/47)
+       ... align-rotation [PASSED]
+  Starting band-align-effect ... (15/47)
+       ... band-align-effect [PASSED]
+  Starting band-fixed-endpoints ... (16/47)
+       ... band-fixed-endpoints [PASSED]
+  Starting leps-neb-barrier ... (17/47)
+       ... leps-neb-barrier [PASSED]
+  Starting leps-cineb-barrier ... (18/47)
+       ... leps-cineb-barrier [PASSED]
+  Starting cineb-switch-threshold ... (19/47)
+       ... cineb-switch-threshold [PASSED]
+  Starting neb-spring-calibration ... (20/47)
+       ... neb-spring-calibration [FAILED]
+  Message: the too stiff spring constants converged, the upper bound is gone
+  Starting mb-neb-saddle ... (21/47)
+       ... mb-neb-saddle [FAILED]
+  Message: the NEB band did not reach the Mueller-Brown saddle point
+  Starting band-images-too-few ... (22/47)
+       ... band-images-too-few [PASSED]
+  Starting band-budget-exhausted ... (23/47)
+       ... band-budget-exhausted [PASSED]
+  Starting band-unconverged ... (24/47)
+       ... band-unconverged [PASSED]
+  Starting method-names ... (25/47)
+       ... method-names [PASSED]
+  Starting string-normal-force ... (26/47)
+       ... string-normal-force [PASSED]
+  Starting string-growth-indicator ... (27/47)
+       ... string-growth-indicator [PASSED]
+  Starting string-spacing ... (28/47)
+       ... string-spacing [PASSED]
+  Starting string-spline-tangent ... (29/47)
+       ... string-spline-tangent [PASSED]
+  Starting string-reparameterize ... (30/47)
+       ... string-reparameterize [PASSED]
+  Starting string-growth-phase ... (31/47)
+       ... string-growth-phase [PASSED]
+  Starting string-invalid ... (32/47)
+       ... string-invalid [PASSED]
+  Starting autoneb-insertion ... (33/47)
+       ... autoneb-insertion [PASSED]
+  Starting autoneb-mb-saddle ... (34/47)
+       ... autoneb-mb-saddle [FAILED]
+  Message: the AutoNEB saddle is not at the Mueller-Brown saddle point
+  Starting autoneb-limits ... (35/47)
+       ... autoneb-limits [PASSED]
+  Starting autoneb-restart ... (36/47)
+       ... autoneb-restart [PASSED]
+  Starting leps-prfo-cross-check ... (37/47)
+       ... leps-prfo-cross-check [PASSED]
+  Starting leps-autoneb-barrier ... (38/47)
+       ... leps-autoneb-barrier [PASSED]
+  Starting leps-string-barrier ... (39/47)
+       ... leps-string-barrier [PASSED]
+  Starting climb-switch-calibration ... (40/47)
+       ... climb-switch-calibration [PASSED]
+  Starting band-dual-criterion-live ... (41/47)
+       ... band-dual-criterion-live [PASSED]
+  Starting band-rotated-endpoint-align ... (42/47)
+       ... band-rotated-endpoint-align [FAILED]
+  Message: the aligned path is not the reference path
+  Starting band-initial-path-scan ... (43/47)
+       ... band-initial-path-scan [FAILED]
+  Message: a band reported convergence away from the analytic barrier
+  Starting band-spring-schedule ... (44/47)
+       ... band-spring-schedule [FAILED]
+  Message: a converged spring schedule did not reach the analytic barrier
+  Starting string-asymptotic-endpoints ... (45/47)
+       ... string-asymptotic-endpoints [PASSED]
+  Starting band-convergence-curve ... (46/47)
+       ... band-convergence-curve [FAILED]
+  Message: the reconstructed curve does not agree with the unrestricted run
+  Starting band-unconnected-endpoints ... (47/47)
+       ... band-unconnected-endpoints [PASSED]
+8 test(s) failed!
+ERROR STOP 1
+
+Error termination. Backtrace:
+#0  0xefcb58218c2 in ???
+#1  0xefcb58223b9 in ???
+#2  0xefcb5823792 in ???
+#3  0x58b12215b4cc in ???
+#4  0x58b122159e2e in ???
+#5  0xefcb551e249 in ???
+#6  0xefcb551e304 in ???
+#7  0x58b122159e60 in ???
+#8  0xffffffffffffffff in ???

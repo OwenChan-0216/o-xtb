@@ -46,6 +46,12 @@ srcs += files(
   'vib/thermo.f90',
   'tasks/vib.f90',
   'tasks/ts.f90',
+  'path/idpp.f90',
+  'path/cineb.f90',
+  'path/neb.f90',
+  'path/autoneb.f90',
+  'path/string.f90',
+  'path/gsm.f90',
   'landscape_driver.f90',
   'landscape_api.f90',
 )

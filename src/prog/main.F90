@@ -111,7 +111,8 @@ module xtb_prog_main
       & landscape_scan_coord_from_name, landscape_scan_coord_known, &
       & landscape_scan_coord_natoms, landscape_scan_mode_known, &
       & p_landscape_scan_coord_distance, p_landscape_restart_off, &
-      & p_landscape_restart_pin, p_landscape_restart_warm
+      & p_landscape_restart_pin, p_landscape_restart_warm, p_landscape_ts_cineb, &
+      & p_landscape_ts_autoneb, p_landscape_ts_string, p_landscape_ts_gsm
    use xtb_landscape_hessian, only: landscape_hessian_source_known
    use xtb_landscape_results, only: landscape_result
 
@@ -976,6 +977,15 @@ contains
          ! it into the engine control it hands to the engine.
          ltset%engine%acc = set%acc
          ltset%etemp = set%etemp
+         ! The band searches need the name of the positional input file: they
+         ! use it only to detect and reject a multi-frame input (the reactant
+         ! is the geometry already read, the product comes from
+         ! `--lts-product`), see `landscape_path_settings`.
+         ltset%path%input_file = fname
+         ! `--lts-max-steps` is the iteration budget of the run; the band
+         ! searches use the same budget, so the option does not have to be
+         ! duplicated as a `--lts-path-max-steps`.
+         ltset%path%max_steps = ltset%max_steps
          call start_timing(3)
          call run_landscape(env, mol, chk, calc, ltset, lres)
          call stop_timing(3)
@@ -2485,6 +2495,15 @@ contains
             if (allocated(sec)) then
                if (landscape_ts_method_known(sec)) then
                   ltset%method = landscape_ts_method_from_name(sec)
+                  ! `cineb` is the climbing image variant of the band search;
+                  ! `cineb` selects the climbing image stage; the AutoNEB and
+                  ! string searches use a climbing node for their saddle
+                  ! candidate, so selecting them switches it on as well.
+                  ! `--lts-climb` does the same for `--lts-method neb`.
+                  if (ltset%method == p_landscape_ts_cineb .or. &
+                        & ltset%method == p_landscape_ts_autoneb .or. &
+                        & ltset%method == p_landscape_ts_string .or. &
+                        & ltset%method == p_landscape_ts_gsm) ltset%path%climb = .true.
                else
                   call env%error("Unknown landscape transition state method '"//sec//"'", source)
                end if
@@ -2796,7 +2815,6 @@ contains
             ! Skip the frequency confirmation of the stationary point
             if (set%runtyp /= p_run_lts) call set_runtyp('lts')
             ltset%verify_ts = .false.
-
          case ('--lts-no-rigid')
             ! Keep the rigid body components in the Cartesian step
             if (set%runtyp /= p_run_lts) call set_runtyp('lts')
@@ -2908,6 +2926,304 @@ contains
             else
                call env%error("The --lts-escape-step flag requires a number", source)
             end if
+
+         case ('--lts-product')
+            ! Product endpoint of a band search (`--lts-method neb|cineb`):
+            ! a single frame xyz with the same atoms in the same order.
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               ltset%path%product_file = sec
+            else
+               call env%error("The --lts-product flag requires a file name", source)
+            end if
+
+         case ('--lts-images')
+            ! Number of band images, the two fixed endpoints included
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%path%n_images = idum2
+               else
+                  call env%error("The --lts-images flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-images flag requires an integer", source)
+            end if
+
+         case ('--lts-kmin')
+            ! Lower spring constant of the dynamic springs (hartree/bohr^2)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%k_min = ddum
+               else
+                  call env%error("The --lts-kmin flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-kmin flag requires a number", source)
+            end if
+
+         case ('--lts-kmax')
+            ! Upper spring constant (hartree/bohr^2)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%k_max = ddum
+               else
+                  call env%error("The --lts-kmax flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-kmax flag requires a number", source)
+            end if
+
+         case ('--lts-kdecay')
+            ! Decay factor of the dynamic springs (dimensionless)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%k_decay = ddum
+               else
+                  call env%error("The --lts-kdecay flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-kdecay flag requires a number", source)
+            end if
+
+         case ('--lts-no-dynamic-k')
+            ! Use a single spring constant k_max for every image
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%path%use_dynamic_k = .false.
+
+         case ('--lts-climb')
+            ! Switch on the climbing image refinement (CI-NEB)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%path%climb = .true.
+
+         case ('--lts-climb-switch')
+            ! Band force below which the climbing image is ignited
+            ! (hartree/bohr); the default is the standard 0.5 eV/angstrom
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%climb_switch_rms = ddum
+               else
+                  call env%error("The --lts-climb-switch flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-climb-switch flag requires a number", source)
+            end if
+
+         case ('--lts-no-idpp')
+            ! Straight linear interpolation instead of the IDPP initial path
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%path%ifidpp = .false.
+
+         case ('--lts-no-align')
+            ! Do not Kabsch align the images before every evaluation
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%path%align = .false.
+
+         case ('--lts-relax-ends')
+            ! Relax the two endpoints before the band is built
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%path%relax_ends = .true.
+
+         case ('--lts-max-displ')
+            ! Upper bound of one displacement component of a band step (bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%max_displ = ddum
+               else
+                  call env%error("The --lts-max-displ flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-max-displ flag requires a number", source)
+            end if
+
+         case ('--lts-frms-avg')
+            ! Convergence threshold of the average band force RMS
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%f_rms_avg_tol = ddum
+               else
+                  call env%error("The --lts-frms-avg flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-frms-avg flag requires a number", source)
+            end if
+
+         case ('--lts-frms-max')
+            ! Convergence threshold of the largest per-image band force RMS
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%f_rms_max_tol = ddum
+               else
+                  call env%error("The --lts-frms-max flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-frms-max flag requires a number", source)
+            end if
+
+         case ('--lts-autoneb-nstart')
+            ! Number of images of the coarse AutoNEB start path
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%path%autoneb_nstart = idum2
+               else
+                  call env%error("The --lts-autoneb-nstart flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-autoneb-nstart flag requires an integer", source)
+            end if
+
+         case ('--lts-autoneb-max-paths')
+            ! Hard upper bound of the number of images of an AutoNEB path
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%path%max_paths = idum2
+               else
+                  call env%error("The --lts-autoneb-max-paths flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-autoneb-max-paths flag requires an integer", source)
+            end if
+
+         case ('--lts-autoneb-max-depth')
+            ! Hard upper bound of the number of AutoNEB insertion stages
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%path%max_depth = idum2
+               else
+                  call env%error("The --lts-autoneb-max-depth flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-autoneb-max-depth flag requires an integer", source)
+            end if
+
+         case ('--lts-autoneb-restart')
+            ! Multi-frame path of an earlier AutoNEB run (`path_autoneb.xyz`),
+            ! adopted as the initial path so completed stages are not repeated
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               ltset%path%autoneb_restart_file = sec
+            else
+               call env%error("The --lts-autoneb-restart flag requires a file name", source)
+            end if
+
+         case ('--lts-string-nnodes')
+            ! Target number of nodes of the growing string
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%path%string_nnodes = idum2
+               else
+                  call env%error("The --lts-string-nnodes flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-string-nnodes flag requires an integer", source)
+            end if
+
+         case ('--lts-string-grow-tol')
+            ! Norm threshold of the growth indicator of Eq. 7 (hartree/bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%string_grow_tol = ddum
+               else
+                  call env%error("The --lts-string-grow-tol flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-string-grow-tol flag requires a number", source)
+            end if
+
+         case ('--lts-string-ds')
+            ! Arc length increment of one growth step (Eq. 9, bohr)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%string_ds = ddum
+               else
+                  call env%error("The --lts-string-ds flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-string-ds flag requires a number", source)
+            end if
+
+         case ('--lts-string-nu2')
+            ! Curvature floor of the node spacing condition (hartree/bohr^2)
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  ltset%path%string_nu2 = ddum
+               else
+                  call env%error("The --lts-string-nu2 flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-string-nu2 flag requires a number", source)
+            end if
+
+         case ('--lts-string-grow-steps')
+            ! Maximum perpendicular relaxation iterations of one frontier node
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  ltset%path%string_grow_steps = idum2
+               else
+                  call env%error("The --lts-string-grow-steps flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lts-string-grow-steps flag requires an integer", source)
+            end if
+
+         case ('--lts-no-string-spline')
+            ! Central difference tangents instead of the cubic spline tangent
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%path%string_spline = .false.
+
+         case ('--lts-string-history')
+            ! Print the growth history of the string
+            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            ltset%path%string_history = .true.
 
          case ('--lvib')
             ! Landscape suite: harmonic frequencies and thermochemistry

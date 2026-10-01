@@ -42,6 +42,7 @@ module xtb_landscape_settings
    public :: landscape_settings, landscape_sp_settings, landscape_opt_settings
    public :: landscape_scan_settings, landscape_scan_coord_settings
    public :: landscape_vib_settings, landscape_ts_settings
+   public :: landscape_path_settings
    public :: landscape_engine_control
    public :: p_landscape_opt_sd, p_landscape_opt_cg, p_landscape_opt_lbfgs
    public :: p_landscape_opt_bfgs
@@ -61,8 +62,11 @@ module xtb_landscape_settings
    public :: landscape_scan_coord_natoms, landscape_scan_coord_known
    public :: landscape_scan_mode_known
    public :: p_landscape_ts_prfo, p_landscape_ts_bprfo, p_landscape_ts_dimer
+   public :: p_landscape_ts_neb, p_landscape_ts_cineb
+   public :: p_landscape_ts_autoneb, p_landscape_ts_string, p_landscape_ts_gsm
    public :: landscape_ts_method_name, landscape_ts_method_from_name
-   public :: landscape_ts_method_known
+   public :: landscape_ts_method_known, landscape_ts_method_is_band
+   public :: landscape_ts_method_is_string
    public :: landscape_ts_init_mode_known
    public :: landscape_ts_ninit_known
 
@@ -91,10 +95,191 @@ module xtb_landscape_settings
    integer, parameter :: p_landscape_scan_coord_angle = 2
    integer, parameter :: p_landscape_scan_coord_dihedral = 3
 
-   !> Transition state search methods (`landscape_ts_settings%method`)
+   !> Transition state search methods (`landscape_ts_settings%method`).
+   !>
+   !> `prfo`, `bprfo` and `dimer` are single ended (one geometry); `neb`,
+   !> `cineb`, `autoneb`, `string` and `gsm` are chain-of-states methods and
+   !> need the two endpoints.  Every identifier is unique in this namespace.
    integer, parameter :: p_landscape_ts_prfo = 1
    integer, parameter :: p_landscape_ts_bprfo = 2
    integer, parameter :: p_landscape_ts_dimer = 3
+   integer, parameter :: p_landscape_ts_neb = 4
+   integer, parameter :: p_landscape_ts_cineb = 5
+   !> AutoNEB: incremental path building with image insertion
+   integer, parameter :: p_landscape_ts_autoneb = 6
+   !> Growing string method (growth plus optimisation of the string)
+   integer, parameter :: p_landscape_ts_string = 7
+   !> Alias of `string`; the generalised variant shares the implementation
+   !> and differs only in the amount of book keeping kept in the report
+   integer, parameter :: p_landscape_ts_gsm = 8
+
+   !> Settings of the chain-of-states band searches (PLAN section 6.4).
+   !>
+   !> The type is a component of `landscape_ts_settings` (`path`), not a task
+   !> settings object of its own: the band searches are two more methods of
+   !> the `--lts` run type, they share its convergence and Hessian settings
+   !> and they reuse its frequency confirmation.  All fields are atomic
+   !> units (bohr, hartree, hartree/bohr, hartree/bohr^2).
+   !>
+   !> Input contract of the band searches (fixed here so that the second
+   !> stage - AutoNEB and the string method - uses exactly the same rules):
+   !>
+   !>  * the positional input file holds the **reactant** (frame 1 is used;
+   !>    the geometry already read by xtb);
+   !>  * `product_file` holds the **product**, a single frame xyz with the
+   !>    same number of atoms in the same order.  A missing file, an
+   !>    unreadable file, a frame count above one and any mismatch of the
+   !>    atom count or the atom numbers are reported as errors by the task.
+   !>  * `input_file` is the name of the positional input file; the task uses
+   !>    it only to detect and **reject** a multi-frame input (that
+   !>    convenience path is deliberately not implemented, see report 35).
+   !>  * `path.xyz` is written with frame 1 = reactant and frame
+   !>    `n_images` = product, in the atom order of the input.
+   !>
+   !> Calibration provenance (PLAN experiment 8, `docs/_landscape-recon/`
+   !> report 35): `k_min`, `k_max`, `climb_switch_rms`, `f_rms_avg_tol` and
+   !> `f_rms_max_tol` were **measured** on the analytic LEPS H + H2 surface.
+   !> The values quoted in PLAN section 6.4 are not used because the two
+   !> named quantities there were converted from the eV/angstrom of the MAPLE
+   !> reference with the *force* factor instead of the *force constant*
+   !> factor: the plan value `2.083e-2` for `k_max` corresponds to 0.3 eV/A^2
+   !> only if 1 eV/A^2 = 0.0694 hartree/bohr^2, while the correct conversion
+   !> is 1 eV/A^2 = 0.01029 hartree/bohr^2; likewise the plan value `3.472e-2`
+   !> for `climb_switch_rms` is 0.5 eV/angstrom only with the same
+   !> mis-conversion (the correct value is `9.7234e-3`).
+   type :: landscape_path_settings
+      !> Number of images **including** the two fixed endpoints (>= 3)
+      integer :: n_images = 9
+      !> Lower spring constant of the dynamic springs (hartree/bohr^2)
+      real(wp) :: k_min = 1.0e-2_wp
+      !> Upper spring constant of the dynamic springs (hartree/bohr^2)
+      real(wp) :: k_max = 1.0e-1_wp
+      !> Use the ORCA style dynamic spring constants; with `.false.` every
+      !> spring is `k_max`
+      logical :: use_dynamic_k = .true.
+      !> Decay factor of the dynamic springs (dimensionless, 0.5 in ORCA)
+      real(wp) :: k_decay = 5.0e-1_wp
+      !> Run the climbing image stage after the plain NEB stage
+      logical :: climb = .false.
+      !> Band force above which the climbing image is **not** ignited
+      !> (hartree/bohr).  The standard 0.5 eV/angstrom is `9.7234e-3`; the
+      !> value is stored to five significant digits, while the exact
+      !> conversion `0.5 evtoau/aatoau` is `9.7234532e-3` (relative
+      !> difference `5.5e-6`, report 37 F4).  Measurement (report 35) shows
+      !> the random gradient noise (`<= 1.2e-15` hartree/bohr) and the warm
+      !> restart bias (`3.9e-7`) are 13 and 4 orders of magnitude smaller
+      !> than that difference, so the switch can never be triggered by noise
+      !> - it is governed by the band only.
+      real(wp) :: climb_switch_rms = 9.7234e-3_wp
+      !> Build the initial path with IDPP (Smidstrup et al.) instead of a
+      !> straight linear interpolation
+      logical :: ifidpp = .true.
+      !> Kabsch align every image to the reactant before each evaluation
+      logical :: align = .true.
+      !> Relax the two endpoints with the M1 minimiser before the band
+      !> search (default off: the endpoints are fixed images)
+      logical :: relax_ends = .false.
+      !> Band convergence threshold of the average perpendicular force RMS
+      !> over the internal images (hartree/bohr)
+      real(wp) :: f_rms_avg_tol = 3.0e-4_wp
+      !> Band convergence threshold of the largest per-image perpendicular
+      !> force RMS (hartree/bohr)
+      real(wp) :: f_rms_max_tol = 1.0e-3_wp
+      !> Maximum number of band iterations
+      integer :: max_steps = 512
+      !> Print level of the band driver: 0 silent, 1 the per iteration table
+      integer :: printlevel = 1
+      !> Number of L-BFGS correction pairs kept in memory
+      integer :: lbfgs_memory = 20
+      !> Upper bound of one displacement component of a band step (bohr)
+      real(wp) :: max_displ = 3.7795e-1_wp
+      !> Curvature clamp of the initial inverse L-BFGS Hessian
+      real(wp) :: curvature = 70.0_wp
+      !> Reset the L-BFGS history every `hessian_recalc` band iterations
+      !> (0 disables the reset).  The band has no explicit Hessian, so the
+      !> field controls the only Hessian-like object of the search: the
+      !> quasi-Newton history.  A periodic reset is the standard safeguard
+      !> against a history that has become inconsistent with a moved path.
+      integer :: hessian_recalc = 0
+      !> Product endpoint file (single frame xyz)
+      character(len=:), allocatable :: product_file
+      !> Name of the positional input file (reactant); used only to reject
+      !> a multi-frame input, see the input contract above
+      character(len=:), allocatable :: input_file
+      !> ---------------------------------------------------------------
+      !> AutoNEB (Kolsbjerg, Groves & Hammer, J. Chem. Phys. **145**,
+      !> 094107 (2016); erratum J. Chem. Phys. **148**, 029903 (2018)).
+      !>
+      !> The erratum corrects the definition of the *added* image in the
+      !> original text: a new image is inserted at the **midpoint of the
+      !> selected interval** (and then relaxed with the band), not at a
+      !> linearly extrapolated position along the path.  The implementation
+      !> follows the corrected rule; the relaxation of the enlarged band is
+      !> the standard NEB/CI-NEB of `xtb_landscape_path_neb`, so the erratum
+      !> has no other consequence here.
+      !>
+      !> Resource bounds (PLAN section 6.4): the branching AutoNEB of the
+      !> paper manages a tree of paths, which is deliberately **not**
+      !> implemented here (a single linear path is grown).  The two hard
+      !> bounds below stand in for the tree management: `max_paths` limits
+      !> the number of images and `max_depth` the number of insertion
+      !> stages.  A configuration that already violates a bound
+      !> (`autoneb_nstart > max_paths`, `max_paths < 3`, `max_depth < 1`) is
+      !> an `env%error`, never a silent truncation; a run that stops at a
+      !> bound reports it in the log and in `autoneb%cap_reached`.
+      !> ---------------------------------------------------------------
+      !> Number of images (endpoints included) of the coarse initial path
+      !> of an AutoNEB run (>= 3)
+      integer :: autoneb_nstart = 5
+      !> Hard upper bound of the number of images of an AutoNEB path
+      integer :: max_paths = 10
+      !> Hard upper bound of the number of image insertion stages
+      integer :: max_depth = 5
+      !> Multi-frame xyz path of an earlier AutoNEB run, read back as the
+      !> initial path so the completed stages are not repeated (restart
+      !> reuse, see `xtb_landscape_path_autoneb`)
+      character(len=:), allocatable :: autoneb_restart_file
+      !> ---------------------------------------------------------------
+      !> Growing string method (Peters, Heyden, Bell & Chakraborty,
+      !> J. Chem. Phys. **120**, 114101 (2004)).  The `gsm` name of the task
+      !> selects the same kernel; it currently differs from `string` only in
+      !> the printed header (report 38 L-5: the growth history of the report
+      !> is switched on by `--lts-string-history` for both names, so `gsm` is
+      !> an alias until a distinct behaviour is defined).  All lengths in
+      !> bohr, energies in hartree.
+      !> ---------------------------------------------------------------
+      !> Target number of nodes of the string (endpoints included, >= 3).
+      !> The string does **not** use `n_images`: `--lts-images` configures the
+      !> band and AutoNEB, the string is configured by `--lts-string-nnodes`
+      !> (report 38 INFO-4)
+      integer :: string_nnodes = 9
+      !> Threshold of the growth indicator of Eq. 7 (hartree/bohr): the
+      !> **norm** of the perpendicular force of the frontier node has to
+      !> fall below this value before the string may grow further
+      real(wp) :: string_grow_tol = 5.0e-3_wp
+      !> Arc length increment of one growth step (Eq. 9, bohr)
+      real(wp) :: string_ds = 5.0e-1_wp
+      !> Curvature floor `nu2` of the node spacing condition
+      !> `R > |gradV . tau| / (2 nu2)` (hartree/bohr^2).  The true curvature
+      !> along the string is unknown during the growth, so a conservative
+      !> lower bound is used; the default is documented in
+      !> `xtb_landscape_path_string` together with the measured curvature of
+      !> the analytic reference surfaces
+      real(wp) :: string_nu2 = 5.0e-2_wp
+      !> Use the cubic spline tangent of the string instead of central
+      !> differences (the tangent of Eq. 1 is taken from a cubic spline with
+      !> **not-a-knot** end conditions through the string nodes, the
+      !> `cqpath_spline_repos` idea of `src/cqpath.f90`; a natural spline has
+      !> an `O(h)` end tangent error, report 38 L-10)
+      logical :: string_spline = .true.
+      !> Maximum number of perpendicular relaxation iterations of one
+      !> frontier node before the growth is declared stalled (an error)
+      integer :: string_grow_steps = 200
+      !> Print the growth history of the string (per node arc length and
+      !> perpendicular force); set by `--lts-string-history` for the `string`
+      !> and the `gsm` task name alike
+      logical :: string_history = .false.
+   end type landscape_path_settings
 
    !> Immutable run-time control of one landscape engine instance.
    !>
@@ -538,6 +723,9 @@ module xtb_landscape_settings
       !> File name prefix of the two output files; the default `xtb` yields
       !> `<prefix>ts.xyz` = `xtbts.xyz`, the same scheme as `<prefix>opt.xyz`
       character(len=64) :: output_prefix = 'xtb'
+      !> Settings of the band searches (`--lts --lts-method neb|cineb`);
+      !> unused by the single ended P-RFO / B-PRFO / dimer methods
+      type(landscape_path_settings) :: path
    contains
       !> This type implements the transition state search task
       procedure :: task => landscape_ts_settings_task
@@ -796,6 +984,16 @@ pure function landscape_ts_method_name(method) result(name)
       name = 'bprfo'
    case (p_landscape_ts_dimer)
       name = 'dimer'
+   case (p_landscape_ts_neb)
+      name = 'neb'
+   case (p_landscape_ts_cineb)
+      name = 'cineb'
+   case (p_landscape_ts_autoneb)
+      name = 'autoneb'
+   case (p_landscape_ts_string)
+      name = 'string'
+   case (p_landscape_ts_gsm)
+      name = 'gsm'
    case default
       name = 'unknown'
    end select
@@ -819,6 +1017,16 @@ function landscape_ts_method_from_name(name) result(method)
       method = p_landscape_ts_bprfo
    case ('dimer')
       method = p_landscape_ts_dimer
+   case ('neb')
+      method = p_landscape_ts_neb
+   case ('cineb')
+      method = p_landscape_ts_cineb
+   case ('autoneb')
+      method = p_landscape_ts_autoneb
+   case ('string')
+      method = p_landscape_ts_string
+   case ('gsm')
+      method = p_landscape_ts_gsm
    case default
       method = 0
    end select
@@ -835,6 +1043,40 @@ function landscape_ts_method_known(name) result(known)
    known = landscape_ts_method_from_name(name) /= 0
 
 end function landscape_ts_method_known
+
+!> True if `method` is a chain-of-states (band) method.
+!>
+!> The single ended methods (P-RFO, B-P-RFO, dimer) search one geometry and
+!> never read `landscape_path_settings%product_file`; the band methods need
+!> both endpoints.  The predicate is the single spelling of that split.
+pure function landscape_ts_method_is_band(method) result(is_band)
+   !> Method identifier
+   integer, intent(in) :: method
+   !> True for `neb`, `cineb`, `autoneb`, `string` and `gsm`
+   logical :: is_band
+
+   is_band = method == p_landscape_ts_neb .or. method == p_landscape_ts_cineb &
+      & .or. method == p_landscape_ts_autoneb &
+      & .or. method == p_landscape_ts_string .or. method == p_landscape_ts_gsm
+
+end function landscape_ts_method_is_band
+
+!> True if `method` is one of the string (GSM) variants.
+!>
+!> The string methods share one implementation (`xtb_landscape_path_string`
+!> and `xtb_landscape_path_gsm`): `gsm` is currently an **alias** of `string`
+!> and differs only in the printed header - the growth history is switched on
+!> by `--lts-string-history` for both names, not by the task name (report 38
+!> L-5).  The predicate keeps that split spelled once.
+pure function landscape_ts_method_is_string(method) result(is_string)
+   !> Method identifier
+   integer, intent(in) :: method
+   !> True for `string` and `gsm`
+   logical :: is_string
+
+   is_string = method == p_landscape_ts_string .or. method == p_landscape_ts_gsm
+
+end function landscape_ts_method_is_string
 
 !> True if `name` names a supported initial transition vector source.
 function landscape_ts_init_mode_known(name) result(known)

@@ -46,6 +46,7 @@ program tester
    use test_landscape_scan, only : collect_landscape_scan
    use test_landscape_vib, only : collect_landscape_vib
    use test_landscape_saddle, only : collect_landscape_saddle
+   use test_landscape_path, only : collect_landscape_path
    use test_latticepoint, only : collect_latticepoint
    use test_molecule, only : collect_molecule
    use test_model_hessian, only : collect_model_hessian
@@ -101,6 +102,7 @@ program tester
       new_testsuite("landscape-scan", collect_landscape_scan), &
       new_testsuite("landscape-vib", collect_landscape_vib), &
       new_testsuite("landscape-saddle", collect_landscape_saddle), &
+      new_testsuite("landscape-path", collect_landscape_path), &
       new_testsuite("latticepoint", collect_latticepoint), &
       new_testsuite("molecule", collect_molecule), &
       new_testsuite("model-hessian", collect_model_hessian), &

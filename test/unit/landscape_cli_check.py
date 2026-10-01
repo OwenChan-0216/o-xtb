@@ -21,6 +21,8 @@ mode mirrors one CMake test one-to-one:
   tsnamespace <exe> <input> <rundir>  -> xtb/landscape-ts-namespace
   maxsteps <exe> <input> <rundir>     -> xtb/landscape-scan-max-steps
   scanhess <exe> <input> <rundir>     -> xtb/landscape-scan-hessian
+  autonebdepth <exe> <input> <rundir> <product>
+                                     -> xtb/landscape-path-autoneb-depth-limit
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
 
@@ -593,6 +595,35 @@ def check_maxsteps(exe, inp, rundir):
         fail("the reference scan reported a missing minimum", output)
 
 
+def check_autoneb_depth_limit(exe, inp, rundir, product):
+    """An AutoNEB run that stops at the insertion cap must name the cap.
+
+    Mirrors the CMake script of `xtb/landscape-path-autoneb-depth-limit`: the
+    band of the last stage converges, but the requested path was not built, so
+    the result message - and therefore `xtbts.log` - has to report the cap
+    instead of a bare "converged" (report 38 L-2).
+    """
+    args = [
+        "--gfn", "2", "--lts", "--lts-method", "autoneb",
+        "--lts-product", product, "--lts-autoneb-max-depth", "1",
+        "--lts-max-steps", "400", "--norestart", "--namespace", "mesonP",
+    ]
+    status, output = run(exe, inp, args, rundir)
+    if status != 0:
+        fail("the capped AutoNEB run terminated with status %d" % status, output)
+    if "autoneb: budget limit reached" not in output:
+        fail("the AutoNEB insertion cap was not reached", output)
+    cap = "landscape task terminated: stopped at the insertion depth limit max_depth = 1"
+    if cap not in output:
+        fail("the cap did not reach the result message", output)
+    with open(os.path.join(rundir, "mesonP.xtbts.log")) as handle:
+        log = handle.read()
+    if "termination: stopped at the insertion depth limit max_depth = 1" not in log:
+        fail("the cap did not reach xtbts.log", log)
+    if "termination: converged" in log:
+        fail("xtbts.log claims convergence for a capped run", log)
+
+
 def check_scanhess(exe, inp, rundir):
     """`--lscan-hessian` reaches the engine of the scan points."""
     args = [
@@ -654,6 +685,10 @@ def main():
         check_maxsteps(exe, inp, rundir)
     elif mode == "scanhess":
         check_scanhess(exe, inp, rundir)
+    elif mode == "autonebdepth":
+        if len(rest) < 1:
+            fail("the autonebdepth mode needs the product geometry")
+        check_autoneb_depth_limit(exe, inp, rundir, rest[0])
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

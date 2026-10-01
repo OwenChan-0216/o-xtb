@@ -34,9 +34,16 @@
 !>    interpreted as kcal/mol and converted to hartree.  It has the two
 !>    minima `(-0.558, 1.442)` (global) and `(0.623, 0.028)` as well as the
 !>    saddle point `(-0.822, 0.624)`.
+!>  * `landscape_leps_model` - London-Eyring-Polanyi-Sato (LEPS) surface of
+!>    the H + H2 exchange reaction (three hydrogen atoms, Eq. 1-3 of Sato,
+!>    J. Chem. Phys. 23, 592 (1955) as assembled in the London equation).
+!>    It has an analytic saddle point on the collinear symmetric line, so it
+!>    is the quantitative reference of the path (NEB / CI-NEB) and IRC tests;
+!>    because it is a genuinely three-dimensional 9-component potential it is
+!>    also the gate of the flattening-order convention (PLAN N4 / R-08).
 module xtb_landscape_testpot
    use xtb_mctc_accuracy, only : wp
-   use xtb_mctc_convert, only : kcaltoau
+   use xtb_mctc_convert, only : kcaltoau, evtoau
    use xtb_landscape_engine, only : landscape_energy_model
    implicit none(type, external)
    private
@@ -44,6 +51,7 @@ module xtb_landscape_testpot
    public :: landscape_harmonic_model, new_harmonic_model
    public :: landscape_rosenbrock_model, new_rosenbrock_model
    public :: landscape_muller_brown_model, new_muller_brown_model
+   public :: landscape_leps_model, new_leps_model
 
    !> Anisotropic harmonic oscillator, `E = 1/2 sum_i k_i (x_i - x0_i)^2`.
    !>
@@ -102,6 +110,76 @@ module xtb_landscape_testpot
       procedure :: hessian => muller_brown_hessian
    end type landscape_muller_brown_model
 
+   !> London-Eyring-Polanyi-Sato (LEPS) surface of the H + H2 exchange
+   !> reaction, a three atom potential.
+   !>
+   !> The surface is the London equation evaluated with the Sato
+   !> modification of the exchange integral.  For each pair `(i,j)` with
+   !> distance `r` the singlet (Morse) and triplet (anti-Morse) potentials
+   !>
+   !>     `1E(r) = d_e [ exp(-2 beta (r - r_e)) - 2 exp(-beta (r - r_e)) ]`
+   !>     `3E(r) = d_e/2 [ exp(-2 beta (r - r_e)) + 2 exp(-beta (r - r_e)) ]`
+   !>
+   !> define the Coulomb and (Sato scaled) exchange integrals
+   !>
+   !>     `Q(r) = (1E + 3E)/2`,   `J(r) = (1E - 3E)/(2 (1 + sato))`,
+   !>
+   !> and the total energy is
+   !>
+   !>     `E = Q12 + Q23 + Q13 - sqrt( 1/2 [ (J12-J23)^2 + (J23-J13)^2
+   !>                                      + (J13-J12)^2 ] )`.
+   !>
+   !> The diagonal entries of the Coulomb/exchange sum cancel in this form,
+   !> so only the three pair terms above contribute.  `sato` is the Sato
+   !> parameter of the H2 molecule (0.10 here); `sato = 0` reduces the
+   !> expression to the unmodified London equation.
+   !>
+   !> Default parameters (Sato, J. Chem. Phys. 23, 592 (1955); the H2
+   !> Morse parameters are the standard spectroscopic ones):
+   !>
+   !>   | symbol | value | unit |
+   !>   |--------|-------|------|
+   !>   | `d_e`  | 4.7466 eV = 0.1744342274 hartree | well depth of H2 |
+   !>   | `beta` | 1.9426 1/angstrom = 3.6711 1/bohr | Morse exponent of H2 |
+   !>   | `r_e`  | 0.7414 angstrom = 1.4011 bohr | equilibrium bond length of H2 |
+   !>   | `sato` | 0.10 (dimensionless) | Sato parameter |
+   !>
+   !> Analytic reference of these parameters (closed form of the surface,
+   !> reproduced by the unit test to 1e-10 hartree):
+   !>
+   !>  * H2 asymptote: `r = 1.4140743` bohr, `E = -0.1549809388` hartree;
+   !>  * H + H2 saddle point (collinear, `r12 = r23 = r*`):
+   !>    `r* = 1.5052686` bohr `= 0.7965539` angstrom,
+   !>    `E = -0.1406385741` hartree, Hessian eigenvalues
+   !>    `-1.004939 / +0.003004 (x2) / +1.895410` hartree/bohr^2 (exactly one
+   !>    negative; the two small values are the degenerate bending pair, the
+   !>    remaining five are the rigid body modes);
+   !>  * classical barrier: `9.0000` kcal/mol `= 0.39036` eV.
+   !>
+   !> The full 3x3 pair geometry is evaluated, so the model is not restricted
+   !> to collinear configurations; the analytic gradient is differentiated on
+   !> the fly by the `hessian` procedure with central differences of the
+   !> analytic gradient (a fixed step of `leps_hessian_step`), which is exact
+   !> enough for a saddle search on this surface.
+   type, extends(landscape_energy_model) :: landscape_leps_model
+      !> Well depth of the H2 pair potential (hartree)
+      real(wp) :: d_e = 0.1744342274_wp
+      !> Morse exponent of the H2 pair potential (1/bohr)
+      real(wp) :: beta = 3.6711_wp
+      !> Equilibrium bond length of the H2 pair potential (bohr)
+      real(wp) :: r_e = 1.4011_wp
+      !> Sato parameter (dimensionless)
+      real(wp) :: sato = 0.10_wp
+   contains
+      !> Energy and gradient
+      procedure :: evaluate => leps_evaluate
+      !> Hessian by central differences of the analytic gradient
+      procedure :: hessian => leps_hessian
+   end type landscape_leps_model
+
+   !> Central difference step of `landscape_leps_model%hessian` (bohr)
+   real(wp), parameter :: leps_hessian_step = 1.0e-4_wp
+
 contains
 
 !> Construct an anisotropic harmonic oscillator.
@@ -142,6 +220,30 @@ subroutine new_muller_brown_model(self, scale)
    if (present(scale)) self%scale = scale
 
 end subroutine new_muller_brown_model
+
+!> Construct a LEPS surface of the H + H2 exchange reaction.
+!>
+!> All four parameters default to the standard H2/H3 values documented on
+!> the type; they are exposed so that a test can move the surface (for
+!> example scale the barrier) without recompiling.
+subroutine new_leps_model(self, d_e, beta, r_e, sato)
+   !> New model
+   type(landscape_leps_model), intent(out) :: self
+   !> Well depth of the pair potential (hartree)
+   real(wp), intent(in), optional :: d_e
+   !> Morse exponent (1/bohr)
+   real(wp), intent(in), optional :: beta
+   !> Equilibrium bond length (bohr)
+   real(wp), intent(in), optional :: r_e
+   !> Sato parameter
+   real(wp), intent(in), optional :: sato
+
+   if (present(d_e)) self%d_e = d_e
+   if (present(beta)) self%beta = beta
+   if (present(r_e)) self%r_e = r_e
+   if (present(sato)) self%sato = sato
+
+end subroutine new_leps_model
 
 !> Energy and gradient of the anisotropic harmonic oscillator
 subroutine harmonic_evaluate(self, x, energy, gradient, fail)
@@ -347,5 +449,180 @@ subroutine muller_brown_hessian(self, x, hess, fail)
    hess = self%scale*hess
 
 end subroutine muller_brown_hessian
+
+!> Energy and gradient of the LEPS surface of H + H2.
+!>
+!> Only the three pair distances enter, so the gradient is obtained from the
+!> derivative with respect to each pair distance `dE/dr_k` and the chain rule
+!> `dE/dx_(k,i) = +/- (dE/dr_k) (x_i - x_j)/r_k`.
+!>
+!> The exchange term `sqrt(0.5 s)` is the norm of the deviation of the three
+!> exchange integrals from their mean, so it is **not differentiable** where
+!> the three are equal (an equilateral H3, the degeneracy of the LEPS
+!> construction) and its directional derivative there depends on the
+!> perturbation direction.  The guard is relative to the scale of the exchange
+!> integrals `max|J|`: below it the root is at the level of the cancellation
+!> error of the sum of squares, and dividing by it would amplify that error
+!> into the gradient.  In that branch the exchange contribution is dropped
+!> (`dE/dr_k = dQ_k`), which is its exact value along the symmetric directions
+!> through the degenerate point; the routine therefore **never divides by
+!> zero** and always returns a gradient in the level set of the energies.
+subroutine leps_evaluate(self, x, energy, gradient, fail)
+   !> Model
+   class(landscape_leps_model), intent(inout) :: self
+   !> Flattened coordinates of the three atoms (bohr), length 9
+   real(wp), intent(in) :: x(:)
+   !> Energy (hartree)
+   real(wp), intent(out) :: energy
+   !> Flattened gradient (hartree/bohr), length 9
+   real(wp), intent(out) :: gradient(:)
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   integer, parameter :: ipair(2, 3) = reshape([1, 2, 2, 3, 1, 3], [2, 3])
+   real(wp) :: xyz(3, 3), r(3), q(3), j(3), dq(3), dj(3), u(3)
+   real(wp) :: root, ds(3), dedr(3)
+   integer :: k, i, iat, jat
+
+   fail = .false.
+   energy = 0.0_wp
+   gradient = 0.0_wp
+
+   if (size(x) /= 9 .or. size(gradient) /= 9) then
+      fail = .true.
+      return
+   end if
+
+   do iat = 1, 3
+      xyz(:, iat) = x(3*(iat - 1) + 1:3*iat)
+   end do
+
+   do k = 1, 3
+      i = ipair(1, k)
+      jat = ipair(2, k)
+      r(k) = sqrt(sum((xyz(:, i) - xyz(:, jat))**2))
+      if (r(k) <= 0.0_wp) then
+         fail = .true.
+         return
+      end if
+      call leps_pair(r(k), self%d_e, self%beta, self%r_e, self%sato, &
+         & q(k), j(k), dq(k), dj(k))
+   end do
+
+   ! London equation: s = (J1-J2)^2 + (J2-J3)^2 + (J3-J1)^2
+   root = sqrt(0.5_wp*((j(1) - j(2))**2 + (j(2) - j(3))**2 + (j(3) - j(1))**2))
+   energy = q(1) + q(2) + q(3) - root
+
+   ! dE/dr_k = dQ_k - (1/4) (ds/dr_k) / root, with
+   ! ds/dJ_k = 2 (2 J_k - J_m - J_n), so (1/4) ds/dr_k = (J_k - (J_m+J_n)/2) dJ_k/dr_k
+   if (root > 1.0e-12_wp*maxval(abs(j))) then
+      ds(1) = (j(1) - 0.5_wp*(j(2) + j(3)))*dj(1)
+      ds(2) = (j(2) - 0.5_wp*(j(1) + j(3)))*dj(2)
+      ds(3) = (j(3) - 0.5_wp*(j(1) + j(2)))*dj(3)
+      dedr = dq - ds/root
+   else
+      ! degenerated exchange integrals: the root is the norm of their
+      ! deviation and has no derivative here, so the contribution of the
+      ! exchange term to the gradient is dropped instead of dividing by it
+      dedr = dq
+   end if
+
+   do k = 1, 3
+      i = ipair(1, k)
+      jat = ipair(2, k)
+      u(k) = 1.0_wp/r(k)
+      gradient(3*(i - 1) + 1:3*i) = gradient(3*(i - 1) + 1:3*i) &
+         & + dedr(k)*u(k)*(xyz(:, i) - xyz(:, jat))
+      gradient(3*(jat - 1) + 1:3*jat) = gradient(3*(jat - 1) + 1:3*jat) &
+         & - dedr(k)*u(k)*(xyz(:, i) - xyz(:, jat))
+   end do
+
+end subroutine leps_evaluate
+
+!> Hessian of the LEPS surface by central differences of its analytic
+!> gradient.
+!>
+!> The surface is smooth and cheap, so a finite difference of the analytic
+!> gradient is exact enough for the saddle search of the path tests (the
+!> eigenvalue at the saddle is reproduced to better than 1e-6).  Every step
+!> evaluates the **analytic gradient**, not a finite difference of the
+!> energy, so the Hessian is symmetric by construction.
+subroutine leps_hessian(self, x, hess, fail)
+   !> Model
+   class(landscape_leps_model), intent(inout) :: self
+   !> Flattened coordinates (bohr), length 9
+   real(wp), intent(in) :: x(:)
+   !> Dense Hessian (hartree/bohr^2), shape (9, 9)
+   real(wp), intent(out) :: hess(:, :)
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   real(wp), allocatable :: xp(:), xm(:), gp(:), gm(:)
+   real(wp) :: ep, em
+   integer :: i, n
+
+   fail = .false.
+   hess = 0.0_wp
+   if (size(x) /= 9 .or. size(hess, 1) /= 9 .or. size(hess, 2) /= 9) then
+      fail = .true.
+      return
+   end if
+
+   n = size(x)
+   allocate(xp(n), xm(n), gp(n), gm(n))
+   do i = 1, n
+      xp = x
+      xm = x
+      xp(i) = xp(i) + leps_hessian_step
+      xm(i) = xm(i) - leps_hessian_step
+      call leps_evaluate(self, xp, ep, gp, fail)
+      if (fail) return
+      call leps_evaluate(self, xm, em, gm, fail)
+      if (fail) return
+      hess(:, i) = (gp - gm)/(2.0_wp*leps_hessian_step)
+   end do
+   hess = 0.5_wp*(hess + transpose(hess))
+
+end subroutine leps_hessian
+
+!> Coulomb and Sato scaled exchange integral of one LEPS pair, together with
+!> their derivatives with respect to the pair distance.
+!>
+!> `1E` is the Morse singlet, `3E` the anti-Morse triplet; `Q = (1E+3E)/2`
+!> and `J = (1E-3E)/(2(1+sato))` (Sato, J. Chem. Phys. 23, 592 (1955)).
+pure subroutine leps_pair(r, d_e, beta, r_e, sato, q, j, dq, dj)
+   !> Pair distance (bohr)
+   real(wp), intent(in) :: r
+   !> Well depth (hartree)
+   real(wp), intent(in) :: d_e
+   !> Morse exponent (1/bohr)
+   real(wp), intent(in) :: beta
+   !> Equilibrium distance (bohr)
+   real(wp), intent(in) :: r_e
+   !> Sato parameter
+   real(wp), intent(in) :: sato
+   !> Coulomb integral (hartree)
+   real(wp), intent(out) :: q
+   !> Sato scaled exchange integral (hartree)
+   real(wp), intent(out) :: j
+   !> Derivative of `q` with respect to `r` (hartree/bohr)
+   real(wp), intent(out) :: dq
+   !> Derivative of `j` with respect to `r` (hartree/bohr)
+   real(wp), intent(out) :: dj
+
+   real(wp) :: x, e1, e3, d1, d3
+
+   x = r - r_e
+   e1 = d_e*(exp(-2.0_wp*beta*x) - 2.0_wp*exp(-beta*x))
+   e3 = 0.5_wp*d_e*(exp(-2.0_wp*beta*x) + 2.0_wp*exp(-beta*x))
+   d1 = d_e*(-2.0_wp*beta*exp(-2.0_wp*beta*x) + 2.0_wp*beta*exp(-beta*x))
+   d3 = 0.5_wp*d_e*(-2.0_wp*beta*exp(-2.0_wp*beta*x) - 2.0_wp*beta*exp(-beta*x))
+
+   q = 0.5_wp*(e1 + e3)
+   j = 0.5_wp*(e1 - e3)/(1.0_wp + sato)
+   dq = 0.5_wp*(d1 + d3)
+   dj = 0.5_wp*(d1 - d3)/(1.0_wp + sato)
+
+end subroutine leps_pair
 
 end module xtb_landscape_testpot

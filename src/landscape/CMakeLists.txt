@@ -51,6 +51,12 @@ list(APPEND srcs
   "${dir}/vib/thermo.f90"
   "${dir}/tasks/vib.f90"
   "${dir}/tasks/ts.f90"
+  "${dir}/path/idpp.f90"
+  "${dir}/path/cineb.f90"
+  "${dir}/path/neb.f90"
+  "${dir}/path/autoneb.f90"
+  "${dir}/path/string.f90"
+  "${dir}/path/gsm.f90"
   "${dir}/landscape_driver.f90"
   "${dir}/landscape_api.f90"
 )

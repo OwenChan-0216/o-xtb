@@ -48,6 +48,7 @@ set(
   "landscape-scan"
   "landscape-vib"
   "landscape-saddle"
+  "landscape-path"
   "latticepoint"
   "molecule"
   "model-hessian"
@@ -1294,6 +1295,662 @@ add_test("xtb/landscape-ts-escape-step-missing"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
 
+# ---------------------------------------------------------------------------
+# Landscape suite: chain-of-states band searches (`--lts --lts-method neb`).
+#
+# The input contract of `landscape_path_settings` is exercised end to end: the
+# positional input file is the reactant, `--lts-product` supplies the product
+# (a single frame xyz) and every other combination is rejected with a readable
+# diagnostic and a non-zero exit status.  The ammonia inversion is a reaction
+# with a small, well known barrier whose transition state is a first order
+# saddle, so the band run also exercises the frequency confirmation.
+set(LANDSCAPE-NH3 "${CMAKE_CURRENT_BINARY_DIR}/landscape_nh3_up.xyz")
+file(WRITE "${LANDSCAPE-NH3}"
+  "4\nammonia (N above the H3 plane)\n"
+  "N  0.0000000  0.0000000  0.3800000\n"
+  "H  0.9400000  0.0000000  0.0000000\n"
+  "H -0.4700000  0.8140000  0.0000000\n"
+  "H -0.4700000 -0.8140000  0.0000000\n")
+set(LANDSCAPE-NH3-DOWN "${CMAKE_CURRENT_BINARY_DIR}/landscape_nh3_down.xyz")
+file(WRITE "${LANDSCAPE-NH3-DOWN}"
+  "4\nammonia (N below the H3 plane)\n"
+  "N  0.0000000  0.0000000 -0.3800000\n"
+  "H  0.9400000  0.0000000  0.0000000\n"
+  "H -0.4700000  0.8140000  0.0000000\n"
+  "H -0.4700000 -0.8140000  0.0000000\n")
+# a product with three atoms instead of four
+set(LANDSCAPE-NH3-SHORT "${CMAKE_CURRENT_BINARY_DIR}/landscape_nh3_short.xyz")
+file(WRITE "${LANDSCAPE-NH3-SHORT}"
+  "3\nthree atoms only\n"
+  "N  0.0000000  0.0000000 -0.3800000\n"
+  "H  0.9400000  0.0000000  0.0000000\n"
+  "H -0.4700000  0.8140000  0.0000000\n")
+# a product with the right number of atoms in the wrong order
+set(LANDSCAPE-NH3-ORDER "${CMAKE_CURRENT_BINARY_DIR}/landscape_nh3_order.xyz")
+file(WRITE "${LANDSCAPE-NH3-ORDER}"
+  "4\nwrong atom order\n"
+  "H  0.9400000  0.0000000  0.0000000\n"
+  "N  0.0000000  0.0000000 -0.3800000\n"
+  "H -0.4700000  0.8140000  0.0000000\n"
+  "H -0.4700000 -0.8140000  0.0000000\n")
+# a product file that holds two frames
+file(READ "${LANDSCAPE-NH3-DOWN}" NH3-DOWN-CONTENT)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_nh3_two.xyz"
+  "${NH3-DOWN-CONTENT}${NH3-DOWN-CONTENT}")
+# an input file that holds two frames
+file(READ "${LANDSCAPE-NH3}" NH3-UP-CONTENT)
+set(LANDSCAPE-NH3-TWO-FRAME "${CMAKE_CURRENT_BINARY_DIR}/landscape_nh3_two_in.xyz")
+file(WRITE "${LANDSCAPE-NH3-TWO-FRAME}"
+  "${NH3-UP-CONTENT}${NH3-DOWN-CONTENT}")
+# a product with a non xyz extension
+set(LANDSCAPE-NH3-COORD "${CMAKE_CURRENT_BINARY_DIR}/landscape_nh3_product.coord")
+file(WRITE "${LANDSCAPE-NH3-COORD}"
+  "$coord\n"
+  " 0.00000000000000  0.00000000000000 -0.38000000000000  n\n"
+  " 0.94000000000000  0.00000000000000  0.00000000000000  h\n"
+  "-0.47000000000000  0.81400000000000  0.00000000000000  h\n"
+  "-0.47000000000000 -0.81400000000000  0.00000000000000  h\n")
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_path.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+foreach(name "p1.path.xyz" "p1.xtbts.xyz" "p1.xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method neb --lts-images 7
+          --lts-product "${PRODUCT}" --norestart --namespace p1
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-method neb terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: transition state search [(]neb[)]")
+  message(FATAL_ERROR "the band header was not printed\n${output}")
+endif()
+if(NOT output MATCHES "band: k_min")
+  message(FATAL_ERROR "the band settings were not printed\n${output}")
+endif()
+if(NOT output MATCHES "landscape: converged")
+  message(FATAL_ERROR "the band did not converge\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the transition state candidate is not a first order saddle\n${output}")
+endif()
+if(NOT output MATCHES "landscape task terminated")
+  message(FATAL_ERROR "the band task did not terminate\n${output}")
+endif()
+foreach(name "p1.path.xyz" "p1.xtbts.xyz" "p1.xtbts.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written")
+  endif()
+  file(SIZE "${RUNDIR}/${name}" size)
+  if(size EQUAL 0)
+    message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+# one frame per image, frame 1 the reactant and frame 7 the product
+file(READ "${RUNDIR}/p1.path.xyz" pathfile)
+string(REGEX MATCHALL "energy:" frames "${pathfile}")
+list(LENGTH frames nframes)
+if(NOT nframes EQUAL 7)
+  message(FATAL_ERROR "path.xyz holds ${nframes} frames, expected 7")
+endif()
+# the climbing image variant has to converge as well
+file(REMOVE "${RUNDIR}/p1.path.xyz")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method cineb --lts-images 7
+          --lts-product "${PRODUCT}" --norestart --namespace p1
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-method cineb terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "climbing image [0-9]+ ignited at iteration")
+  message(FATAL_ERROR "the climbing image was never ignited\n${output}")
+endif()
+if(NOT output MATCHES "band: climbing image [(]TS candidate[)]: [0-9]+")
+  message(FATAL_ERROR "the climbing image was not reported\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the CI-NEB candidate is not a first order saddle\n${output}")
+endif()
+if(NOT EXISTS "${RUNDIR}/p1.path.xyz")
+  message(FATAL_ERROR "path.xyz was not written by the CI-NEB run")
+endif()
+# `--lts-relax-ends` relaxes the two endpoints with the M1 minimiser before the
+# band is built: the printed gradient norm has to drop **for both endpoints**
+# and the band still has to converge (report 38 L-11, which had no coverage at
+# all; the before/after comparison is R2-L3)
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method cineb --lts-images 7
+          --lts-product "${PRODUCT}" --lts-relax-ends
+          --norestart --namespace p1
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-relax-ends terminated with status ${status}\n${output}")
+endif()
+string(REGEX MATCH "band: endpoint relaxation [(]reactant[)] before: +E +(-?[0-9.]+) Eh, [|]g[|] +([0-9.E+-]+)" _ "${output}")
+if(NOT CMAKE_MATCH_1)
+  message(FATAL_ERROR "the reactant was not reported before the relaxation\n${output}")
+endif()
+set(REACTANT-G-BEFORE "${CMAKE_MATCH_2}")
+string(REGEX MATCH "band: endpoint relaxation [(]reactant[)] after: +E +(-?[0-9.]+) Eh, [|]g[|] +([0-9.E+-]+)" _ "${output}")
+if(NOT CMAKE_MATCH_1)
+  message(FATAL_ERROR "the relaxed reactant was not reported\n${output}")
+endif()
+set(REACTANT-G-AFTER "${CMAKE_MATCH_2}")
+string(REGEX MATCH "band: endpoint relaxation [(]product[)] before: +E +(-?[0-9.]+) Eh, [|]g[|] +([0-9.E+-]+)" _ "${output}")
+if(NOT CMAKE_MATCH_1)
+  message(FATAL_ERROR "the product was not reported before the relaxation\n${output}")
+endif()
+set(PRODUCT-G-BEFORE "${CMAKE_MATCH_2}")
+string(REGEX MATCH "band: endpoint relaxation [(]product[)] after: +E +(-?[0-9.]+) Eh, [|]g[|] +([0-9.E+-]+)" _ "${output}")
+if(NOT CMAKE_MATCH_1)
+  message(FATAL_ERROR "the relaxed product was not reported\n${output}")
+endif()
+set(PRODUCT-G-AFTER "${CMAKE_MATCH_2}")
+# the relaxation has to **lower** the gradient norm of both endpoints (each is a
+# minimum of the free surface, so the M1 minimiser has to descend).  Checking
+# only that the two lines exist lets a relaxation that is a no-op stay green
+# (report 38 L-11, R2-L3).
+if(NOT REACTANT-G-AFTER LESS REACTANT-G-BEFORE)
+  message(FATAL_ERROR "the reactant relaxation did not lower the gradient norm: ${REACTANT-G-BEFORE} -> ${REACTANT-G-AFTER}\n${output}")
+endif()
+if(NOT PRODUCT-G-AFTER LESS PRODUCT-G-BEFORE)
+  message(FATAL_ERROR "the product relaxation did not lower the gradient norm: ${PRODUCT-G-BEFORE} -> ${PRODUCT-G-AFTER}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: converged")
+  message(FATAL_ERROR "the band with relaxed endpoints did not converge\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the relaxed-endpoint band did not confirm the saddle\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-path-cli"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-NH3}
+  -DPRODUCT=${LANDSCAPE-NH3-DOWN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-path
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_path.cmake")
+
+set(LANDSCAPE-PATH-DIR "${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-path")
+add_test("xtb/landscape-path-product-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images 5"
+  "-DPATTERN=a band search needs a product geometry"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-product-not-found"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images 5 --lts-product no_such_product.xyz"
+  "-DPATTERN=cannot open the product geometry"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-product-atom-count"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images 5 --lts-product ${LANDSCAPE-NH3-SHORT}"
+  "-DPATTERN=the product geometry has 3 atoms but the reactant has 4"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-product-atom-order"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images 5 --lts-product ${LANDSCAPE-NH3-ORDER}"
+  "-DPATTERN=the atom order of the product geometry differs"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-product-multiframe"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images 5 --lts-product ${CMAKE_CURRENT_BINARY_DIR}/landscape_nh3_two.xyz"
+  "-DPATTERN=holds 2 frames; exactly one is required"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-product-not-xyz"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images 5 --lts-product ${LANDSCAPE-NH3-COORD}"
+  "-DPATTERN=must be a single frame xyz file"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-input-multiframe"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3-TWO-FRAME}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images 5"
+  "-DPATTERN=the input holds 2 frames; pass the product with --lts-product"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-ambiguous"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3-TWO-FRAME}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images 5 --lts-product ${LANDSCAPE-NH3-DOWN}"
+  "-DPATTERN=the two endpoints are ambiguous"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-band-images-missing"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method neb --lts-images"
+  "-DPATTERN=The --lts-images flag requires an integer"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
+# A global `--lts-product` is ignored by the single ended methods; the run
+# must say so instead of ignoring the option silently.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_path_warn.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method dimer --lts-ninit force
+          --lts-product "${PRODUCT}" --norestart
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT output MATCHES "only used by")
+  message(FATAL_ERROR "the ignored --lts-product was not reported\n${output}")
+endif()
+if(NOT output MATCHES "neb|cineb")
+  message(FATAL_ERROR "the warning does not name the band methods\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-path-product-single-ended"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HCN}
+  -DPRODUCT=${LANDSCAPE-NH3-DOWN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-path-warn
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_path_warn.cmake")
+
+# Landscape suite: end to end AutoNEB.  The coarse path of five images is grown
+# to the requested nine images by inserting one image per stage at the interval
+# of the worst energy resolution, and the resulting saddle candidate has to be
+# the first order saddle of the ammonia inversion.  The path of the first run
+# is then read back with `--lts-autoneb-restart`: the already completed stages
+# are not repeated, so the restarted run must reproduce the barrier and the
+# number of images of the uninterrupted one.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_autoneb.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+foreach(name "p2.path_autoneb.xyz" "p2.path_ts_list.xyz" "p2.xtbts.xyz" "p2.xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method autoneb
+          --lts-product "${PRODUCT}" --lts-max-steps 400 --norestart --namespace p2
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-method autoneb terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: transition state search [(]autoneb[)]")
+  message(FATAL_ERROR "the AutoNEB header was not printed\n${output}")
+endif()
+if(NOT output MATCHES "autoneb: coarse path of 5 images, target 9")
+  message(FATAL_ERROR "the coarse path of the AutoNEB run was not reported\n${output}")
+endif()
+if(NOT output MATCHES "autoneb: 5 stages, 4 inserted images, 9 images in the final path")
+  message(FATAL_ERROR "the AutoNEB stages were not completed\n${output}")
+endif()
+if(NOT output MATCHES "autoneb: inserted an image")
+  message(FATAL_ERROR "no image was inserted\n${output}")
+endif()
+if(NOT output MATCHES "landscape: converged")
+  message(FATAL_ERROR "the AutoNEB path did not converge\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the AutoNEB candidate is not a first order saddle\n${output}")
+endif()
+foreach(name "p2.path_autoneb.xyz" "p2.path_ts_list.xyz" "p2.xtbts.xyz" "p2.xtbts.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written")
+  endif()
+  file(SIZE "${RUNDIR}/${name}" size)
+  if(size EQUAL 0)
+    message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+# one frame per image of the final path
+file(READ "${RUNDIR}/p2.path_autoneb.xyz" autonebfile)
+string(REGEX MATCHALL "energy:" frames "${autonebfile}")
+list(LENGTH frames nframes)
+if(NOT nframes EQUAL 9)
+  message(FATAL_ERROR "path_autoneb.xyz holds ${nframes} frames, expected 9")
+endif()
+# one saddle candidate per completed stage, each with its imaginary mode count
+file(READ "${RUNDIR}/p2.path_ts_list.xyz" tslist)
+string(REGEX MATCHALL "imaginary modes:" candidates "${tslist}")
+list(LENGTH candidates ncand)
+if(NOT ncand EQUAL 5)
+  message(FATAL_ERROR "path_ts_list.xyz holds ${ncand} candidates, expected 5")
+endif()
+string(REGEX MATCHALL "imaginary modes: 1" saddles "${tslist}")
+list(LENGTH saddles nsaddle)
+if(NOT nsaddle EQUAL 5)
+  message(FATAL_ERROR "only ${nsaddle} of the AutoNEB candidates is a first order saddle")
+endif()
+# take the barrier of the uninterrupted run
+string(REGEX MATCH "autoneb: saddle candidate +-?[0-9.]+ Eh, barrier +([0-9.]+)" _ "${output}")
+set(BARRIER "${CMAKE_MATCH_1}")
+# the path file of the uninterrupted run, normalised for the comparison below.
+# Two normalisations: the stage counter in the frame comments is not reproduced
+# by the restart (it does not repeat the stages), and every number is truncated
+# to four decimals.  The second is required because the adopted path goes
+# through the text file and is **not** bitwise equal to the in-memory result
+# (report 38 L-12; measured in report 39 section 10 item 4: the largest
+# difference is 2e-5 angstrom and comes from the Kabsch alignment that the band
+# applies to the adopted images, and the two saddle energies differ in the 12th
+# decimal).  A negative zero is normalised as well, because the sign of a
+# coordinate at the level of the round trip is not reproducible.
+file(READ "${RUNDIR}/p2.path_autoneb.xyz" ONESHOTPATH)
+string(REGEX REPLACE "iter: [0-9]+" "iter:" ONESHOTPATH "${ONESHOTPATH}")
+# (a `{4}` quantifier is not supported by the CMake regex engine, hence the
+# explicit repetition of the digit class)
+string(REGEX REPLACE "(-?[0-9]+[.][0-9][0-9][0-9][0-9])[0-9]+" "\\1" ONESHOTPATH "${ONESHOTPATH}")
+string(REGEX REPLACE "-0[.]0000" "0.0000" ONESHOTPATH "${ONESHOTPATH}")
+string(REGEX REPLACE "  +" " " ONESHOTPATH "${ONESHOTPATH}")
+# the restart: the path of the run above is adopted as the initial path, so no
+# insertion is left (the target of 9 images is already reached)
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method autoneb
+          --lts-product "${PRODUCT}" --lts-max-steps 400 --norestart --namespace p2
+          --lts-autoneb-restart "${RUNDIR}/p2.path_autoneb.xyz"
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the restarted AutoNEB run terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "autoneb: 1 stages, 0 inserted images, 9 images in the final path")
+  message(FATAL_ERROR "the restart repeated a stage\n${output}")
+endif()
+string(REGEX MATCH "autoneb: saddle candidate +-?[0-9.]+ Eh, barrier +([0-9.]+)" _ "${output}")
+if(NOT "${CMAKE_MATCH_1}" STREQUAL "${BARRIER}")
+  message(FATAL_ERROR "the restart changed the barrier: ${BARRIER} -> ${CMAKE_MATCH_1}")
+endif()
+# frame by frame comparison of the path file: the restarted run has to
+# reproduce the path of the uninterrupted one (same frames, same atom order,
+# same energies and geometries to the printed precision)
+file(READ "${RUNDIR}/p2.path_autoneb.xyz" RESTARTEDPATH)
+string(REGEX REPLACE "iter: [0-9]+" "iter:" RESTARTEDPATH "${RESTARTEDPATH}")
+string(REGEX REPLACE "(-?[0-9]+[.][0-9][0-9][0-9][0-9])[0-9]+" "\\1" RESTARTEDPATH "${RESTARTEDPATH}")
+string(REGEX REPLACE "-0[.]0000" "0.0000" RESTARTEDPATH "${RESTARTEDPATH}")
+string(REGEX REPLACE "  +" " " RESTARTEDPATH "${RESTARTEDPATH}")
+if(NOT ONESHOTPATH STREQUAL RESTARTEDPATH)
+  message(FATAL_ERROR "the restarted AutoNEB run did not reproduce path_autoneb.xyz")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the restarted run did not confirm the saddle\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-path-autoneb"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-NH3}
+  -DPRODUCT=${LANDSCAPE-NH3-DOWN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-autoneb
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_autoneb.cmake")
+
+# Landscape suite: end to end growing string.  The two convergence thresholds
+# are relaxed with respect to the band defaults because the discrete string has
+# a resolution floor: measured on this run, the largest per node perpendicular
+# force of the string is 1.9e-3 while the band default is 1e-3 (report 36
+# section 5).  The run has to grow the string, converge it, refine the climbing
+# node and write path.xyz and path_ts_list.xyz.
+#
+# The growth numbers changed with the M-2 fix of the first growth direction
+# (report 39 section 8.2): the string now grows 8 steps to 10 nodes (was 6 steps
+# to 8 nodes) and reaches a barrier of 6.0702 kcal/mol (was 5.9789, the band
+# gives 6.0825, so the two legs of the cross validation agree to 0.012 kcal/mol
+# instead of 0.104).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_string.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+foreach(name "p3.path.xyz" "p3.path_ts_list.xyz" "p3.xtbts.xyz" "p3.xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method string
+          --lts-product "${PRODUCT}" --lts-string-nnodes 16
+          --lts-frms-avg 1e-3 --lts-frms-max 2e-3 --lts-max-steps 600
+          --norestart --namespace p3
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-method string terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: transition state search [(]string[)]")
+  message(FATAL_ERROR "the string header was not printed\n${output}")
+endif()
+if(NOT output MATCHES "string: growth steps [0-9]+.*spacing")
+  message(FATAL_ERROR "the growth of the string was not reported\n${output}")
+endif()
+if(NOT output MATCHES "string: climbing node [0-9]+ refined in [0-9]+ iterations")
+  message(FATAL_ERROR "the climbing node was not refined\n${output}")
+endif()
+if(NOT output MATCHES "landscape: converged")
+  message(FATAL_ERROR "the string did not converge\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the string candidate is not a first order saddle\n${output}")
+endif()
+foreach(name "p3.path.xyz" "p3.path_ts_list.xyz" "p3.xtbts.xyz" "p3.xtbts.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written")
+  endif()
+  file(SIZE "${RUNDIR}/${name}" size)
+  if(size EQUAL 0)
+    message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+file(READ "${RUNDIR}/p3.path.xyz" pathfile)
+string(REGEX MATCHALL "energy:" frames "${pathfile}")
+list(LENGTH frames nframes)
+if(nframes LESS 5)
+  message(FATAL_ERROR "path.xyz holds only ${nframes} frames")
+endif()
+file(READ "${RUNDIR}/p3.path_ts_list.xyz" tslist)
+string(REGEX MATCHALL "imaginary modes:" candidates "${tslist}")
+list(LENGTH candidates ncand)
+if(ncand LESS 1)
+  message(FATAL_ERROR "path_ts_list.xyz holds no candidate")
+endif()
+# the GSM variant shares the kernel and must reach the same kind of saddle
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method gsm
+          --lts-product "${PRODUCT}" --lts-string-nnodes 16
+          --lts-frms-avg 1e-3 --lts-frms-max 2e-3 --lts-max-steps 600
+          --norestart --namespace p3
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-method gsm terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: transition state search [(]gsm[)]")
+  message(FATAL_ERROR "the gsm header was not printed\n${output}")
+endif()
+if(NOT output MATCHES "saddle confirmation - imaginary modes: 1")
+  message(FATAL_ERROR "the gsm candidate is not a first order saddle\n${output}")
+endif()
+# cross check: the string and the band kernel have to agree on the barrier of
+# the same reaction (the measured difference is 0.10 kcal/mol)
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method cineb --lts-images 9
+          --lts-product "${PRODUCT}" --lts-max-steps 400 --norestart --namespace p4
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lts --lts-method cineb terminated with status ${status}\n${output}")
+endif()
+string(REGEX MATCH "band: highest image +[0-9]+, energy +-?[0-9.]+ Eh, barrier +([0-9.]+)" _ "${output}")
+set(NEBBARRIER "${CMAKE_MATCH_1}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method string
+          --lts-product "${PRODUCT}" --lts-string-nnodes 16
+          --lts-frms-avg 1e-3 --lts-frms-max 2e-3 --lts-max-steps 600
+          --norestart --namespace p4
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the cross check string run terminated with status ${status}\n${output}")
+endif()
+string(REGEX MATCH "string: path length +[0-9.]+ bohr, highest node +[0-9]+, E +-?[0-9.]+ Eh, barrier +([0-9.]+)" _ "${output}")
+set(STRINGBARRIER "${CMAKE_MATCH_1}")
+if(NOT NEBBARRIER MATCHES "^[0-9]+" OR NOT STRINGBARRIER MATCHES "^[0-9]+")
+  message(FATAL_ERROR "a barrier was not found: band '${NEBBARRIER}', string '${STRINGBARRIER}'\n${output}")
+endif()
+execute_process(COMMAND ${CMAKE_COMMAND} -E echo "cineb barrier ${NEBBARRIER}, string barrier ${STRINGBARRIER}")
+# The windows are the measured barriers plus/minus 0.05 kcal/mol (report 39
+# section 8.2: CI-NEB 6.0825, string 6.0702 on this reaction), so a regression of
+# the 0.1 kcal/mol class that report 36 section 7.4 used as the cross
+# validation cannot pass any more (report 38 L-8).
+if(NEBBARRIER LESS 6.03 OR NEBBARRIER GREATER 6.13)
+  message(FATAL_ERROR "the CI-NEB barrier ${NEBBARRIER} is outside the expected window")
+endif()
+if(STRINGBARRIER LESS 6.02 OR STRINGBARRIER GREATER 6.12)
+  message(FATAL_ERROR "the string barrier ${STRINGBARRIER} is outside the expected window")
+endif()
+]=])
+add_test("xtb/landscape-path-string"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-NH3}
+  -DPRODUCT=${LANDSCAPE-NH3-DOWN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-string
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_string.cmake")
+
+# The AutoNEB resource bounds are hard limits: a request above `max_paths` and a
+# coarse path above the request are rejected, never silently truncated.
+add_test("xtb/landscape-path-autoneb-max-paths"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method autoneb --lts-images 14 --lts-product ${LANDSCAPE-NH3-DOWN}"
+  "-DPATTERN=exceeds the hard AutoNEB limit max_paths"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-autoneb-nstart"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method autoneb --lts-autoneb-nstart 12 --lts-product ${LANDSCAPE-NH3-DOWN}"
+  "-DPATTERN=exceeds the requested number of images"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-path-string-ds-too-large"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-NH3}
+  "-DARGS=--gfn 2 --lts --lts-method string --lts-string-ds 5.0 --lts-product ${LANDSCAPE-NH3-DOWN}"
+  "-DPATTERN=is not smaller than the distance between the endpoints"
+  -DRUNDIR=${LANDSCAPE-PATH-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
+# The image bound is a hard limit for an **adopted** path as well: a restart
+# file with more frames than `max_paths` is rejected instead of being adopted
+# verbatim (report 38 L-3).  The multi frame file is built by this test from
+# the single frame input, so it does not depend on the path file of another
+# test having been written.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_autoneb_adopt.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+file(READ "${INPUT}" frame)
+set(ADOPTED "${RUNDIR}/adopted_multi.xyz")
+file(WRITE "${ADOPTED}" "")
+foreach(i RANGE 1 18)
+  file(APPEND "${ADOPTED}" "${frame}")
+  file(APPEND "${ADOPTED}" "\n")
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method autoneb
+          --lts-product "${PRODUCT}" --lts-autoneb-restart "${ADOPTED}"
+          --lts-autoneb-max-paths 10 --lts-max-steps 100 --norestart
+          --namespace pA
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(status EQUAL 0)
+  message(FATAL_ERROR "an oversized adopted path was accepted\n${output}")
+endif()
+if(NOT output MATCHES "more than the hard limit")
+  message(FATAL_ERROR "the reported failure is not the image bound\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-path-autoneb-adopt-limit"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-NH3}
+  -DPRODUCT=${LANDSCAPE-NH3-DOWN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-autoneb-adopt
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_autoneb_adopt.cmake")
+
+# A run that stops at the AutoNEB insertion depth cap has to report the cap in
+# the result message - and therefore in `xtbts.log` - instead of a bare
+# "converged": the band of the last stage did converge, but the requested path
+# was not built (report 38 L-2).  Before the fix the log said "converged"
+# while the path held 6 of 9 images; the propagation had no automatic coverage
+# at all (the branch was only exercised by hand, R2-L6).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_autoneb_cap.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+file(REMOVE "${RUNDIR}/pC.xtbts.log")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method autoneb
+          --lts-product "${PRODUCT}" --lts-autoneb-max-depth 1
+          --lts-max-steps 400 --norestart --namespace pC
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the capped AutoNEB run terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "autoneb: budget limit reached")
+  message(FATAL_ERROR "the AutoNEB insertion cap was not reached\n${output}")
+endif()
+if(NOT output MATCHES "landscape task terminated: stopped at the insertion depth limit max_depth = 1")
+  message(FATAL_ERROR "the cap did not reach the result message\n${output}")
+endif()
+if(NOT EXISTS "${RUNDIR}/pC.xtbts.log")
+  message(FATAL_ERROR "xtbts.log was not written")
+endif()
+file(READ "${RUNDIR}/pC.xtbts.log" log)
+if(NOT log MATCHES "termination: stopped at the insertion depth limit max_depth = 1")
+  message(FATAL_ERROR "the cap did not reach xtbts.log\n${log}")
+endif()
+if(log MATCHES "termination: converged")
+  message(FATAL_ERROR "xtbts.log claims convergence for a capped run\n${log}")
+endif()
+]=])
+add_test("xtb/landscape-path-autoneb-depth-limit"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-NH3}
+  -DPRODUCT=${LANDSCAPE-NH3-DOWN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-autoneb-cap
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_autoneb_cap.cmake")
+
 set_tests_properties(
   "xtb/Singlepoint"
   "xtb/GFN0-xTB"
@@ -1366,6 +2023,11 @@ set_tests_properties(
   "xtb/landscape-ts-minimum"
   "xtb/landscape-ts-escape"
   "xtb/landscape-ts-namespace"
+  "xtb/landscape-path-cli"
+  "xtb/landscape-path-product-single-ended"
+  "xtb/landscape-path-autoneb"
+  "xtb/landscape-path-autoneb-depth-limit"
+  "xtb/landscape-path-string"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

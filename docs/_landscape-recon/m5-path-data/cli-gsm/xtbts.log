@@ -1,0 +1,21 @@
+ landscape transition state search: gsm
+ electronic temperature (frozen):      300.000 K
+ initial trust radius:    3.779500E-01 bohr
+ Hessian source: numerical
+ termination: converged
+ --------------------------------------------------------------
+ landscape: converged
+ converged:      T
+ steps:          11
+ energy calls:   645
+ cache misses:   641
+ final energy:        -4.416671520341 Eh
+ final gradient:    6.203444E-03 Eh/bohr
+ max gradient:      5.364628E-03 Eh/bohr
+ etemp:               300.000 K
+ --------------------------------------------------------------
+ convergence history
+ criteria (gmax,grms,dmax,drms):  F F F F
+ confirmation imaginary modes: 1
+ is a first order saddle: T
+ most negative frequency:          -955.27 cm^-1

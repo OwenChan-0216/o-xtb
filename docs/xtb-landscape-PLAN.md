@@ -165,7 +165,7 @@ grep -rln irc src/                    # -> 3 files
 | ts: B-PRFO(单体) | `ts/algorithm/BPRFO.py:52-80`（944 行，死代码） | ❌ | `saddle/bprfo.f90` | redesign（去批量） | 术语歧义（D2 后果） |
 | ts: dimer | `ts/algorithm/dimer.py`（537 行，运行时 torch） | ❌ | `saddle/dimer.f90`（纯 Fortran） | 1:1 | 需 HVP；随机 seed |
 | ts: NEB | `ts/algorithm/neb.py`（1540 行，改进切线 + 动态弹簧） | ❌ | `path/neb.f90` | 1:1 | 无（只需 E+G） |
-| ts: CI-NEB | `neb.py:318-370, 789-855` | ❌ | `path/cineb.f90` | 1:1 | climbing 切换阈值 [待校准] |
+| ts: CI-NEB | `neb.py:318-370, 789-855` | ❌ | `path/cineb.f90` | 1:1 | climbing 切换阈值 9.7234e-3 Eh/bohr（= 0.5 eV/Å，报告 37 §3.1；点火迭代实测 0/26/31） |
 | ts: AutoNEB | `ts/algorithm/autoneb.py`（1214 行，树管理） | ❌ | `path/autoneb.f90` | redesign | 无阻塞构造（R03 §E.2） |
 | ts: string/GSM | `ts/algorithm/string.py`（954 行） | ❌ | `path/string.f90` | 1:1 | 无 |
 | hessian (数值) | `hessian/hessian.py:11`（torch autograd，孤立） | ✅ `numhess` / `TCalculator%hessian`（step 0.005） | `types/hessian.f90` + `vib/numhess.f90` | redesign（autograd→数值） | `accu_hess=0.3` 噪声（R04 §77） |
@@ -678,14 +678,14 @@ M0/M1 **不**添加空的 stub 类型（避免死代码 / 占位实现）；"预
 | 字段 | 单位 | 默认 | 对照 / 理由 |
 |---|---|---|---|
 | `n_images` | — | 10 | MAPLE `NEBParams.n_images=10` |
-| `k_min` / `k_max` | hartree/bohr² | 2.083e-3 / 2.083e-2 | MAPLE `0.03/0.3`，其单位在 MAPLE 文档中缺失；本计划按 ASE 惯例（eV/Å²）换算（0.03 eV/Å² = 2.083e-3 Eh/bohr²；ASE 默认 `k=0.1 eV/Å` 落在该区间，参 R04 §42）`[待校准]` |
+| `k_min` / `k_max` | hartree/bohr² | 2.083e-3 / 2.083e-2 | MAPLE `0.03/0.3`，其单位在 MAPLE 文档中缺失；本计划按 ASE 惯例（eV/Å²）换算（0.03 eV/Å² = 2.083e-3 Eh/bohr²；ASE 默认 `k=0.1 eV/Å` 落在该区间，参 R04 §42）。**[M5 处置] `[待校准]` 结案（报告 37 §3.2/§4.3）**：校准对象是**动态调度**而不是单个 k —— LEPS band 实测动态 `1e-2/1e-1`（48 步）与动态 PLAN 初值（30 步）都收敛且 barrier 误差 < 1e-4 kcal/mol，而**静态** `1e-2` 与静态 `1e-1` 在 400 步内都不收敛（静态 `1e-3`、`1`、`10` 收敛）。NH3 上动态校准值 11 步 / PLAN 初值 20 步 |
 | `use_dynamic_k` / `k_decay` | — | `.true.` / 0.5 | MAPLE 同值；公式见 §6.4 |
 | `ifidpp` | — | 1 | MAPLE 默认；IDPP 见 R04 §47 |
 | `lbfgs_m` | — | 20 | MAPLE 同值 |
 | `step0` | bohr | 3.7795e-2 | MAPLE `2e-2 Å` |
 | `band_f_rms_avg` | hartree/bohr | 1.736e-3 | geomeTRIC 0.025 eV/Å（R04 §46）换算 |
 | `band_f_rms_max` | hartree/bohr | 3.472e-3 | geomeTRIC 0.05 eV/Å |
-| `climb_switch_rms` | hartree/bohr | 3.472e-2 | geomeTRIC `--climb 0.5` eV/Å；`[待校准]` 由实验 #8 定 |
+| `climb_switch_rms` | hartree/bohr | **9.7234e-3** | geomeTRIC `--climb 0.5` eV/Å；**[M5 处置] `[待校准]` 结案（报告 37 §3.1）**：0.5 eV/Å = 0.5·evtoau/aatoau = 9.7234532e-3 Eh/bohr；PLAN 初值 3.472e-2 是**倒数**换算（0.5/14.4），大 3.57 倍。`settings.f90` 存 5 位有效数字 9.7234e-3（差 5.3e-8 = 5.5e-6 相对） |
 | `climb` | — | `.true.` | CI-NEB 默认开启（R04 §45：CI 修正 NEB 低估约 0.4 eV） |
 | `refine` | — | `''` | `''\|cineb\|nebts`（MAPLE `refine=None`） |
 | `remove_rotation_and_translation` | — | `.true.` | ASE 非周期默认（R04 §39） |
@@ -909,13 +909,44 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 | 算法 | 文献 | 关键公式/参数 | 失效模式 | 防护 |
 |---|---|---|---|---|
 | 改进切线 NEB | Henkelman & Jónsson, JCP **113**, 9978 (2000) Eqs.8–12 | 能量单调性 upwind；极值点加权平均；改进弹簧用**标量距离差** | 朴素切线导致 kink 与路径抖动 | 用 Eq.12 弹簧（原 Eq.5 已知次优，R04 §41） |
-| 动态弹簧 | ORCA 风格，MAPLE `neb.py:214-281` | `k_i = k_max − (k_max−k_min)·exp(−decay·ΔE_i/ΔE_max)` | k 过大妨碍收敛（VASP 警告，R04 Contradictions #2） | `k_max=2.083e-2 Eh/bohr²`，`use_dynamic_k=.true.` |
-| CI-NEB | Henkelman/Uberuaga/Jónsson, JCP **113**, 9901 (2000) Eq.5 | `F_max = −∇E + 2(∇E·τ̂)τ̂`；最高点不受弹簧力 | 过早点火导致能量曲线失真 | 先跑常规 NEB，`band_f_rms_max < climb_switch_rms` 后再切 CI；`[待校准]` 实验 #8 |
+| 动态弹簧 | ORCA 风格，MAPLE `neb.py:214-281` | `k_i = k_max − (k_max−k_min)·exp(−decay·ΔE_i/ΔE_max)` | k 过大妨碍收敛（VASP 警告，R04 Contradictions #2） | `k_min=1.0e-2`、`k_max=1.0e-1 Eh/bohr²`，`use_dynamic_k=.true.`（报告 37 §3.2：该窗口内静态值反而失败，调度是承重件） |
+| CI-NEB | Henkelman/Uberuaga/Jónsson, JCP **113**, 9901 (2000) Eq.5 | `F_max = −∇E + 2(∇E·τ̂)τ̂`；最高点不受弹簧力 | 过早点火导致能量曲线失真 | 先跑常规 NEB，`band_f_rms_max < climb_switch_rms` 后再切 CI；阈值定值 9.7234e-3 Eh/bohr（实验 #8，报告 37 §3.1：LEPS 上点火迭代 31，阈值放大到 1.0 也只提前点火、**不改变**收敛鞍点与势垒） |
 | IDPP 初始路径 | Smidstrup et al., JCP **140**, 214106 (2014) | 对距离插值的目标面做 NEB，**无需能量评价** | 线性插值产生间断（原文） | `ifidpp=1` 默认 |
 | AutoNEB | Kolsbjerg/Groves/Hammer, JCP **145**, 094107 (2016)；勘误 JCP **148**, 029903 (2018) | 逐步建路 + 在几何/能量分辨率最差处插点 | 树管理复杂 → 资源超支 | `max_paths=10`、`max_depth=5` 硬上限 |
 | GSM/String | Peters/Heyden/Bell/Chakraborty, JCP **120**, 114101 (2004) Eqs.1,7,9 | 法向力 `f⊥ = −∇V + (τ̂ᵀ∇V)τ̂`（Eq.1）；生长指示 `i(f⊥)=1 if \|f⊥\|≤tol`（Eq.7）；`a1(k+1)=a1(k)+Δs·i(·)`（Eq.9） | 节点间距过小产生 kink | 间距条件 `R > \|∇V·τ̂\|/(2ν₂)`（原文）；切线用三次样条（`cqpath_spline_repos`，`src/cqpath.f90:32`） |
 | 收敛 | geomeTRIC | 所有图像 `g_RMS` 的平均与最大都达标（R04 §46） | 用单点判据会在一条不良图像上假收敛 | 用 `band_f_rms_avg` + `band_f_rms_max` 双判据 |
 | Kabsch/对齐 | MAPLE `neb.py:55` | 每步去转动平移 | 路径漂移 | `remove_rotation_and_translation=.true.` |
+
+**M5 结案后的实测边界（报告 39，M5 修复轮）**
+
+1. **band 传播没有线搜索，收敛性对 `n_images` 非单调（实测窗口）。** band 步是截断的
+   L-BFGS 步，接受判据的两个自然候选（band 力范数、图像总能量）**都不是**传播的下降函数：
+   切向弹簧必须暂时抬高两者才能重分布图像。实测（GFN2 NH3 反转，报告 39 §6.1）：第 3 次
+   迭代的步在**任一**缩放因子下都抬高力范数，而 band 仍高于判据 2.8 倍；LEPS 上把「力范数
+   单调下降」作为接受判据会让 band 在 2 次迭代后停滞。因此 **线搜索被实测否决**（回溯线搜索
+   与「有界增长」两版都试过：前者让 NH3 停滞，后者的收敛窗口仍非单调，见报告 39 §6.2），
+   改为：`max_displ=0.37795`（默认）时 3/5/9/11 像收敛、7/13/15 像发散；`max_displ=1e-1`
+   时 3/5/7/9/11 像收敛、13/15 像发散（初始 band 力与图像数无关：IDPP `f_rms_max=1.199e-1`）。
+   防护 = **显式诊断**：`diverged` 标志（力范数超过初值 1e3 倍时提前终止，LEPS 上把 512 步
+   的浪费降到 147-390 步）+ 迭代上限报告，且**任何**非收敛都以 `env%error` 结束（非零退出），
+   绝不静默返回最后一次迭代。单元用例 `band-initial-path-scan`（收敛计数下限 = 实测 9）与
+   `band-divergence-guard` 钉住窗口，退化会变红。AutoNEB 继承同一窗口。
+2. **GSM 首个生长节点的方向**（报告 38 M-2）：首个生长节点**必须**沿 `unit(P - R)` 放置；
+   原实现把「栅格预算」当索引传入，`tau` 指向坐标原点。修复后 NH3 上 string 的实测数字变化：
+   生长 8 步 / 10 节点（原 6 步 / 8 节点）、势垒 **6.0702** kcal/mol（原 5.9789；band 给
+   6.0825）⇒ string 与 band 的互校差从 0.104 降到 **0.012** kcal/mol，TS 几何 RMSD 从
+   0.0140 Å 降到 **0.0054 Å**。同时发现：曲率条件把间距放大到上限 `2 ds = 1.0` bohr 时，
+   球面约束松弛在 NH3 上停滞；生长现已在该情形**回退到请求步长**（`ds = 0.5`）重试一次
+   （报告 39 §3.4）。
+3. **string 在分子面上的力判据需要放宽**（报告 38 L-4）：NH3 上用**默认**阈值
+   （`f_rms_avg=3e-4`、`f_rms_max=1e-3`）实测残差 `3.79e-4 / 1.05e-3` ⇒ `converged F`、
+   非零退出；CLI 用例因此显式放宽到 `1e-3 / 2e-3`。string 的默认力判据（`3e-4`/`1e-3`）在
+   分子面上**不可达**，因此 `string%converged` 只是「节点力残差」的陈述，IRC（M6）**不得**
+   把它当作起点可用性的判据。
+4. **`neb` / `cineb` 不写 `path_ts_list.xyz`**（报告 38 L-6，接口差异，必须显式记录）：
+   只有 **AutoNEB**（每个 stage 一帧）与 **string/GSM**（最终路径的内部局部极大）写该文件；
+   plain NEB / CI-NEB 只写 `path.xyz`。其最高像 / climbing image 是最自然的鞍点候选，但不落
+   该文件。M6/M7 任何消费 `path_ts_list.xyz` 的流程都必须容忍「NEB/CI-NEB 运行后该文件不存在」。
 
 ### 6.5 IRC（M6）
 
@@ -1011,7 +1042,7 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 | 5 | P-RFO 模态跟随 vs Sella/pysisyphus(+xtb) 交叉验证（SN2、HCN→HNC、Diels–Alder） | M4 期间 | `test_landscape_saddle.f90` | 收敛代数、TS 几何 RMSD、虚频个数与数值 |
 | 6 | IRC 四算法互校（同 TS 跑 forward+backward） | M6 期间 | `test_landscape_irc.f90` | 端点几何/能量/归属极小点；显著偏差者在文档中降级 |
 | 7 | IRC 端点判据标定（对照 Gaussian `MaxPoints=10` / ORCA `MaxIter=20`） | M6 期间 | `test_landscape_irc.f90` | 三终止信号阈值标定 |
-| 8 | CI-NEB climbing 切换阈值（0.5 eV/Å 是否会被噪声误触发） | **M5 之前** | `test_landscape_path.f90` | `climb_switch_rms` 定值；同时校准 `k_min/k_max`（`[待校准]`） |
+| 8 | CI-NEB climbing 切换阈值（0.5 eV/Å 是否会被噪声误触发） | **M5 之前** | `test_landscape_path.f90`（`climb-switch-calibration`、`band-spring-schedule`） | **结案（报告 37 §3）**：`climb_switch_rms = 9.7234e-3 Eh/bohr`（= 0.5 eV/Å）；噪声不会误触发（σ_g ≤ 1.2e-15、warm 3.9e-7，小 13/4 个数量级）且切换完全由 band 决定（同位逐位相同实测量）；`k_min/k_max = 1.0e-2/1.0e-1` 动态调度 |
 | 9 | DMF 可行性 | **不执行**（D2 已排除） | — | 记录为 `not-applicable` |
 | 10 | DL-FIND 复用性（法律 + 技术） | M0 之前（已完成） | — | R05 §1.1：DL-FIND 为 LGPL-3.0 与 xtb 兼容，但架构（回调式 + HDLC + MPI task-farm）与 `TCalculator` 差异大，**不搬运代码，只借鉴设计**（R05 §1.1.2 末） |
 | 11 | rigid vs relaxed scan 滞回量化（二面角双向） | M2 期间 | `test_landscape_scan.f90` | 正/反向 E(q) 最大差异与不连续点；决定 `bidirectional` 默认（本计划已默认 true） |
@@ -1287,6 +1318,16 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 验收：实验 #8；LEPS 势垒与解析值差 < 0.5 kcal/mol（对应 R05 §3.6 M5 判据）。
 **LOC ≈ 4880。**
 
+**M5 修复轮结案（报告 39，`39-m5-fix-report.md`）**：独立复核报告 38 的 4 条 MEDIUM 全部
+修复（M-1 `gsm.f90` 未初始化 `n_eval`；M-2 首个生长节点方向 `unit(P − R)`；M-3 `neb.f90` /
+`cineb.f90` 文档与公式/实测对齐；M-4 `landscape_testpot.f90` 的 root 守卫真正消除除零），
+F1/F2（band 传播鲁棒性）以**实测驱动的 (b) 方案**结案（线搜索被实测否决，改为显式
+`diverged` 诊断 + 收敛窗口文档 + 回归测试），LOW/INFO 逐条处置。修复后的验收数字：
+LEPS 四路互校势垒差不变（NEB/CI-NEB +0.0000、AutoNEB −0.0004、String +0.0003 kcal/mol）；
+NH3 NEB/CI-NEB **6.0825**、AutoNEB **6.0823** kcal/mol 不变；NH3 String/GSM 因 M-2 变为
+**6.0702** kcal/mol（原 5.9789，band 给 6.0825 ⇒ 互校差 0.104 → **0.012** kcal/mol），
+GSM vs CI-NEB TS 几何 RMSD **0.0103 bohr（0.0054 Å）**（原 0.0265 bohr / 0.0140 Å）。
+
 ### 9.7 M6：IRC（GS / HPC / LQA / EulerPC）
 
 | 模块 | 文件 | LOC 估 |
@@ -1331,9 +1372,9 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 | **R-08** | 行/列主序与展平顺序错误 | 高：静默的错误结果（能量对但梯度错位） | 中 | N4：强制 `xyz(3,n)`；`coords/cartesian.f90` 提供唯一 `pack/unpack` 对；LEPS 解析梯度单元测试可立即暴露错位 | `test_landscape_optimize.f90`（解析梯度逐分量比对） |
 | **R-09** | 模态跟踪符号翻转 → 模式跳变 | 高：TS 搜索发散到极小点 | 中 | `argmax\|overlap\| + sign realign`（PRFO.py:634-672）；`mode_overlap_min=0.3` 守卫 + 告警 | `test_landscape_saddle.f90`（Müller–Brown 上的模态连续性断言） |
 | **R-10** | Dimer separation 定义歧义（R04 Contradictions #1） | 中：曲率 C 差 2–4 倍，收敛行为不同 | 中 | 文档**写明**取「中点→像」定义；`delta` 显式可调；VASP 诊断规则（Torque 不降 ⇒ 增大 delta 或收紧 SCF）移植为运行时告警 | `test_landscape_saddle.f90`（dimer 分支） |
-| **R-11** | NEB 弹簧常数矛盾（R04 Contradictions #2：k 可变化数量级 vs 过大妨碍收敛） | 中 | 中 | 区分「平衡位置不敏感」与「收敛速率敏感」：`k_min/k_max` 提供，`use_dynamic_k=.true.` 默认，`[待校准]` 由实验 #8 定值 | `test_landscape_path.f90`（实验 #8） |
+| **R-11** | NEB 弹簧常数矛盾（R04 Contradictions #2：k 可变化数量级 vs 过大妨碍收敛） | 中 | 中 | 区分「平衡位置不敏感」与「收敛速率敏感」：`k_min/k_max` 提供，`use_dynamic_k=.true.` 默认。**[M5 结案]** 实验 #8（报告 37 §3.2）：动态 `1e-2/1e-1` 收敛，窗口内静态 `1e-2/1e-1` 不收敛 → 校准对象是调度；静止值 `k=1e2` 不收敛的上界可证伪 | `test_landscape_path.f90`（`band-spring-schedule`、`neb-spring-calibration`） |
 | **R-12** | LQA 谱系歧义（R04 Contradictions #3：Page–McIver vs Sun–Ruedenberg QSD） | 中：实现成另一种算法而不自知 | 中 | 在 `irc/lqa.f90` 头注释**明确写出采用的是哪一支**（本计划采用 HPC/EulerPC 论文所引的 Page–McIver LQA 解析传播，与 R04 §12 一致），并在文档中记录 QSD 的差异 | `test_landscape_irc.f90`（实验 #6 与 GS 互校） |
-| **R-13** | MAPLE 部分阈值/弹簧常数的单位未标注（`k_min/k_max`、`grow_relax_tol`） | 中：默认值可能差 1.9–3.6 倍 | 中 | 全部标 `[待校准]`；按 MAPLE 能量/长度单位（Ha/Å）推断并给出换算依据；实验 #8 校准 | `test_landscape_path.f90` |
+| **R-13** | MAPLE 部分阈值/弹簧常数的单位未标注（`k_min/k_max`、`grow_relax_tol`） | 中：默认值可能差 1.9–3.6 倍 | 中 | 全部标 `[待校准]`；按 MAPLE 能量/长度单位（Ha/Å）推断并给出换算依据。**[M5 结案]** 实验 #8（报告 37 §3）：`k_min/k_max` 的多 1.9–3.6 倍不确定度在 LEPS/NH3 上都**不改变收敛性**（动态 PLAN 初值与校准值都收敛），故不定值不构成阻塞；`climb_switch_rms` 的单位错误（3.57 倍）已定值纠正。`grow_relax_tol`（= `string_grow_tol`）由报告 36/37 的 string 实测保留 5e-3 | `test_landscape_path.f90` |
 | **R-14** | MAPLE fixture 全部基于 ML 势（R03 §D），不能作 GFN2 数值基准 | 高：若误用会造成"假通过" | 高 | L1 用解析势（Müller–Brown/LEPS/CO₂）做定量验证；MAPLE 输出仅用于**拓扑/几何一致性**抽查，绝不逐位比对 | `test_landscape_*.f90`（L1 层） |
 | **R-15** | 许可证：pysisyphus(GPL-3.0)、geomeTRIC(非标准) 的**代码**不可并入 xtb(LGPL-3.0-or-later)；DL-FIND/sella 为 LGPL-3.0（R04 §76、R05 §1.1） | 高（法律） | 低 | **只读文献与 Python 实现用于算法参考，不搬运任何代码**；DL-FIND 只借鉴设计（R05 §1.1.2）；M0 起在 `landscape_api.f90` 头部登记「算法来源为文献，不复制第三方代码」 | 代码审查（人工） |
 | **R-16** | 本机 **meson/ninja 未安装**（`meson: command not found`），`meson.build` 无法验证 | 中：Meson 路径可能带着错误进入主干 | 高 | `src/landscape/meson.build` 严格照抄 `src/freq/meson.build` 的结构（`srcs += files(...)`），逐行核对；在 CI/有 meson 的环境补验；CMake 路径**必须**在本机真实验证 | CI（外部）；本机 `cmake` 构建 |
@@ -1760,7 +1801,126 @@ xTB 计算器（与已有的 `acc` 同一机制），CLI 侧在 `main.F90` 三�
 打印 NaN）。这是 M2 已接受的语义（R-04：点未收敛是告警不是失败）且已被测试固定；
 M7 收口时若统一「结果不可用 ⇒ 非零退出」，这里要一并改。
 
+### 12.12 M5（chain-of-states 第一阶段：IDPP / NEB / CI-NEB）实际接线与接口契约
+
+**runtyp**：**不新增编号**。`--lts --lts-method neb|cineb` 复用 `p_run_lts = 19`
+（§12.1 的预留），`landscape_ts_settings%method` 增加 `p_landscape_ts_neb = 4` /
+`p_landscape_ts_cineb = 5`，`tasks/ts.f90` 在方法分派处分出 band 分支。
+`grep -n "integer, parameter :: p_run_" src/setparam.f90` 的实测取值集合为
+`{1..15, 19, 21, 71, 100..104}`；band 方法无需新编号，因此 R-05 不触发。
+
+**新增文件**（`src/landscape/path/`）：`idpp.f90`（IDPP 初始路径）、`cineb.f90`
+（Eq. 5 climbing image 力 + 点火判据）、`neb.f90`（band 内核：改进切线、Eq. 12 弹簧、
+动态弹簧、Kabsch 对齐、双判据收敛、两阶段 CI 切换）。
+
+**新增 CLI flag**（全部 `if (set%runtyp /= p_run_lts) call set_runtyp('lts')`）：
+
+| flag | 语义 | settings 字段 |
+|---|---|---|
+| `--lts-product <file>` | 产物端点（**单帧 xyz**，与输入同原子数同原子序） | `path%product_file` |
+| `--lts-images <n>` | 像数（含两个固定端点，>= 3） | `path%n_images` |
+| `--lts-kmin <k>` / `--lts-kmax <k>` | 动态弹簧下/上界（Eh/bohr²） | `path%k_min` / `path%k_max` |
+| `--lts-kdecay <d>` | 动态弹簧衰减因子 | `path%k_decay` |
+| `--lts-no-dynamic-k` | 全部用 `k_max` | `path%use_dynamic_k = .false.` |
+| `--lts-climb` | 打开 climbing image 阶段（`--lts-method cineb` 自动打开） | `path%climb` |
+| `--lts-climb-switch <f>` | 点火阈值（Eh/bohr） | `path%climb_switch_rms` |
+| `--lts-no-idpp` | 线性插值而非 IDPP | `path%ifidpp = .false.` |
+| `--lts-no-align` | 关闭 Kabsch 对齐 | `path%align = .false.` |
+| `--lts-relax-ends` | 先用 M1 极小化端点 | `path%relax_ends = .true.` |
+| `--lts-frms-avg <f>` / `--lts-frms-max <f>` | band 双判据阈值（Eh/bohr） | `path%f_rms_avg_tol` / `path%f_rms_max_tol` |
+| `--lts-max-displ <d>` | 单步单分量上界（bohr） | `path%max_displ` |
+
+`--lts-max-steps` 同时写入 `ltset%max_steps` 与 `ltset%path%max_steps`（band 的迭代预算）。
+
+**输入契约（同时适用于第二阶段的 AutoNEB / String）**：
+
+1. 位置参数 xyz = **反应物**；`--lts-product <file>` = **产物**（单帧 xyz）。
+2. `path%input_file` 由 `main.F90` 从位置参数填入，**只**用于检测多帧输入
+   （`landscape_ts_count_frames`，逐帧跳过 atom 行的计数器，不是解析器）。
+3. 校验矩阵（每条都是 `env%error` + 非零退出，对应 CLI 测试名见报告 35 §4）：
+
+| 情形 | 结果 |
+|---|---|
+| 有 product 文件、单帧、原子数/原子序一致 | 正常建带 |
+| product 文件不存在 / 打不开 | `cannot open the product geometry` |
+| product 原子数不符 | `the product geometry has N atoms but the reactant has M` |
+| product 原子序不符 | `the atom order of the product geometry differs` |
+| product 帧数 > 1 | `holds K frames; exactly one is required` |
+| product 扩展名不是 xyz | `must be a single frame xyz file` |
+| 输入帧数 > 1 且**无** product | `the input holds K frames; pass the product with --lts-product` |
+| 输入帧数 > 1 且**有** product | `the two endpoints are ambiguous` |
+| 单帧输入且无 product | `a band search needs a product geometry` |
+| 单端方法（prfo/bprfo/dimer）带 `--lts-product` | `env%warning`（资源脚本全局设置该 flag 不算错误，但绝不静默） |
+
+> **决策记录**：多帧输入的**便利路径**（帧 1 = 反应物、帧 2 = 产物）**未实现**：
+> 既有 `readMolecule` 只读单帧，复用它读第二帧需要自己写多帧解析器，成本高于收益。
+> 因此按「单一路径 + 明确错误」处理（报告 35 §4）。
+
+**输出**：`path.xyz`（`get_namespace('path.xyz')`，帧 1 = 反应物、帧 N = 产物，
+comment 行含能量与帧号），以及复用 M4 的 `xtbts.xyz` / `xtbts.log`（内容为
+**TS 候选**，即 climbing image；未点火时取最高能量像）。TS 候选同样过 M3 频率确认，
+虚频数 != 1 即非零退出。
+
+**标定（PLAN §8.2 实验 #8，实测见报告 35 §3）**：
+
+| 参数 | PLAN 初值 | 标定后 | 依据 |
+|---|---|---|---|
+| `k_min` / `k_max` | 2.083e-3 / 2.083e-2 `[待校准]` → **结案** | **1.0e-2 / 1.0e-1 Eh/bohr²（动态）** | LEPS band 扫描（报告 35 §3.2）+ M5 独立复核（报告 37 §3.2：动态两套值都收敛、静态 1e-2/1e-1 不收敛；NH3 上 11 步 vs PLAN 初值 20 步） |
+| `climb_switch_rms` | 3.472e-2 `[待校准]` → **结案** | **9.7234e-3 Eh/bohr（= 0.5 eV/Å）** | PLAN 值用**力**换算因子处理了**力常数/阈值**：0.5 eV/Å = 9.7234e-3 Eh/bohr，不是 3.472e-2（3.472e-2 = 0.5/14.4，见报告 35 §3.3）。M5 复核（报告 37 §3.1）：单位换算三位数字独立复算一致；`settings.f90` 存值 9.7234e-3 与精确值差 5.3e-8 |
+| `f_rms_avg_tol` / `f_rms_max_tol` | — | **3.0e-4 / 1.0e-3 Eh/bohr** | LEPS band 收敛且 barrier 误差 < 1e-3 kcal/mol |
+| σ_g 是否会误触发 climb 切换 | 问 | **不会**：随机 σ_g ≤ 1.2e-15、warm-restart 偏置 3.9e-7（报告 28 §3.1），比 9.72e-3 小 13 / 4 个数量级 |
+
+**已知限制（报告 35 §6）**：band 传播用固定步长截断的 L-BFGS（力场非保守），
+对 HCN→HNC 这类大振幅重原子交换反应（IDPP 路径本身不连续）不收敛；
+对 NH3 反转、LEPS、Müller-Brown 正常收敛。属第一阶段已知缺口，第二阶段可加线搜索。
+
 ---
+
+### 12.13 M5（chain-of-states 第二阶段：AutoNEB / String(GSM)）实际接线
+
+**runtyp**：**不新增编号**。`--lts --lts-method autoneb|string|gsm` 沿用 `p_run_lts = 19`；
+`setparam.f90` / `set_module.f90` 无改动（实测核查），方法名走
+`landscape_ts_method_from_name`，三个新常量 `p_landscape_ts_autoneb = 6` /
+`p_landscape_ts_string = 7` / `p_landscape_ts_gsm = 8`。
+`landscape_ts_method_is_band` 覆盖三者（三方法都读 `--lts-product`），
+新增 `landscape_ts_method_is_string` 区分 string 系。
+
+**新增文件**：`path/autoneb.f90`（AutoNEB）、`path/string.f90`（法向力/生长指示/间距条件/
+样条切线/重参数化的数学内核）、`path/gsm.f90`（两阶段驱动 + climbing node + 细化轮）。
+
+**新增 CLI flag**（全部 `if (set%runtyp /= p_run_lts) call set_runtyp('lts')`），
+并已写入 `src/xhelp.f90`：
+
+| flag | 语义 | settings 字段 | 默认 |
+|---|---|---|---|
+| `--lts-autoneb-nstart N` | 粗路径像数 | `path%autoneb_nstart` | 5 |
+| `--lts-autoneb-max-paths N` | 像数硬上限（违反 → error） | `path%max_paths` | 10 |
+| `--lts-autoneb-max-depth N` | 插入 stage 硬上限 | `path%max_depth` | 5 |
+| `--lts-autoneb-restart NAME` | 复用早前 `path_autoneb.xyz` | `path%autoneb_restart_file` | 未设置 |
+| `--lts-string-nnodes N` | 节点预算（上界） | `path%string_nnodes` | 9 |
+| `--lts-string-grow-tol F` | Eq.7 阈值（模） | `path%string_grow_tol` | 5e-3 |
+| `--lts-string-ds F` | Eq.9 弧长增量 | `path%string_ds` | 0.5 |
+| `--lts-string-nu2 F` | 间距条件曲率下界 | `path%string_nu2` | 0.05 |
+| `--lts-string-grow-steps N` | 单前沿松弛步数上限 | `path%string_grow_steps` | 200 |
+| `--lts-no-string-spline` | 中心差分切线 | `path%string_spline = .false.` | 样条 |
+| `--lts-string-history` | 打印生长历史 | `path%string_history` | 否 |
+
+`--lts-method cineb|autoneb|string|gsm` 自动打开 climbing（`path%climb = .true.`）；
+`--lts-images` 对 AutoNEB 是**请求的最终像数**（`max_paths` 仍是硬上限）。
+
+**输出**：`path_autoneb.xyz`（AutoNEB 路径，同时是重启文件）、
+`path.xyz`（string/gsm，与 NEB 同格式）、
+`path_ts_list.xyz`（鞍点候选：AutoNEB 每 stage 一帧，string 为最终路径的内部局部极大；
+帧注释含能量与**虚频数**），以及复用 M4 的 `xtbts.xyz`/`xtbts.log`。
+
+**标定与实测**（详见 `docs/_landscape-recon/36-m5-autoneb-string-report.md`）：
+NH3 反转上 AutoNEB 势垒 6.0823 kcal/mol（与 CI-NEB 相同）、string 5.9789 kcal/mol，
+同体系 GSM/CI-NEB 鞍点几何 RMSD **0.0140 bohr**；string 的收敛阈值有实测定值下限
+（`f_rms_avg 8.1e-4 / f_rms_max 1.78e-3`），端到端用例显式放宽并在报告 §5 记录。
+
+**已知限制**：string 的生长阶段在**抽象 2 维嵌入**与 **LEPS 第一阶段端点对**上不收敛
+（前者路径急转、后者直连线与 MEP 出射方向正交），二者均以实测数字记录在报告 §5；
+真实分子（NH3）正常。
 
 ## 附录 A：环境约束（已实测）
 

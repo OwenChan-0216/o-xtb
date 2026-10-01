@@ -61,6 +61,7 @@ module xtb_landscape_coords
    public :: mass_unweight_vector, mass_unweight_hessian
    public :: mass_weight, mass_unweight
    public :: center_of_mass, remove_translation, remove_rotation
+   public :: align_geometry
    public :: bohr_to_angstrom, angstrom_to_bohr, hartree_to_kcalmol, kcalmol_to_hartree
 
    !> Apply the inverse square root mass metric to a Cartesian vector or matrix
@@ -348,6 +349,56 @@ pure subroutine remove_translation(mol, xyz)
    end do
 
 end subroutine remove_translation
+
+!> Rotate `xyz` onto `xyz_ref` about the arithmetic centroid.
+!>
+!> This is the mass free Kabsch alignment used by the chain-of-states band
+!> (`xtb_landscape_path_neb`): every image of a path is aligned to the
+!> reactant before it is evaluated, which removes the rigid body drift that
+!> the independent minimisation of the images would otherwise introduce
+!> (`remove_rotation_and_translation` of PLAN section 6.4).  Both geometries
+!> are translated to their **arithmetic** centroid (not their centre of mass)
+!> and `xyz` is rotated by the quaternion rotation that best reproduces
+!> `xyz_ref` (`kabsch_align`), so the alignment is a pure proper rotation
+!> (`det = +1`) with no reflection and no scaling.  Only the geometry is
+!> changed, never the physics: the caller keeps the endpoints fixed and uses
+!> the aligned geometry for the interpolation, the forces and the output.
+!>
+!> The two geometries must contain the same atoms in the same order.
+subroutine align_geometry(env, xyz, xyz_ref)
+   !> Computational environment for the LAPACK error report
+   type(TEnvironment), intent(inout) :: env
+   !> Coordinates to rotate (bohr), overwritten in place
+   real(wp), intent(inout) :: xyz(:, :)
+   !> Reference coordinates (bohr), not modified
+   real(wp), intent(in) :: xyz_ref(:, :)
+
+   real(wp), allocatable :: target(:, :), reference(:, :)
+   real(wp) :: com(3), comref(3)
+   integer :: i
+
+   if (size(xyz, 2) /= size(xyz_ref, 2)) return
+   allocate(target(3, size(xyz, 2)), source=xyz)
+   allocate(reference(3, size(xyz, 2)), source=xyz_ref)
+
+   com = sum(target, dim=2)/real(size(target, 2), wp)
+   comref = sum(reference, dim=2)/real(size(reference, 2), wp)
+   do i = 1, size(target, 2)
+      target(:, i) = target(:, i) - com
+      reference(:, i) = reference(:, i) - comref
+   end do
+
+   call kabsch_align(env, target, reference)
+   ! Translate the rotated geometry so that its centroid coincides with the
+   ! reference centroid, exactly like the Kabsch alignment of the reference
+   ! implementation (`Q R + t` with `t = Pc - Qc R`).  Without this step the
+   ! rotation would move every image to the origin, i.e. the alignment would
+   ! silently introduce a translation.
+   do i = 1, size(target, 2)
+      xyz(:, i) = target(:, i) + comref
+   end do
+
+end subroutine align_geometry
 
 !> Align a geometry with a reference frame or with its principal axes.
 !>

@@ -59,6 +59,7 @@ tests = [
   'landscape-scan',
   'landscape-vib',
   'landscape-saddle',
+  'landscape-path',
   'latticepoint',
   'molecule',
   'model-hessian',
@@ -396,4 +397,31 @@ test('landscape ts dimer seed missing', python, env: xtbenv, args: [
 test('landscape ts method unknown', python, env: xtbenv, args: [
   landscape_cli_check, 'error', xtb_exe, hcn_xyz, landscape_cli_dir / 'landscape-cli-error',
   'Unknown landscape transition state method', '--gfn', '2', '--lts', '--lts-method', 'bogus',
+])
+
+# CLI checks of the M5 chain-of-states tasks.  The CMake build drives these
+# with `xtb/landscape-path-*` scripts; only the AutoNEB insertion cap is
+# mirrored here so far, because it is the one branch of the M5 fix round that
+# had no automated coverage at all (report 38 L-2, R2-L6).  The ammonia
+# inversion is the molecular fixture of the whole path suite.
+nh3_up_xyz = meson.current_build_dir() / 'landscape_nh3_up.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("4\\nammonia (N above the H3 plane)\\nN  0.0000000  0.0000000  0.3800000\\nH  0.9400000  0.0000000  0.0000000\\nH -0.4700000  0.8140000  0.0000000\\nH -0.4700000 -0.8140000  0.0000000\\n")',
+  nh3_up_xyz,
+  check: true,
+)
+nh3_down_xyz = meson.current_build_dir() / 'landscape_nh3_down.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("4\\nammonia (N below the H3 plane)\\nN  0.0000000  0.0000000 -0.3800000\\nH  0.9400000  0.0000000  0.0000000\\nH -0.4700000  0.8140000  0.0000000\\nH -0.4700000 -0.8140000  0.0000000\\n")',
+  nh3_down_xyz,
+  check: true,
+)
+# a run that stops at the AutoNEB insertion depth cap must report the cap in
+# the result message and in xtbts.log instead of a bare "converged"
+# (mirrors `xtb/landscape-path-autoneb-depth-limit`, report 38 L-2)
+test('landscape path autoneb depth limit', python, env: landscape_env, args: [
+  landscape_cli_check, 'autonebdepth', xtb_exe, nh3_up_xyz,
+  landscape_cli_dir / 'landscape-cli-autoneb-depth', nh3_down_xyz,
 ])

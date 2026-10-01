@@ -1,0 +1,29 @@
+Test project /tmp/xtb-land/build
+      Start 36: xtb/CAPI
+ 1/12 Test #36: xtb/CAPI .........................   Passed    0.08 sec
+      Start 67: xtb/model-hessian
+ 2/12 Test #67: xtb/model-hessian ................   Passed    0.03 sec
+      Start 69: xtb/optimizer
+ 3/12 Test #69: xtb/optimizer ....................   Passed    0.02 sec
+      Start 82: xtb/Argparser_print_version
+ 4/12 Test #82: xtb/Argparser_print_version ......   Passed    0.00 sec
+      Start 83: xtb/Argparser_print_help
+ 5/12 Test #83: xtb/Argparser_print_help .........   Passed    0.00 sec
+      Start 84: xtb/Argparser_print_license
+ 6/12 Test #84: xtb/Argparser_print_license ......   Passed    0.00 sec
+      Start 86: xtb/Singlepoint
+ 7/12 Test #86: xtb/Singlepoint ..................   Passed    0.03 sec
+      Start 88: xtb/GFN0-xTB
+ 8/12 Test #88: xtb/GFN0-xTB .....................   Passed    0.02 sec
+      Start 89: xtb/GFN1-xTB
+ 9/12 Test #89: xtb/GFN1-xTB .....................   Passed    0.04 sec
+      Start 90: xtb/GFN2-xTB/GBSA
+10/12 Test #90: xtb/GFN2-xTB/GBSA ................   Passed    0.03 sec
+      Start 91: xtb/GFN2-FF
+11/12 Test #91: xtb/GFN2-FF ......................   Passed    0.01 sec
+      Start 92: xtb/GFN2-FF/xcontrol
+12/12 Test #92: xtb/GFN2-FF/xcontrol .............   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 12
+
+Total Test time (real) =   0.28 sec
