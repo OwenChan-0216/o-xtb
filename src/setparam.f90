@@ -203,6 +203,7 @@ module xtb_setparam
    integer, parameter :: p_run_bhess  =  71
    integer, parameter :: p_run_md     =   6
    integer, parameter :: p_run_omd    =   8
+   integer, parameter :: p_run_lopt   =   9
    integer, parameter :: p_run_path   =  10
    integer, parameter :: p_run_screen =  11
    integer, parameter :: p_run_modef  =  13

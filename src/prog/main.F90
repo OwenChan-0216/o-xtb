@@ -100,6 +100,11 @@ module xtb_prog_main
    use xtb_dipro, only: get_jab, jab_input
    !> PTB related modules
    use xtb_main_json, only: main_ptb_json
+   !> landscape task suite
+   use xtb_landscape, only: run_landscape
+   use xtb_landscape_settings, only: landscape_opt_settings, &
+      & landscape_opt_algorithm_from_name, landscape_conv_level_known
+   use xtb_landscape_results, only: landscape_result
 
    implicit none
    private
@@ -130,6 +135,8 @@ contains
       type(jab_input) :: dipro
       type(TCpcmx) :: cpx
       type(TTBLiteInput) :: tblite
+      type(landscape_opt_settings) :: lset
+      type(landscape_result) :: lres
 !  store important names and stuff like that in FORTRAN strings
       character(len=:), allocatable :: fname    ! geometry input file
       character(len=:), allocatable :: xcontrol ! instruction file
@@ -224,7 +231,7 @@ contains
       ! ------------------------------------------------------------------------
       ! read the command line arguments
       call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
-         & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite)
+         & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset)
 
 
       ! No solvation available for PTB!
@@ -567,7 +574,7 @@ contains
             call env%terminate('This is an internal error, please define your runtypes!')
          case (p_run_prescc,p_run_scc, p_run_grad, p_run_opt, p_run_hess, p_run_ohess, p_run_bhess, &
                p_run_md, p_run_omd, p_run_path, p_run_screen, &
-               p_run_modef, p_run_mdopt, p_run_metaopt)
+               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt)
             if (set%mode_extrun == p_ext_gfnff) then
                fnv = xfind(p_fname_param_gfnff)
             elseif (set%mode_extrun .eq. p_ext_ptb) then
@@ -906,6 +913,27 @@ contains
          ! stop optimization timer !
          call stop_timing(3)
 
+      end if
+
+      ! ------------------------------------------------------------------------
+      ! landscape suite (minimisation with the algorithms of src/landscape)
+      if (set%runtyp == p_run_lopt) then
+         ! The CLI electronic-structure setting reaches the engine only through
+         ! its own control object: `xtb_single::singlepoint` forwards `acc` as
+         ! an argument but drops it, and the engine writes its value into the
+         ! calculator, so the CLI value has to be synced here
+         ! (docs/_landscape-recon/12-*.md, R2-02).
+         lset%engine%acc = set%acc
+         call start_timing(3)
+         call run_landscape(env, mol, chk, calc, lset, lres)
+         call stop_timing(3)
+         ! Report the *converged* geometry: `res` feeds the TOTAL ENERGY line
+         ! (`write_energy`) and xtbout.json, while `xtbopt.xyz` is written by
+         ! the landscape task from `lres%energy`.  Without this write-back the
+         ! reported energy is the one of the starting geometry.
+         res%e_total = lres%energy
+         res%gnorm = lres%gnorm
+         call env%checkpoint("Landscape task terminated")
       end if
 
       ! ------------------------------------------------------------------------
@@ -1294,7 +1322,7 @@ contains
 
 !> Parse command line arguments and forward them to settings
    subroutine parseArguments(env, args, inputFile, paramFile, lgrad, &
-         & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite)
+         & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset)
 
       use xtb_mctc_global, only: persistentEnv
 
@@ -1349,6 +1377,9 @@ contains
       !> Input for TBLite calculator
       type(TTBLiteInput), intent(out) :: tblite
 
+      !> Landscape task settings (`--lopt`, `--lopt-engine`, `--lopt-level`)
+      type(landscape_opt_settings), intent(inout) :: lset
+
 !$    integer :: omp_get_num_threads, nproc
       integer :: nFlags
       integer :: idum, ndum
@@ -1356,6 +1387,7 @@ contains
       real(wp) :: ddum
       character(len=:), allocatable :: flag, sec
       logical :: exist
+      integer :: landscape_algorithm
 
       set%gfn_method = 2
       dipro%diprocalc = .false.
@@ -2025,6 +2057,42 @@ contains
          case ('--mdopt')
             call set_runtyp('mdopt')
 
+         case ('--lopt')
+            ! Landscape suite: minimisation with the algorithms of
+            ! `src/landscape/optimize` (see PLAN section 12).  The flag takes
+            ! no positional argument; engine and convergence level are set by
+            ! the dedicated flags below.
+            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+
+         case ('--lopt-engine')
+            ! Minimisation algorithm of the landscape suite
+            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               landscape_algorithm = landscape_opt_algorithm_from_name(sec)
+               if (landscape_algorithm == 0) then
+                  call env%error("Unknown landscape minimisation algorithm '"//sec//"'", source)
+               else
+                  lset%algorithm = landscape_algorithm
+               end if
+            else
+               call env%error("The --lopt-engine flag requires an algorithm name", source)
+            end if
+
+         case ('--lopt-level')
+            ! Convergence level of the landscape suite (ORCA naming)
+            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_conv_level_known(sec)) then
+                  call lset%set_conv_level(sec)
+               else
+                  call env%error("Unknown landscape convergence level '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lopt-level flag requires a level name", source)
+            end if
+
          case ('--metadyn')
             call set_runtyp('md')
             call args%nextArg(sec)
@@ -2198,6 +2266,9 @@ contains
       if ((set%runtyp == p_run_opt) .or. (set%runtyp == p_run_ohess) .or. &
          &   (set%runtyp == p_run_omd) .or. (set%runtyp == p_run_metaopt)) then
          call prtiming(3, 'ANC optimizer')
+      end if
+      if (set%runtyp == p_run_lopt) then
+         call prtiming(3, 'landscape optimizer')
       end if
       if (set%runtyp == p_run_path) then
          call prtiming(4, 'path finder')

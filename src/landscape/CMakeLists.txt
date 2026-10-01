@@ -1,0 +1,45 @@
+# This file is part of xtb.
+#
+# Copyright (C) 2026 xtb contributors
+#
+# xtb is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# xtb is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with xtb.  If not, see <https://www.gnu.org/licenses/>.
+
+# Add all landscape sources with one build file.  Nested CMakeLists.txt files
+# in types/, engine/ and optimize/ are deliberately avoided (PLAN section 4.1).
+
+set(dir "${CMAKE_CURRENT_SOURCE_DIR}")
+
+list(APPEND srcs
+  "${dir}/types/settings.f90"
+  "${dir}/types/results.f90"
+  "${dir}/types/coords.f90"
+  "${dir}/types/log.f90"
+  "${dir}/types/hessian.f90"
+  "${dir}/engine/engine.f90"
+  "${dir}/optimize/hessian_update.f90"
+  "${dir}/optimize/line_search.f90"
+  "${dir}/optimize/sd.f90"
+  "${dir}/optimize/cg.f90"
+  "${dir}/optimize/lbfgs.f90"
+  "${dir}/optimize/bfgs.f90"
+  "${dir}/optimize/diis.f90"
+  "${dir}/optimize/rfo.f90"
+  "${dir}/optimize/driver.f90"
+  "${dir}/tasks/sp.f90"
+  "${dir}/tasks/opt.f90"
+  "${dir}/landscape_driver.f90"
+  "${dir}/landscape_api.f90"
+)
+
+set(srcs ${srcs} PARENT_SCOPE)

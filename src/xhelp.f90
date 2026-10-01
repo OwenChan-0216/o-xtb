@@ -271,6 +271,18 @@ subroutine help(iunit)
    "    call ancopt(3) to perform a geometry optimization, levels from crude, sloppy,", &
    "    loose, normal (default), tight, verytight to extreme can be chosen",&
    "",&
+   "--lopt",&
+   "    minimize the geometry with the landscape task suite (src/landscape); the", &
+   "    algorithm is selected with --lopt-engine and the thresholds with --lopt-level",&
+   "",&
+   "--lopt-engine NAME",&
+   "    minimisation algorithm of the landscape suite, one of sd, cg, lbfgs,", &
+   "    bfgs, diis or rfo (default lbfgs)",&
+   "",&
+   "--lopt-level LEVEL",&
+   "    convergence level of the landscape suite, one of superloose, loose,", &
+   "    normal (default), tight or vtight",&
+   "",&
    "--cycles [int]",&
    "    maximum number of optimization cycles.",&
    "",&

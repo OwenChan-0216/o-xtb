@@ -1,0 +1,71 @@
+### Reduced-link experiments (gfortran 12, build dir /tmp/xtb-red2/build)
+### link command template:
+gfortran -fdefault-real-8 -fdefault-double-8 <prog objs> -o OUT <xtb-object objs minus EXCLUDE> libmctc-lib.a -lopenblas -lm -ldl -fopenmp
+
+===== nogfnff : EXCLUDE=/gfnff/ : exit=1 : undefined-reference-lines=46 =====
+     23 `__xtb_gfnff_calculator_MOD___vtab_xtb_gfnff_calculator_Tgffcalculator'
+      6 `__xtb_gfnff_calculator_MOD_newgffcalculator'
+      3 `__xtb_gfnff_param_MOD_gff_print'
+      2 `__xtb_gfnff_calculator_MOD_singlepoint'
+      1 `__xtb_gfnff_topology_MOD_zero'
+      1 `__xtb_gfnff_topology_MOD___vtab_xtb_gfnff_topology_Tprinttopo'
+      1 `__xtb_gfnff_topology_MOD___vtab_xtb_gfnff_topology_Tgfftopology'
+      1 `__xtb_gfnff_topology_MOD_any'
+      1 `__xtb_gfnff_shake_MOD_init_shake'
+      1 `__xtb_gfnff_param_MOD_ini'
+      1 `__xtb_gfnff_param_MOD_gfnff_set_param'
+      1 `__xtb_gfnff_param_MOD_gfnff_param_dealloc'
+
+===== noiff : EXCLUDE=/gfnff/|/iff/ : exit=1 : undefined-reference-lines=61 =====
+     23 `__xtb_gfnff_calculator_MOD___vtab_xtb_gfnff_calculator_Tgffcalculator'
+      6 `__xtb_gfnff_calculator_MOD_newgffcalculator'
+      5 `__xtb_iff_iffenergy_MOD_iff_e'
+      3 `__xtb_gfnff_param_MOD_gff_print'
+      2 `__xtb_iff_iffprepare_MOD_precomp'
+      2 `__xtb_gfnff_calculator_MOD_singlepoint'
+      1 `__xtb_iff_iffprepare_MOD_prepare_iff'
+      1 `__xtb_iff_iffini_MOD_init_iff'
+      1 `__xtb_iff_iffenergy_MOD_intermole_probe'
+      1 `__xtb_iff_iffenergy_MOD_alignmol'
+      1 `__xtb_iff_data_MOD___vtab_xtb_iff_data_Tiffdata'
+      1 `__xtb_iff_data_MOD_allocateiffdata'
+
+===== noptb-solv : EXCLUDE=/gfnff/|/iff/|/ptb/|/solv/ : exit=1 : undefined-reference-lines=102 =====
+     23 `__xtb_gfnff_calculator_MOD___vtab_xtb_gfnff_calculator_Tgffcalculator'
+      6 `__xtb_solv_gbsa_MOD___vtab_xtb_solv_gbsa_Tborn'
+      6 `__xtb_gfnff_calculator_MOD_newgffcalculator'
+      5 `__xtb_ptb_calculator_MOD___vtab_xtb_ptb_calculator_Tptbcalculator'
+      5 `__xtb_iff_iffenergy_MOD_iff_e'
+      4 `__xtb_solv_model_MOD___vtab_xtb_solv_model_Tsolvmodel'
+      3 `__xtb_solv_cosmo_MOD___vtab_xtb_solv_cosmo_Tcosmo'
+      3 `__xtb_solv_cm5_MOD_calc_cm5'
+      3 `__xtb_gfnff_param_MOD_gff_print'
+      2 `__xtb_solv_model_MOD_newbornmodel'
+      2 `__xtb_solv_gbsa_MOD_update'
+      2 `__xtb_solv_cpx_MOD___vtab_xtb_solv_cpx_Tcpcmx'
+
+===== nofeat : EXCLUDE=/gfnff/|/iff/|/ptb/|/dipro/|/docking/|/solv/|/api/|/tblite/ : exit=1 : undefined-reference-lines=251 =====
+     43 `__xtb_docking_param_MOD_optlvl'
+     32 `_F.xtb_docking_param_MOD_optlvl'
+     15 `__xtb_gfnff_calculator_MOD___vtab_xtb_gfnff_calculator_Tgffcalculator'
+     13 `__xtb_docking_set_module_MOD_set_logicals'
+      8 `__xtb_docking_param_MOD_directedset'
+      7 `__xtb_docking_set_module_MOD_set_docking'
+      6 `__xtb_tblite_calculator_MOD___vtab_xtb_tblite_calculator_Ttblitecalculator'
+      6 `__xtb_solv_gbsa_MOD___vtab_xtb_solv_gbsa_Tborn'
+      6 `__xtb_docking_param_MOD_xcontrol'
+      6 `__xtb_docking_param_MOD_uhf'
+      6 `__xtb_docking_param_MOD_chrg'
+      5 `__xtb_ptb_calculator_MOD___vtab_xtb_ptb_calculator_Tptbcalculator'
+
+===== nolin : EXCLUDE=/src/lin\.f90\.o : exit=1 : undefined-reference-lines=6 =====
+      5 `lin_'
+      1 /usr/bin/ld: CMakeFiles/xtb-object.dir/src/scc_core.f90.o:/home/owenchan/work_path/coding/fortran/xtb/src/scc_core.f90:218: more undefined references to `lin_' follow
+
+===== nopqn : EXCLUDE=/src/pqn\.f90\.o : exit=1 : undefined-reference-lines=3 =====
+      3 `ncore_'
+
+===== nolinmod : EXCLUDE=/src/lin_mod\.f90\.o : exit=1 : undefined-reference-lines=6 =====
+      5 `__xtb_lin_MOD_lin'
+      1 /usr/bin/ld: CMakeFiles/xtb-object.dir/src/xtb/hamiltonian.F90.o:/home/owenchan/work_path/coding/fortran/xtb/src/xtb/hamiltonian.F90:282: more undefined references to `__xtb_lin_MOD_lin' follow
+

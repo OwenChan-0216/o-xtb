@@ -34,6 +34,15 @@ program tester
    use test_gfnff, only : collect_gfnff
    use test_hessian, only : collect_hessian
    use test_iff, only : collect_iff
+   use test_landscape_api, only : collect_landscape_api
+   use test_landscape_settings, only : collect_landscape_settings
+   use test_landscape_coords, only : collect_landscape_coords
+   use test_landscape_hessian_update, only : collect_landscape_hessian_update
+   use test_landscape_optimize_math, only : collect_landscape_optimize_math
+   use test_landscape_cg, only : collect_landscape_cg
+   use test_landscape_hessian, only : collect_landscape_hessian
+   use test_landscape_optimize_xtb, only : collect_landscape_optimize_xtb
+   use test_landscape_failure, only : collect_landscape_failure
    use test_latticepoint, only : collect_latticepoint
    use test_molecule, only : collect_molecule
    use test_model_hessian, only : collect_model_hessian
@@ -77,6 +86,15 @@ program tester
       new_testsuite("gfnff", collect_gfnff), &
       new_testsuite("hessian", collect_hessian), &
       new_testsuite("iff", collect_iff), &
+      new_testsuite("landscape-api", collect_landscape_api), &
+      new_testsuite("landscape-settings", collect_landscape_settings), &
+      new_testsuite("landscape-coords", collect_landscape_coords), &
+      new_testsuite("landscape-hessian-update", collect_landscape_hessian_update), &
+      new_testsuite("landscape-optimize-math", collect_landscape_optimize_math), &
+      new_testsuite("landscape-cg", collect_landscape_cg), &
+      new_testsuite("landscape-hessian", collect_landscape_hessian), &
+      new_testsuite("landscape-optimize-xtb", collect_landscape_optimize_xtb), &
+      new_testsuite("landscape-failure", collect_landscape_failure), &
       new_testsuite("latticepoint", collect_latticepoint), &
       new_testsuite("molecule", collect_molecule), &
       new_testsuite("model-hessian", collect_model_hessian), &

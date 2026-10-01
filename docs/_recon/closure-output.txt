@@ -1,0 +1,455 @@
+========================================================================
+CLOSURE SEEDED FROM src/prog/* + src/main/*
+========================================================================
+total fortran files in repo (src/+symmetry/): 362
+seed files: 14
+files in transitive closure: 286
+files excluded by closure: 76
+
+EXCLUDED FILES grouped by directory:
+  [src]  (51 files)
+      src/constr.f90
+      src/david.f
+      src/define.f90
+      src/drsp.f
+      src/elem.f90
+      src/enso_printout.f90
+      src/eqrot.f90
+      src/expire.f90
+      src/filetools.F90
+      src/foden.f90
+      src/fragment.f90
+      src/generate_wsc.f90
+      src/geosum.f90
+      src/getname.f90
+      src/getsymnum.f90
+      src/gfn_prparam.f90
+      src/header.f90
+      src/htosq.f90
+      src/ifind.f90
+      src/lin.f90
+      src/locmode.f90
+      src/lopt.f90
+      src/makel.f90
+      src/matinv.f90
+      src/neighbor.f90
+      src/nvtx.f90
+      src/pocketscan.f90
+      src/pqn.f90
+      src/printmold.f90
+      src/prmat.f90
+      src/prmat2.f90
+      src/pseudodiag.f90
+      src/qpot.f90
+      src/qsort.f90
+      src/rabguess.f90
+      src/rdcoord2.f90
+      src/readl.f90
+      src/readl2.f90
+      src/rmrottr.f90
+      src/rmsd.f90
+      src/shiftlp.f90
+      src/spline2.f90
+      src/spline3.f90
+      src/surfac.f
+      src/timing.f90
+      src/wrbas.f90
+      src/wrgbw.f90
+      src/wrmo.f90
+      src/wrmodef.f90
+      src/xhelp.f90
+      src/zmatpr.f90
+  [src/api]  (7 files)
+      src/api/calculator.f90
+      src/api/environment.f90
+      src/api/interface.f90
+      src/api/molecule.f90
+      src/api/results.f90
+      src/api/utils.f90
+      src/api/version.f90
+  [src/dipro]  (1 files)
+      src/dipro/version.f90
+  [src/disp]  (1 files)
+      src/disp/dftd3.f
+  [src/gfnff]  (5 files)
+      src/gfnff/getring36.f90
+      src/gfnff/gfnff_qm.f90
+      src/gfnff/gfnff_rab.f
+      src/gfnff/math.f
+      src/gfnff/shortest_distance.f90
+  [src/lbfgs_anc]  (2 files)
+      src/lbfgs_anc/filter.f90
+      src/lbfgs_anc/optimizer.f90
+  [src/main]  (1 files)
+      src/main/run.f90
+  [src/mctc]  (6 files)
+      src/mctc/error.f90
+      src/mctc/mctc_filetools.f90
+      src/mctc/mctc_init.F90
+      src/mctc/mctc_linux.f90
+      src/mctc/namegen.f90
+      src/mctc/runtypes.f90
+  [src/type]  (1 files)
+      src/type/options.f90
+  [symmetry]  (1 files)
+      symmetry/symmetry.f90
+
+EXTERNAL (non-in-tree) modules referenced by closure: 54
+  cpx  <- 1 file(s) in closure
+  cublas  <- 4 file(s) in closure
+  cusolverdn  <- 2 file(s) in closure
+  dftd4_data_hardness  <- 1 file(s) in closure
+  mctc_data  <- 1 file(s) in closure
+  mctc_env  <- 25 file(s) in closure
+  mctc_io  <- 19 file(s) in closure
+  mctc_io_constants  <- 2 file(s) in closure
+  mctc_io_convert  <- 4 file(s) in closure
+  mctc_io_filetype  <- 1 file(s) in closure
+  mctc_io_structure  <- 2 file(s) in closure
+  mctc_io_structure_info  <- 1 file(s) in closure
+  multicharge_model  <- 2 file(s) in closure
+  tblite_adjlist  <- 5 file(s) in closure
+  tblite_basis_ortho  <- 1 file(s) in closure
+  tblite_basis_slater  <- 1 file(s) in closure
+  tblite_basis_type  <- 19 file(s) in closure
+  tblite_blas  <- 9 file(s) in closure
+  tblite_ceh_ceh  <- 1 file(s) in closure
+  tblite_ceh_singlepoint  <- 1 file(s) in closure
+  tblite_container  <- 3 file(s) in closure
+  tblite_context  <- 4 file(s) in closure
+  tblite_context_terminal  <- 1 file(s) in closure
+  tblite_context_type  <- 1 file(s) in closure
+  tblite_coulomb_charge_effective  <- 1 file(s) in closure
+  tblite_cutoff  <- 3 file(s) in closure
+  tblite_data_spin  <- 1 file(s) in closure
+  tblite_external_field  <- 3 file(s) in closure
+  tblite_integral_dipole  <- 1 file(s) in closure
+  tblite_integral_multipole  <- 4 file(s) in closure
+  tblite_integral_overlap  <- 3 file(s) in closure
+  tblite_integral_type  <- 3 file(s) in closure
+  tblite_lapack_solver  <- 2 file(s) in closure
+  tblite_lapack_sygvd  <- 1 file(s) in closure
+  tblite_output_ascii  <- 1 file(s) in closure
+  tblite_output_format  <- 1 file(s) in closure
+  tblite_param  <- 1 file(s) in closure
+  tblite_post_processing_list  <- 1 file(s) in closure
+  tblite_results  <- 2 file(s) in closure
+  tblite_scf_iterator  <- 2 file(s) in closure
+  tblite_scf_potential  <- 3 file(s) in closure
+  tblite_scf_solver  <- 1 file(s) in closure
+  tblite_solvation  <- 1 file(s) in closure
+  tblite_spin  <- 1 file(s) in closure
+  tblite_wavefunction  <- 8 file(s) in closure
+  tblite_wavefunction_fermi  <- 2 file(s) in closure
+  tblite_wavefunction_mulliken  <- 2 file(s) in closure
+  tblite_wavefunction_spin  <- 1 file(s) in closure
+  tblite_wavefunction_type  <- 2 file(s) in closure
+  tblite_xtb_calculator  <- 3 file(s) in closure
+  tblite_xtb_gfn1  <- 2 file(s) in closure
+  tblite_xtb_gfn2  <- 2 file(s) in closure
+  tblite_xtb_ipea1  <- 2 file(s) in closure
+  tblite_xtb_singlepoint  <- 2 file(s) in closure
+
+MODULES PROVIDED ONLY BY EXCLUDED FILES: 17
+  nvtx  (nvtx.f90)
+  xtb__  (run.f90)
+  xtb_api_calculator  (calculator.f90)
+  xtb_api_environment  (environment.f90)
+  xtb_api_interface  (interface.f90)
+  xtb_api_molecule  (molecule.f90)
+  xtb_api_results  (results.f90)
+  xtb_api_utils  (utils.f90)
+  xtb_api_version  (version.f90)
+  xtb_dipro_version  (version.f90)
+  xtb_mctc_filetools  (mctc_filetools.f90)
+  xtb_mctc_linux  (mctc_linux.f90)
+  xtb_mctc_namegen  (namegen.f90)
+  xtb_mctc_runtypes  (runtypes.f90)
+  xtb_pbc_optimizer_filter  (filter.f90)
+  xtb_pbc_optimizer_optimizer  (optimizer.f90)
+  xtb_type_options  (options.f90)
+
+========================================================================
+EXTERNAL MODULE FAMILIES AND IN-TREE REFERRERS
+========================================================================
+cpx: 1 files, modules: cpx
+    src/solv/cpx.F90
+dftd4: 1 files, modules: dftd4_data_hardness
+    src/ptb/coulomb.F90
+mctc_data: 1 files, modules: mctc_data
+    src/ptb/ncoord.F90
+mctc_env: 25 files, modules: mctc_env
+    src/dipro.F90
+    src/dipro/bondorder.F90
+    src/dipro/fragment.f90
+    src/dipro/xtb.F90
+    src/io/reader.f90
+    src/io/writer.f90
+    src/main/json.F90
+    src/ptb/calculator.F90
+    src/ptb/corebasis.F90
+    src/ptb/coulomb.F90
+    src/ptb/guess.F90
+    src/ptb/hamiltonian.F90
+    src/ptb/integral_types.F90
+    src/ptb/integrals.F90
+    src/ptb/mmlpopanalysis.F90
+    src/ptb/ncoord.F90
+    src/ptb/paulixc.F90
+    src/ptb/plusu.F90
+    src/ptb/property.F90
+    src/ptb/response.F90
+    src/ptb/solver.F90
+    src/ptb/twostepscf.F90
+    src/ptb/vdzp.F90
+    src/solv/cpx.F90
+    src/tblite/calculator.F90
+mctc_io: 23 files, modules: mctc_io, mctc_io_constants, mctc_io_convert, mctc_io_filetype, mctc_io_structure, mctc_io_structure_info
+    src/dipro.F90
+    src/dipro/xtb.F90
+    src/io/reader.f90
+    src/io/writer.f90
+    src/main/property.F90
+    src/mctc/filetypes.f90
+    src/ptb/calculator.F90
+    src/ptb/corebasis.F90
+    src/ptb/coulomb.F90
+    src/ptb/guess.F90
+    src/ptb/hamiltonian.F90
+    src/ptb/integrals.F90
+    src/ptb/ncoord.F90
+    src/ptb/paulixc.F90
+    src/ptb/plusu.F90
+    src/ptb/property.F90
+    src/ptb/response.F90
+    src/ptb/twostepscf.F90
+    src/ptb/vdzp.F90
+    src/tblite/calculator.F90
+    src/tblite/mapping.F90
+    src/type/molecule.f90
+    src/type/vendordata.f90
+multicharge: 2 files, modules: multicharge_model
+    src/ptb/calculator.F90
+    src/ptb/twostepscf.F90
+tblite: 23 files, modules: tblite_adjlist, tblite_basis_ortho, tblite_basis_slater, tblite_basis_type, tblite_blas, tblite_ceh_ceh, tblite_ceh_singlepoint, tblite_container, tblite_context, tblite_context_terminal, tblite_context_type, tblite_coulomb_charge_effective, tblite_cutoff, tblite_data_spin, tblite_external_field, tblite_integral_dipole, tblite_integral_multipole, tblite_integral_overlap, tblite_integral_type, tblite_lapack_solver, tblite_lapack_sygvd, tblite_output_ascii, tblite_output_format, tblite_param, tblite_post_processing_list, tblite_results, tblite_scf_iterator, tblite_scf_potential, tblite_scf_solver, tblite_solvation, tblite_spin, tblite_wavefunction, tblite_wavefunction_fermi, tblite_wavefunction_mulliken, tblite_wavefunction_spin, tblite_wavefunction_type, tblite_xtb_calculator, tblite_xtb_gfn1, tblite_xtb_gfn2, tblite_xtb_ipea1, tblite_xtb_singlepoint
+    src/dipro.F90
+    src/dipro/bondorder.F90
+    src/dipro/xtb.F90
+    src/main/json.F90
+    src/main/property.F90
+    src/ptb/calculator.F90
+    src/ptb/corebasis.F90
+    src/ptb/coulomb.F90
+    src/ptb/guess.F90
+    src/ptb/hamiltonian.F90
+    src/ptb/integrals.F90
+    src/ptb/mmlpopanalysis.F90
+    src/ptb/paulixc.F90
+    src/ptb/plusu.F90
+    src/ptb/property.F90
+    src/ptb/response.F90
+    src/ptb/solver.F90
+    src/ptb/twostepscf.F90
+    src/ptb/vdzp.F90
+    src/tblite/calculator.F90
+    src/tblite/mapping.F90
+    src/type/data.F90
+    src/type/restart.F90
+
+========================================================================
+CLOSURE SEEDED ONLY FROM src/prog/main.F90
+========================================================================
+total fortran files in repo (src/+symmetry/): 362
+seed files: 1
+files in transitive closure: 274
+files excluded by closure: 88
+
+EXCLUDED FILES grouped by directory:
+  [src]  (51 files)
+      src/constr.f90
+      src/david.f
+      src/define.f90
+      src/drsp.f
+      src/elem.f90
+      src/enso_printout.f90
+      src/eqrot.f90
+      src/expire.f90
+      src/filetools.F90
+      src/foden.f90
+      src/fragment.f90
+      src/generate_wsc.f90
+      src/geosum.f90
+      src/getname.f90
+      src/getsymnum.f90
+      src/gfn_prparam.f90
+      src/header.f90
+      src/htosq.f90
+      src/ifind.f90
+      src/lin.f90
+      src/locmode.f90
+      src/lopt.f90
+      src/makel.f90
+      src/matinv.f90
+      src/neighbor.f90
+      src/nvtx.f90
+      src/pocketscan.f90
+      src/pqn.f90
+      src/printmold.f90
+      src/prmat.f90
+      src/prmat2.f90
+      src/pseudodiag.f90
+      src/qpot.f90
+      src/qsort.f90
+      src/rabguess.f90
+      src/rdcoord2.f90
+      src/readl.f90
+      src/readl2.f90
+      src/rmrottr.f90
+      src/rmsd.f90
+      src/shiftlp.f90
+      src/spline2.f90
+      src/spline3.f90
+      src/surfac.f
+      src/timing.f90
+      src/wrbas.f90
+      src/wrgbw.f90
+      src/wrmo.f90
+      src/wrmodef.f90
+      src/xhelp.f90
+      src/zmatpr.f90
+  [src/api]  (7 files)
+      src/api/calculator.f90
+      src/api/environment.f90
+      src/api/interface.f90
+      src/api/molecule.f90
+      src/api/results.f90
+      src/api/utils.f90
+      src/api/version.f90
+  [src/dipro]  (1 files)
+      src/dipro/version.f90
+  [src/disp]  (1 files)
+      src/disp/dftd3.f
+  [src/docking]  (2 files)
+      src/docking/search_nci.f90
+      src/docking/set_module.f90
+  [src/freq]  (1 files)
+      src/freq/utils.f90
+  [src/gfnff]  (5 files)
+      src/gfnff/getring36.f90
+      src/gfnff/gfnff_qm.f90
+      src/gfnff/gfnff_rab.f
+      src/gfnff/math.f
+      src/gfnff/shortest_distance.f90
+  [src/lbfgs_anc]  (2 files)
+      src/lbfgs_anc/filter.f90
+      src/lbfgs_anc/optimizer.f90
+  [src/main]  (2 files)
+      src/main/geometry.f90
+      src/main/run.f90
+  [src/mctc]  (6 files)
+      src/mctc/error.f90
+      src/mctc/mctc_filetools.f90
+      src/mctc/mctc_init.F90
+      src/mctc/mctc_linux.f90
+      src/mctc/namegen.f90
+      src/mctc/runtypes.f90
+  [src/param]  (1 files)
+      src/param/atomicmass.f90
+  [src/prog]  (7 files)
+      src/prog/dock.f90
+      src/prog/info.f90
+      src/prog/irmod.f90
+      src/prog/primary.f90
+      src/prog/submodules.f90
+      src/prog/thermo.f90
+      src/prog/topology.f90
+  [src/type]  (1 files)
+      src/type/options.f90
+  [symmetry]  (1 files)
+      symmetry/symmetry.f90
+
+EXTERNAL (non-in-tree) modules referenced by closure: 54
+  cpx  <- 1 file(s) in closure
+  cublas  <- 4 file(s) in closure
+  cusolverdn  <- 2 file(s) in closure
+  dftd4_data_hardness  <- 1 file(s) in closure
+  mctc_data  <- 1 file(s) in closure
+  mctc_env  <- 25 file(s) in closure
+  mctc_io  <- 19 file(s) in closure
+  mctc_io_constants  <- 2 file(s) in closure
+  mctc_io_convert  <- 4 file(s) in closure
+  mctc_io_filetype  <- 1 file(s) in closure
+  mctc_io_structure  <- 2 file(s) in closure
+  mctc_io_structure_info  <- 1 file(s) in closure
+  multicharge_model  <- 2 file(s) in closure
+  tblite_adjlist  <- 5 file(s) in closure
+  tblite_basis_ortho  <- 1 file(s) in closure
+  tblite_basis_slater  <- 1 file(s) in closure
+  tblite_basis_type  <- 19 file(s) in closure
+  tblite_blas  <- 9 file(s) in closure
+  tblite_ceh_ceh  <- 1 file(s) in closure
+  tblite_ceh_singlepoint  <- 1 file(s) in closure
+  tblite_container  <- 3 file(s) in closure
+  tblite_context  <- 4 file(s) in closure
+  tblite_context_terminal  <- 1 file(s) in closure
+  tblite_context_type  <- 1 file(s) in closure
+  tblite_coulomb_charge_effective  <- 1 file(s) in closure
+  tblite_cutoff  <- 3 file(s) in closure
+  tblite_data_spin  <- 1 file(s) in closure
+  tblite_external_field  <- 3 file(s) in closure
+  tblite_integral_dipole  <- 1 file(s) in closure
+  tblite_integral_multipole  <- 4 file(s) in closure
+  tblite_integral_overlap  <- 3 file(s) in closure
+  tblite_integral_type  <- 3 file(s) in closure
+  tblite_lapack_solver  <- 2 file(s) in closure
+  tblite_lapack_sygvd  <- 1 file(s) in closure
+  tblite_output_ascii  <- 1 file(s) in closure
+  tblite_output_format  <- 1 file(s) in closure
+  tblite_param  <- 1 file(s) in closure
+  tblite_post_processing_list  <- 1 file(s) in closure
+  tblite_results  <- 2 file(s) in closure
+  tblite_scf_iterator  <- 2 file(s) in closure
+  tblite_scf_potential  <- 3 file(s) in closure
+  tblite_scf_solver  <- 1 file(s) in closure
+  tblite_solvation  <- 1 file(s) in closure
+  tblite_spin  <- 1 file(s) in closure
+  tblite_wavefunction  <- 8 file(s) in closure
+  tblite_wavefunction_fermi  <- 2 file(s) in closure
+  tblite_wavefunction_mulliken  <- 2 file(s) in closure
+  tblite_wavefunction_spin  <- 1 file(s) in closure
+  tblite_wavefunction_type  <- 2 file(s) in closure
+  tblite_xtb_calculator  <- 3 file(s) in closure
+  tblite_xtb_gfn1  <- 2 file(s) in closure
+  tblite_xtb_gfn2  <- 2 file(s) in closure
+  tblite_xtb_ipea1  <- 2 file(s) in closure
+  tblite_xtb_singlepoint  <- 2 file(s) in closure
+
+MODULES PROVIDED ONLY BY EXCLUDED FILES: 27
+  nvtx  (nvtx.f90)
+  xtb__  (run.f90)
+  xtb_api_calculator  (calculator.f90)
+  xtb_api_environment  (environment.f90)
+  xtb_api_interface  (interface.f90)
+  xtb_api_molecule  (molecule.f90)
+  xtb_api_results  (results.f90)
+  xtb_api_utils  (utils.f90)
+  xtb_api_version  (version.f90)
+  xtb_dipro_version  (version.f90)
+  xtb_docking_search_nci  (search_nci.f90)
+  xtb_docking_set_module  (set_module.f90)
+  xtb_freq_utils  (utils.f90)
+  xtb_mctc_filetools  (mctc_filetools.f90)
+  xtb_mctc_linux  (mctc_linux.f90)
+  xtb_mctc_namegen  (namegen.f90)
+  xtb_mctc_runtypes  (runtypes.f90)
+  xtb_param_atomicmass  (atomicmass.f90)
+  xtb_pbc_optimizer_filter  (filter.f90)
+  xtb_pbc_optimizer_optimizer  (optimizer.f90)
+  xtb_prog_dock  (dock.f90)
+  xtb_prog_info  (info.f90)
+  xtb_prog_ir  (irmod.f90)
+  xtb_prog_submodules  (submodules.f90)
+  xtb_prog_thermo  (thermo.f90)
+  xtb_prog_topology  (topology.f90)
+  xtb_type_options  (options.f90)
+

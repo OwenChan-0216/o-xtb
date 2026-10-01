@@ -72,3 +72,6 @@ python/build
 
 # external directory
 ext/
+
+# agent session notes (local only)
+AGENTS.md

@@ -47,6 +47,15 @@ tests = [
   'gfnff',
   'hessian',
   'iff',
+  'landscape-api',
+  'landscape-settings',
+  'landscape-coords',
+  'landscape-hessian-update',
+  'landscape-optimize-math',
+  'landscape-cg',
+  'landscape-hessian',
+  'landscape-optimize-xtb',
+  'landscape-failure',
   'latticepoint',
   'molecule',
   'model-hessian',
@@ -68,6 +77,8 @@ tests = [
 test_srcs = files(
   'main.f90',
   'molstock.f90',
+  #> analytic test potentials shared by the landscape tests
+  'landscape_testpot.f90',
   #> PTB as additional test since ending is different
   'test_ptb.F90',
 )
@@ -87,7 +98,13 @@ tester = executable(
 )
 
 foreach t : tests
-  test(t, tester, args: t, suite: 'unit', env: xtbenv)
+  if t == 'landscape-optimize-xtb'
+    # bitwise reproducibility of the `off` restart policy needs a fixed thread
+    # count (OpenMP reduction ordering changes the last bits)
+    test(t, tester, args: t, suite: 'unit', env: xtbenv + ['OMP_NUM_THREADS=1'])
+  else
+    test(t, tester, args: t, suite: 'unit', env: xtbenv)
+  endif
 endforeach
 test('ptb', tester, args: 'ptb', suite: 'unit', env: xtbenv)
 
@@ -109,3 +126,20 @@ if host_machine.system() != 'windows'
     files('../../assets/inputs/vasp/ammonia.vasp'),
   ])
 endif
+
+# CLI level smoke test of the new `--lopt` run type.  The water input is
+# generated in the build directory with the Python interpreter meson always
+# provides (see the root meson.build); the test fails if the minimisation does
+# not converge, because a non-converged landscape run reports an error and
+# therefore exits with a non-zero status.
+h2o_xyz = meson.current_build_dir() / 'landscape_h2o.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("3\\nwater\\nO 0.0 0.0 0.0\\nH 0.0 0.0 0.96\\nH 0.93 0.0 -0.24\\n")',
+  h2o_xyz,
+  check: true,
+)
+test('landscape opt', xtb_exe, env: xtbenv, args: [
+  h2o_xyz, '--gfn', '2', '--lopt', '--lopt-engine', 'lbfgs',
+  '--lopt-level', 'normal', '--norestart', '--namespace', 'landscape1',
+])

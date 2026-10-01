@@ -1061,6 +1061,9 @@ subroutine set_runtyp(typ)
    case('omd')
       set%runtyp = p_run_omd
 
+   case('lopt')
+      set%runtyp = p_run_lopt
+
    case('path')
       set%runtyp = p_run_path
 
