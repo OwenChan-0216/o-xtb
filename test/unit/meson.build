@@ -61,6 +61,7 @@ tests = [
   'landscape-saddle',
   'landscape-path',
   'landscape-irc',
+  'landscape-e2e',
   'latticepoint',
   'molecule',
   'model-hessian',
@@ -103,7 +104,7 @@ tester = executable(
 )
 
 foreach t : tests
-  if t == 'landscape-optimize-xtb' or t == 'landscape-scan' or t == 'landscape-vib'
+  if t == 'landscape-optimize-xtb' or t == 'landscape-scan' or t == 'landscape-vib' or t == 'landscape-e2e'
     # bitwise reproducibility of the `off` restart policy needs a fixed thread
     # count (OpenMP reduction ordering changes the last bits); the scan and
     # frequency suites additionally run 340x faster with one thread (they
@@ -177,6 +178,15 @@ landscape_cli_dir = meson.current_build_dir()
 test('landscape opt energy', python, env: landscape_env, args: [
   landscape_cli_check, 'energy', xtb_exe, h2o_xyz,
   landscape_cli_dir / 'landscape-cli-energy',
+])
+
+# the file namespace of the `--lopt` geometry and trajectory: without
+# `--namespace` the names stay `xtbopt.xyz`/`xtb.trj`, and two namespaced runs in
+# one directory write (and keep) two different geometry files (mirrors
+# `xtb/landscape-opt-namespace`; the stretched input is written by the check)
+test('landscape opt namespace', python, env: landscape_env, args: [
+  landscape_cli_check, 'optnamespace', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-opt-namespace',
 ])
 
 # the CLI accuracy (`--acc`) must reach the engine control and change the result
@@ -468,4 +478,81 @@ test('landscape irc dwi n', python, env: xtbenv, args: [
 test('landscape irc termination', python, env: landscape_env, args: [
   landscape_cli_check, 'irctermination', xtb_exe, hcn_xyz,
   landscape_cli_dir / 'landscape-cli-irc-termination',
+])
+
+# ---------------------------------------------------------------------------
+# M7: `--ljson` and the end-to-end validation script
+# ---------------------------------------------------------------------------
+#
+# `landscape_e2e_check.py` implements the layered validation of PLAN section
+# 9.8 and the machine readable checks of `--ljson`: it parses the document with
+# the JSON parser of the standard library, compares every counter against the
+# number the task printed, requires two runs to be byte identical and checks
+# the namespace prefix.  Meson cannot inspect the output of a test, so the
+# conditions live in the script exactly like the ones of
+# `landscape_cli_check.py`.
+landscape_e2e_check = files('landscape_e2e_check.py')
+
+# The `sp` task has no run type of its own (it is API only) and is covered by
+# the unit suite `landscape-e2e` instead.
+foreach task : ['opt', 'scan', 'scan2d', 'vib', 'ts', 'irc']
+  if task == 'ts' or task == 'irc'
+    e2e_input = hcn_xyz
+  else
+    e2e_input = h2o_xyz
+  endif
+  test('landscape ljson @0@'.format(task), python, env: landscape_env, args: [
+    landscape_e2e_check, 'ljson', xtb_exe, e2e_input,
+    landscape_cli_dir / 'landscape-e2e-ljson-@0@'.format(task), task,
+  ])
+endforeach
+
+# `--ljson` without a landscape run type writes nothing; the no-op has to be
+# reported and no document may appear (mirrors `xtb/landscape-ljson-no-runtype`)
+test('landscape ljson no runtype', python, env: landscape_env, args: [
+  landscape_cli_check, 'ljsonnorun', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-ljson-no-runtype',
+])
+
+# The product endpoint of the HCN/HNC band searches (same atom order as the
+# reactant, HNC on the H-C-N line).  A distinct variable name: `hnc_xyz` above
+# is the linear-HNC input of the transition state tests.
+hnc_product_xyz = meson.current_build_dir() / 'landscape_hnc_product.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("3\\nHNC product\\nH 1.0 0.0 0.0\\nC -1.17 0.0 0.0\\nN 0.0 0.0 0.0\\n")',
+  hnc_product_xyz,
+  check: true,
+)
+# `--ljson` must produce a valid document for every task method: the eight `ts`
+# methods (four band searches among them) and the four `irc` methods.
+test('landscape e2e ljson methods', python, env: landscape_env, args: [
+  landscape_e2e_check, 'ljson-methods', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-e2e-ljson-methods', hnc_product_xyz,
+])
+# The sampling point of the `ts` evaluation counter (PLAN section 12.11).
+test('landscape e2e ts counters', python, env: landscape_env, args: [
+  landscape_e2e_check, 'ts-counters', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-e2e-ts-counters',
+])
+# The point bookkeeping of a scan, converged and not.
+test('landscape e2e scan counters', python, env: landscape_env, args: [
+  landscape_e2e_check, 'scan-counters', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-e2e-scan-counters',
+])
+test('landscape e2e chain', python, env: landscape_env, args: [
+  landscape_e2e_check, 'chain', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-e2e-chain',
+])
+test('landscape e2e chain failure', python, env: landscape_env, args: [
+  landscape_e2e_check, 'chain-failure', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-e2e-chain-failure',
+])
+test('landscape e2e layers', python, env: landscape_env, args: [
+  landscape_e2e_check, 'layers', xtb_exe, tester, h2o_xyz,
+  landscape_cli_dir / 'landscape-e2e-layers', hcn_xyz,
+])
+test('landscape e2e maple', python, env: landscape_env, args: [
+  landscape_e2e_check, 'maple', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-e2e-maple',
 ])

@@ -34,6 +34,7 @@
 !> Units: coordinates in bohr, energies in hartree, gradients in hartree/bohr.
 module xtb_landscape_tasks_scan
    use xtb_mctc_accuracy, only : wp
+   use xtb_mctc_convert, only : autokcal
    use xtb_mctc_filetypes, only : fileType
    use xtb_type_environment, only : TEnvironment
    use xtb_type_molecule, only : TMolecule, init
@@ -43,7 +44,7 @@ module xtb_landscape_tasks_scan
    use xtb_setparam, only : get_namespace
    use xtb_landscape_settings, only : landscape_scan_settings, &
       & landscape_restart_name, landscape_scan_coord_name, &
-      & landscape_missing_value
+      & landscape_missing_value, landscape_value_present
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack
    use xtb_landscape_engine, only : landscape_engine, new_landscape_engine, &
@@ -54,6 +55,13 @@ module xtb_landscape_tasks_scan
       & landscape_scan_profile_write
    use xtb_landscape_scan2d, only : landscape_scan_grid, landscape_scan2d, &
       & landscape_scan_grid_write
+   use xtb_landscape_json, only : landscape_json_document, &
+      & landscape_json_document_init, landscape_json_add_result, &
+      & landscape_json_add_counter, landscape_json_add_value, &
+      & landscape_json_add_flag, landscape_json_add_series, &
+      & landscape_json_write, &
+      & landscape_json_status_ok, landscape_json_status_incomplete, &
+      & landscape_json_status_error
    implicit none(type, external)
    private
 
@@ -183,6 +191,10 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
 
    result%n_eval = engine%n_eval
    result%n_cache_miss = engine%n_eval
+   ! M4 hard constraint 1: the effective electronic temperature is part of the
+   ! result object (read back from the calculator), not only of the printed
+   ! engine report.
+   result%etemp = engine%effective_etemp()
    result%energy = best_energy
    result%gnorm = best_residual
    result%gmax = best_residual
@@ -230,7 +242,14 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
       ! missing value and the reference geometry is the input geometry (the
       ! `0.0` of an unevaluated point must never be reported as a result).
       result%message = "scan completed without a converged point"
-      call env%warning("no scan point converged: the reported energy is "//&
+      ! M7 close-out of PLAN line 1805: a result that is not available is a
+      ! non-zero exit.  Before this round the branch only warned and the
+      ! process exited 0 next to a NaN `TOTAL ENERGY` (the semantics recorded
+      ! as INFO-3 in PLAN section 12.11); a caller of a scan chain cannot
+      ! distinguish that from a valid result.  A scan with **some**
+      ! unconverged points keeps exit 0 (see the next branch): it still has a
+      ! converged minimum and the residuals make the caveat visible.
+      call env%error("no scan point converged: the reported energy is "//&
          & "undefined (it stays NaN) and the reference geometry is the input "//&
          & "geometry; raise the step budget of the inner relaxation "//&
          & "(max_steps)", source)
@@ -246,7 +265,135 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
       result%message = "scan completed"
    end if
 
+   ! The document is written independently of `write_files`: it is the
+   ! regression artefact of the run, not a geometry file (see
+   ! `landscape_settings%ljson`).
+   if (settings%ljson) then
+      if (settings%ndim == 2) then
+         call write_json_grid(env, result, grid, n_fail, n_unconverged, n_valid)
+      else
+         call write_json_profile(env, result, profile, n_fail, n_unconverged, n_valid)
+      end if
+   end if
+
 end subroutine landscape_scan
+
+!> Write the structured result `landscape_scan.json` of a 1D scan.
+!>
+!> The `energy` series is the de-biased energy of every point in visit
+!> order, i.e. the quantity of `xtbscan.log`; the counters are the point
+!> counts the task prints (`n_points`, `n_valid`, `n_fail`,
+!> `n_unconverged`) next to the aggregate `n_eval` of the result.
+subroutine write_json_profile(env, result, profile, n_fail, n_unconverged, n_valid)
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Aggregate scan result
+   type(landscape_result), intent(in) :: result
+   !> 1D scan profile
+   type(landscape_scan_profile), intent(in) :: profile
+   !> Number of points whose single point failed
+   integer, intent(in) :: n_fail
+   !> Number of points whose inner relaxation stopped short
+   integer, intent(in) :: n_unconverged
+   !> Number of points that carry a usable energy
+   integer, intent(in) :: n_valid
+
+   type(landscape_json_document) :: doc = landscape_json_document()
+   logical :: ok
+   integer :: status
+
+   call scan_json_status(result, n_fail, status)
+   call landscape_json_document_init(doc, 'scan')
+   call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_counter(doc, 'n_points', profile%n_points)
+   call landscape_json_add_counter(doc, 'n_forward', profile%n_forward)
+   call landscape_json_add_counter(doc, 'n_valid', n_valid)
+   call landscape_json_add_counter(doc, 'n_fail', n_fail)
+   call landscape_json_add_counter(doc, 'n_unconverged', n_unconverged)
+   call landscape_json_add_value(doc, 'kcal_per_mol', result%energy*autokcal)
+   call landscape_json_add_flag(doc, 'bidirectional', profile%bidirectional)
+   if (allocated(profile%energy)) then
+      call landscape_json_add_series(doc, 'energy', profile%energy)
+   end if
+   if (allocated(profile%reached)) then
+      call landscape_json_add_series(doc, 'reached', profile%reached)
+   end if
+   if (allocated(profile%residual)) then
+      call landscape_json_add_series(doc, 'residual', profile%residual)
+   end if
+   call landscape_json_write(env, doc, ok)
+
+end subroutine write_json_profile
+
+!> Write the structured result `landscape_scan.json` of a 2D grid scan.
+!>
+!> The `energy` series holds the grid in **visit order** (the order the
+!> serpentine sweep evaluated the points), so it lines up with the frames of
+!> `xtbscan.log`; `n_points` is `n1*n2`.
+subroutine write_json_grid(env, result, grid, n_fail, n_unconverged, n_valid)
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Aggregate scan result
+   type(landscape_result), intent(in) :: result
+   !> 2D scan grid
+   type(landscape_scan_grid), intent(in) :: grid
+   !> Number of points whose single point failed
+   integer, intent(in) :: n_fail
+   !> Number of points whose inner relaxation stopped short
+   integer, intent(in) :: n_unconverged
+   !> Number of points that carry a usable energy
+   integer, intent(in) :: n_valid
+
+   type(landscape_json_document) :: doc = landscape_json_document()
+   real(wp), allocatable :: energy(:)
+   logical :: ok
+   integer :: status, i
+
+   call scan_json_status(result, n_fail, status)
+   call landscape_json_document_init(doc, 'scan')
+   call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_counter(doc, 'n_points', grid%n_points)
+   call landscape_json_add_counter(doc, 'n1', grid%n1)
+   call landscape_json_add_counter(doc, 'n2', grid%n2)
+   call landscape_json_add_counter(doc, 'n_valid', n_valid)
+   call landscape_json_add_counter(doc, 'n_fail', n_fail)
+   call landscape_json_add_counter(doc, 'n_unconverged', n_unconverged)
+   call landscape_json_add_value(doc, 'kcal_per_mol', result%energy*autokcal)
+   if (allocated(grid%energy) .and. allocated(grid%visit_i)) then
+      allocate(energy(grid%n_points))
+      do i = 1, grid%n_points
+         energy(i) = grid%energy(grid%visit_i(i), grid%visit_j(i))
+      end do
+      call landscape_json_add_series(doc, 'energy', energy)
+   end if
+   call landscape_json_write(env, doc, ok)
+
+end subroutine write_json_grid
+
+!> Verdict of a scan for the JSON document.
+!>
+!> A failed point makes the result unusable (status `error`; the task reports
+!> it through `env` and exits non-zero), an all-unconverged scan has no
+!> minimum either, and a partially unconverged scan is `incomplete` with a
+!> usable minimum.
+pure subroutine scan_json_status(result, n_fail, status)
+   !> Aggregate scan result
+   type(landscape_result), intent(in) :: result
+   !> Number of points whose single point failed
+   integer, intent(in) :: n_fail
+   !> Task verdict
+   integer, intent(out) :: status
+
+   status = landscape_json_status_ok
+   if (.not. result%converged) status = landscape_json_status_incomplete
+   if (n_fail > 0) status = landscape_json_status_error
+   if (result%n_steps > 0 .and. .not. result%converged) then
+      if (.not. landscape_value_present(result%energy)) then
+         status = landscape_json_status_error
+      end if
+   end if
+
+end subroutine scan_json_status
 
 !> Write the 1D scan log, one xyz frame per point with a de-biased energy.
 !>

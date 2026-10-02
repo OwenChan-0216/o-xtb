@@ -94,6 +94,12 @@ module xtb_landscape_tasks_irc
    use xtb_landscape_irc_lqa, only : landscape_irc_lqa_walk
    use xtb_landscape_irc_hpc, only : landscape_irc_hpc_walk
    use xtb_landscape_irc_eulerpc, only : landscape_irc_eulerpc_walk
+   use xtb_landscape_json, only : landscape_json_document, &
+      & landscape_json_document_init, landscape_json_add_counter, &
+      & landscape_json_add_value, landscape_json_add_flag, &
+      & landscape_json_add_series, landscape_json_write, &
+      & landscape_json_status_ok, landscape_json_status_incomplete, &
+      & landscape_json_status_error
    implicit none(type, external)
    private
 
@@ -350,7 +356,100 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
    end if
    result%message = "IRC integration completed"
 
+   if (settings%ljson) then
+      call write_json(env, settings, result, have_bwd, n_scf_fail)
+   end if
+
 end subroutine landscape_irc
+
+!> Write the structured result `landscape_irc.json`.
+!>
+!> The `s` series is the arc length of the integrator in
+!> `bohr*amu^1/2`; as in the printed table it is a chord summation for
+!> `gs`/`hpc`/`eulerpc` and the integrated arc length for `lqa`, so the
+!> series must not be compared across methods (M6 handover LOW-4).  The
+!> energy series are the reference for the endpoint attribution: the last
+!> point of each direction is the one the `reached_min_*` flag refers to.
+!>
+!> Status: an IRC of a first order saddle that produced both paths is `ok`
+!> (or `incomplete` when a direction only stopped on the step budget).  A
+!> run whose input is not a saddle, that could not build a direction or that
+!> had an unconverged SCC is `error` - the task reports it through `env` and
+!> the process exits non-zero.
+subroutine write_json(env, settings, result, have_bwd, n_scf_fail)
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> IRC settings
+   type(landscape_irc_settings), intent(in) :: settings
+   !> IRC result
+   type(landscape_irc_result), intent(in) :: result
+   !> True if the backward direction was integrated
+   logical, intent(in) :: have_bwd
+   !> Number of unconverged SCCs of the run
+   integer, intent(in) :: n_scf_fail
+
+   type(landscape_json_document) :: doc = landscape_json_document()
+   logical :: ok, complete
+   integer :: status, n_eval_fwd, n_eval_bwd
+
+   n_eval_fwd = 0
+   if (allocated(result%n_eval_fwd)) n_eval_fwd = sum(result%n_eval_fwd)
+   n_eval_bwd = 0
+   if (allocated(result%n_eval_bwd)) n_eval_bwd = sum(result%n_eval_bwd)
+
+   complete = result%is_saddle .and. (result%term_fwd /= 1)
+   if (have_bwd) complete = complete .and. (result%term_bwd /= 1)
+   status = landscape_json_status_ok
+   if (complete .and. result%n_fwd > 0) status = landscape_json_status_ok
+   if (.not. complete) status = landscape_json_status_incomplete
+   if (.not. result%is_saddle .or. result%n_fwd == 0) then
+      status = landscape_json_status_error
+   end if
+   if (n_scf_fail > 0) status = landscape_json_status_error
+
+   call landscape_json_document_init(doc, 'irc')
+   doc%status = status
+   doc%converged = result%is_saddle .and. result%n_fwd > 0
+   if (allocated(result%message)) doc%message = result%message
+   call landscape_json_add_counter(doc, 'method', settings%method)
+   call landscape_json_add_counter(doc, 'n_fwd', result%n_fwd)
+   call landscape_json_add_counter(doc, 'n_bwd', result%n_bwd)
+   call landscape_json_add_counter(doc, 'n_imag', result%n_imag)
+   call landscape_json_add_counter(doc, 'n_eval_fwd', n_eval_fwd)
+   call landscape_json_add_counter(doc, 'n_eval_bwd', n_eval_bwd)
+   call landscape_json_add_counter(doc, 'n_relax_fwd', result%n_relax_fwd)
+   call landscape_json_add_counter(doc, 'n_relax_bwd', result%n_relax_bwd)
+   call landscape_json_add_counter(doc, 'n_pinned_fwd', result%n_pinned_fwd)
+   call landscape_json_add_counter(doc, 'n_pinned_bwd', result%n_pinned_bwd)
+   call landscape_json_add_counter(doc, 'n_scf_fail', n_scf_fail)
+   call landscape_json_add_counter(doc, 'term_fwd', result%term_fwd)
+   call landscape_json_add_counter(doc, 'term_bwd', result%term_bwd)
+   call landscape_json_add_value(doc, 'energy_ts', result%energy_ts)
+   call landscape_json_add_value(doc, 'gnorm_ts', result%gnorm_ts)
+   call landscape_json_add_value(doc, 'step_length', result%step_length)
+   call landscape_json_add_value(doc, 'etemp', result%etemp)
+   call landscape_json_add_value(doc, 'e_min_fwd', result%e_min_fwd)
+   call landscape_json_add_value(doc, 'e_min_bwd', result%e_min_bwd)
+   call landscape_json_add_value(doc, 'rmsd_to_min_fwd', result%rmsd_to_min_fwd)
+   call landscape_json_add_value(doc, 'rmsd_to_min_bwd', result%rmsd_to_min_bwd)
+   call landscape_json_add_flag(doc, 'is_saddle', result%is_saddle)
+   call landscape_json_add_flag(doc, 'reached_min_fwd', result%reached_min_fwd)
+   call landscape_json_add_flag(doc, 'reached_min_bwd', result%reached_min_bwd)
+   call landscape_json_add_flag(doc, 'two_way', have_bwd)
+   call landscape_json_add_flag(doc, 'swapped', result%swapped)
+   if (allocated(result%e_fwd)) then
+      call landscape_json_add_series(doc, 'energy_fwd', result%e_fwd)
+      call landscape_json_add_series(doc, 's_fwd', result%s_fwd)
+      call landscape_json_add_series(doc, 'gnorm_fwd', result%gnorm_fwd)
+   end if
+   if (allocated(result%e_bwd) .and. result%n_bwd > 0) then
+      call landscape_json_add_series(doc, 'energy_bwd', result%e_bwd)
+      call landscape_json_add_series(doc, 's_bwd', result%s_bwd)
+      call landscape_json_add_series(doc, 'gnorm_bwd', result%gnorm_bwd)
+   end if
+   call landscape_json_write(env, doc, ok)
+
+end subroutine write_json
 
 !> Dispatch one direction to the integrator selected by the settings.
 subroutine walk_direction(env, model, settings, mass, x0, hess, v, sign, path, fail)

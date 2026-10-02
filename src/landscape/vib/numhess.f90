@@ -64,7 +64,7 @@ contains
 !> differentiation; they are returned because the frequency task needs the
 !> energy for the thermochemistry and the gradient norm for its report.
 subroutine landscape_vib_hessian(env, mol, chk, calc, settings, hess, energy, &
-      & gradient, final_err, fail, n_eval)
+      & gradient, final_err, fail, n_eval, etemp)
    character(len=*), parameter :: source = 'landscape_vib_hessian'
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
@@ -89,6 +89,12 @@ subroutine landscape_vib_hessian(env, mol, chk, calc, settings, hess, energy, &
    !> Number of energy/gradient evaluations (6N+1 for the numerical Hessian,
    !> 1 for the model and file sources)
    integer, intent(out), optional :: n_eval
+   !> Effective electronic temperature read back from the calculator (kelvin);
+   !> zero when the engine never touched the calculator (the provider failed
+   !> before the first evaluation).  Recorded for the same reason as in the
+   !> saddle and IRC tasks (M4 hard constraint 1): the value in effect, not
+   !> the request.
+   real(wp), intent(out), optional :: etemp
 
    type(landscape_engine) :: engine
    class(landscape_hessian_provider), allocatable :: hp
@@ -98,6 +104,7 @@ subroutine landscape_vib_hessian(env, mol, chk, calc, settings, hess, energy, &
    energy = 0.0_wp
    gradient = 0.0_wp
    hess = 0.0_wp
+   if (present(etemp)) etemp = 0.0_wp
    final_err = 0.0_wp
    if (present(n_eval)) n_eval = 0
 
@@ -155,6 +162,10 @@ subroutine landscape_vib_hessian(env, mol, chk, calc, settings, hess, energy, &
    ! The engine adds the displaced points of the provider to its own counter,
    ! so the reported cost is the true 6N+1 of the numerical Hessian.
    if (present(n_eval)) n_eval = engine%n_eval
+   ! The effective electronic temperature is read back from the calculator
+   ! (M4 hard constraint 1); the frequency task stores it in its result so it
+   ! reaches `landscape_<task>.json` as well as stdout.
+   if (present(etemp)) etemp = engine%effective_etemp()
    call engine%destroy()
 
 end subroutine landscape_vib_hessian

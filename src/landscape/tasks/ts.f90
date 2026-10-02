@@ -98,6 +98,11 @@ module xtb_landscape_tasks_ts
    use xtb_landscape_path_gsm, only : landscape_string_optimize, landscape_string_type
    use xtb_io_reader, only : readMolecule
    use xtb_mctc_filetypes, only : fileType, getFileType
+   use xtb_landscape_json, only : landscape_json_document, &
+      & landscape_json_document_init, landscape_json_add_result, &
+      & landscape_json_add_counter, landscape_json_add_value, &
+      & landscape_json_add_flag, landscape_json_write, landscape_json_status_ok, &
+      & landscape_json_status_incomplete, landscape_json_status_error
    use xtb_setparam, only : get_namespace
    implicit none(type, external)
    private
@@ -227,6 +232,7 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    ! of images between two fixed endpoints.
    if (landscape_ts_method_is_band(settings%method)) then
       call landscape_ts_band(env, mol, chk, engine, settings, result)
+      if (settings%ljson) call write_json(env, settings, result, engine%n_scf_fail)
       call engine%report(env%unit)
       call engine%destroy()
       return
@@ -246,18 +252,12 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    end if
 
    call geometry_unpack(xfinal, mol%xyz)
-   result%n_cache_miss = engine%n_eval
    ! M1 (review 29): record the *effective* electronic temperature read back
    ! from the calculator, not the setting echoed from the request.  A value
    ! that never reached the calculator would otherwise be invisible in the
    ! result object (the M3 MEDIUM-B "dead field" defect).
    result%etemp = engine%effective_etemp()
    n_scf_fail = engine%n_scf_fail
-
-   if (settings%printlevel > 0) then
-      call result%write_log(env%unit)
-      call result%conv%write_log(env%unit)
-   end if
 
    ! Frequency confirmation of the stationary point.  The Hessian is the one of
    ! the configured provider at the converged geometry; the analysis is the M3
@@ -267,12 +267,30 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
       call confirm_saddle(env, mol, chk, engine, settings, result)
    end if
 
+   ! The evaluation counter is sampled *after* the confirmation: it is the
+   ! cost of the complete run and equals the `landscape engine: energy
+   ! evaluations` line printed below for the same run (M7 fix round, report
+   ! 50 finding M-1 - the sampling point used to be before the confirmation,
+   ! so the two numbers of one and the same stdout disagreed by the 6N finite
+   ! difference evaluations of the confirmation Hessian, and the JSON
+   ! counter was the search-only number).  `--lts-no-verify` therefore
+   ! lowers the counter by exactly one 6N Hessian; the CLI check
+   ! `landscape_e2e_check.py ts-counters` asserts that difference.
+   result%n_cache_miss = engine%n_eval
+
+   if (settings%printlevel > 0) then
+      call result%write_log(env%unit)
+      call result%conv%write_log(env%unit)
+   end if
+
    if (settings%write_files) then
       call write_ts_files(env, mol, settings, result)
    end if
 
    call engine%report(env%unit)
    call engine%destroy()
+
+   if (settings%ljson) call write_json(env, settings, result, n_scf_fail)
 
    if (n_scf_fail > 0) then
       call env%error("transition state search aborted: the SCC did not "//&
@@ -289,6 +307,47 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    end if
 
 end subroutine landscape_ts
+
+!> Write the structured result `landscape_ts.json`.
+!>
+!> The counter `method` is the `p_landscape_ts_*` identifier of the run
+!> (1 `prfo`, 2 `bprfo`, 3 `dimer`, 4 `neb`, 5 `cineb`, 6 `autoneb`,
+!> 7 `string`, 8 `gsm`); it is numeric because the document carries numbers
+!> only, the mapping is the one of `landscape_ts_method_name`.  The band
+!> methods fill `result%converged` from the band criterion and have no
+!> convergence report (`result%conv`), so their `history` block is empty while
+!> the counters and the confirmation are complete.
+subroutine write_json(env, settings, result, n_scf_fail)
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Transition state settings
+   type(landscape_ts_settings), intent(in) :: settings
+   !> Search result
+   type(landscape_result), intent(in) :: result
+   !> Number of unconverged SCCs of the run
+   integer, intent(in) :: n_scf_fail
+
+   type(landscape_json_document) :: doc = landscape_json_document()
+   logical :: ok
+   integer :: status
+
+   status = landscape_json_status_ok
+   if (.not. result%converged) status = landscape_json_status_incomplete
+   ! A converged search that did not end on a first order saddle (or a run
+   ! with an unconverged SCC) has no usable result; the task reports both
+   ! through `env` and exits non-zero.
+   if (settings%verify_ts .and. .not. result%is_saddle) then
+      status = landscape_json_status_error
+   end if
+   if (n_scf_fail > 0) status = landscape_json_status_error
+   call landscape_json_document_init(doc, 'ts')
+   call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_counter(doc, 'method', settings%method)
+   call landscape_json_add_flag(doc, 'verify_ts', settings%verify_ts)
+   call landscape_json_add_value(doc, 'kcal_per_mol', result%energy*autokcal)
+   call landscape_json_write(env, doc, ok)
+
+end subroutine write_json
 
 !> Confirm the stationary point with a frequency analysis.
 !>
@@ -856,12 +915,6 @@ subroutine landscape_ts_finish(env, model, mol, chk, engine, settings, images, k
    result%energy = energy
    result%gnorm = sqrt(sum(gflat**2))
    result%gmax = maxval(abs(gflat))
-   result%n_cache_miss = engine%n_eval
-
-   if (settings%printlevel > 0) then
-      call result%write_log(env%unit)
-      call result%conv%write_log(env%unit)
-   end if
 
    if (has_candidates .and. settings%write_files) then
       call write_ts_candidates(env, mol, chk, engine, settings, candidates, &
@@ -871,6 +924,18 @@ subroutine landscape_ts_finish(env, model, mol, chk, engine, settings, images, k
    if (settings%verify_ts) then
       call confirm_saddle(env, mol, chk, engine, settings, result)
    end if
+
+   ! Same sampling rule as the single-geometry search above (report 50
+   ! finding M-1): the counter belongs after the confirmation Hessian so that
+   ! the printed value, the JSON counter and the engine report of the run
+   ! agree.
+   result%n_cache_miss = engine%n_eval
+
+   if (settings%printlevel > 0) then
+      call result%write_log(env%unit)
+      call result%conv%write_log(env%unit)
+   end if
+
    if (settings%write_files) then
       call write_ts_files(env, mol, settings, result)
    end if

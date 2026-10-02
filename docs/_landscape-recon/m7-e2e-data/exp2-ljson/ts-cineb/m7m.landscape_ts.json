@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "task": "ts",
+  "status": 1,
+  "status_name": "incomplete",
+  "converged": false,
+  "message": "band reached the iteration limit without converging",
+  "counters": {
+    "n_eval": 190,
+    "n_cache_miss": 190,
+    "n_steps": 20,
+    "n_imag": 1,
+    "n_iter": 0,
+    "method": 5
+  },
+  "values": {
+    "energy": -5.38739245462807670E+000,
+    "gnorm": 4.52287123533399050E-003,
+    "gmax": 2.80212641655784838E-003,
+    "etemp": 3.00000000000000000E+002,
+    "imag_freq": -1.44892223173475190E+003,
+    "kcal_per_mol": -3.38063980694370275E+003
+  },
+  "flags": {
+    "is_saddle": true,
+    "verify_ts": true
+  },
+  "history": {
+  }
+}

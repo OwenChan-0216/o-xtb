@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "task": "ts",
+  "status": -1,
+  "status_name": "error",
+  "converged": false,
+  "message": "the string made no progress towards the product",
+  "counters": {
+    "n_eval": 1,
+    "n_cache_miss": 0,
+    "n_steps": 0,
+    "n_imag": -1,
+    "n_iter": 0,
+    "method": 7
+  },
+  "values": {
+    "energy": 0.00000000000000000E+000,
+    "gnorm": 0.00000000000000000E+000,
+    "gmax": 0.00000000000000000E+000,
+    "etemp": 0.00000000000000000E+000,
+    "imag_freq": 0.00000000000000000E+000,
+    "kcal_per_mol": 0.00000000000000000E+000
+  },
+  "flags": {
+    "is_saddle": false,
+    "verify_ts": true
+  },
+  "history": {
+  }
+}

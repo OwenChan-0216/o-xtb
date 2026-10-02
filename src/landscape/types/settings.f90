@@ -375,6 +375,13 @@ module xtb_landscape_settings
       !> of the `hessian` file written by `--hess` and by the `vib` task).
       !> Unused - and unallocated - for the other sources.
       character(len=:), allocatable :: hessian_file
+      !> Write the structured result `landscape_<task>.json` (PLAN section 5.5,
+      !> `--ljson`).  The file is written **independently** of `write_files`:
+      !> a task is a chain member in which the geometry/Hessian files may be
+      !> suppressed, while the machine readable result is the regression
+      !> artefact.  The file name is the task name of the concrete settings
+      !> type, all tasks write the same key order.
+      logical :: ljson = .false.
    contains
       !> Test the four convergence criteria plus the energy guard
       procedure :: is_converged => landscape_settings_is_converged

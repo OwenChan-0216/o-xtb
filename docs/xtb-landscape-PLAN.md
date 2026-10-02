@@ -811,10 +811,10 @@ end type
 |---|---|---|---|
 | 全部 | stdout（`env%unit`） | 分节头（`generic_header` 风格）+ 每步一行 `iter / E / gnorm / f_max / dp_max / trust / method` | 与 `relaxation_engine` 现有表格风格一致 |
 | opt | `xtbopt.xyz` | 最终优化几何 | **沿用现有命名**（`src/prog/main.F90:1129-1136`） |
-| opt | `xtbopt.log` | 每步轨迹 | 沿用现有命名 |
+| opt | `xtb.trj` | 每步轨迹 | 沿用现有命名 |
 | opt | `xtb.trj` | 轨迹（`fileType%trj` 语义） | 沿用现有命名 |
 | scan | `xtbscan.log` | 每帧几何 + `energy=Etot−Efix`（去偏能量） | **沿用现有**（`src/scan_driver.f90:98,129`）；新 driver 仍写该名以保证兼容。**几何被丢弃的扫描点不写帧**（既无能量，几何也可能是未评估的零帧）；此时 stdout 表里该行能量为 `NaN`、`conv = F`，文件以 `status='replace'` 打开以免残留上一次运行的帧 |
-| scan | `xtbscan_2d.xyz`（ndim=2 时） | 网格帧（comment 带两个坐标值） | 新增 |
+| scan | `xtbscan.log`（ndim=2 时同一个文件） | 网格帧（comment 带两个坐标值） | 新增 |
 | ts (prfo/bprfo/dimer) | `xtbts.xyz`（最终 TS）、`xtbts.log`（轨迹） | 几何 + `n_imag` | 新增 |
 | ts (neb/cineb/autoneb/string) | `path.xyz` | `n_images` 帧，comment 含 `energy` 与帧号 | 与 R05 §3.4 一致 |
 | ts (autoneb) | `path_autoneb.xyz`、`path_ts_list.xyz` | 全局 MEP 与所有局部 TS | 新增 |
@@ -1130,7 +1130,7 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 | `test/unit/test_landscape_api.f90` | 216 / — | `run_landscape` 的 `sp`/`opt` 分派、未知任务与 PBC 拒绝 | ✅ 已交付 |
 
 **M1 验收测试**：同 M0 的 1–5，外加
-「`--lopt` 端到端：`xtb h2o.xyz --lopt --lopt-engine lbfgs --lopt-level normal` 收敛并写 `xtbopt.xyz` + `xtb.trj`」
+「`--lopt` 端到端：`xtb h2o.xyz --lopt --lopt-engine lbfgs --lopt-level normal` 收敛并写 `xtbopt.xyz` + `xtb.trj`（带 `--namespace ns` 时是 `ns.xtbopt.xyz` + `ns.xtb.trj`，见 §12.9 与报告 53 §N-1）」
 （`ctest -R landscape` 中的 `xtb/landscape-opt`，见 §12.9），
 以及「`--lopt` 不改变既有 `--opt` 的行为（回归）」：`ctest -R 'Singlepoint|IP|GFN'` 全绿。
 
@@ -1357,6 +1357,42 @@ GSM vs CI-NEB TS 几何 RMSD **0.0103 bohr（0.0054 Å）**（原 0.0265 bohr / 
 交付物：与 xtb `--hess` 一致的 G/H/ZPE；对 MAPLE 各任务做**拓扑/几何一致性**对照记录（非逐位）。
 **LOC ≈ 650。**
 
+**实际交付与验收结果（M7 修复轮回填，`--ljson` 规格见 §12.16）**
+
+新增文件：`src/landscape/types/json.f90`、`test/unit/test_landscape_e2e.f90`、
+`test/unit/landscape_e2e_check.py`、`docs/xtb-landscape-M7-validation.md`；
+6 个任务（`sp`/`opt`/`scan`/`vib`/`ts`/`irc`）挂钩 `--ljson`；CLI 新增
+`--ljson`；新 ctest 目标 13 个（`xtb/landscape-ljson-{opt,scan,scan2d,vib,ts,irc}`、
+`xtb/landscape-e2e-{ljson-methods,ts-counters,scan-counters,chain,chain-failure,layers,maple}`）。
+
+**验收数字（four systems，`OMP_NUM_THREADS=1`，`--lopt --lopt-level tight` → 同一
+`xtbopt.xyz` 上 `--lvib` vs `--hess`；报告 49 §1.1 / 报告 51 §4 重测一致）**
+
+| 体系（模式数） | max Δν (cm⁻¹) | ΔZPE (Eh) | ΔH(298.15 K) (Eh) | ΔG(298.15 K) (Eh) | 容差 |
+|---|---|---|---|---|---|
+| H2O（3N−6 = 3）tight | **0.0100** | 1.429·10⁻⁸ | 1.426·10⁻⁸ | 1.429·10⁻⁸ | 0.20 cm⁻¹ / 1.37·10⁻⁶ Eh |
+| CH3OH（12）tight | **0.0600** | 2.975·10⁻⁷ | 3.070·10⁻⁷ | 2.530·10⁻⁷ | 1.00 cm⁻¹ / 2.7·10⁻⁵ Eh |
+| CH3OH（12）`--lopt` **默认**级 | **0.8900** | −1.71·10⁻⁶ | — | — | 1.00 cm⁻¹（仅 12 % 余量） |
+| CO2（线性 3N−5 = 4）tight | **0.0000** | 1.709·10⁻⁸ | 1.296·10⁻⁸ | 1.908·10⁻⁸ | 0.20 cm⁻¹ |
+| C2H2（线性 3N−5 = 7）tight | **0.0000** | −3.4·10⁻¹¹ | −2.1·10⁻¹¹ | −4.2·10⁻¹¹ | 0.20 cm⁻¹ |
+
+* 容差来源是**实测**（报告 49 §1.2）：H2O tight 极小点实测 0.0100 cm⁻¹ / 1.43·10⁻⁸ Eh，
+  CLI 链容差 0.20 cm⁻¹（**20×**）与 1.0·10⁻⁶ Eh（**70×**，H2O 的有效值是传播项占优的
+  1.37·10⁻⁶ = **96×**）；余量用于同一检查跑在**收敛得差一些的极小点**上——实测偏离极小点
+  0.02 bohr 即达 3.3–5.2 cm⁻¹、默认级 CH3OH 达 0.89 cm⁻¹，以及跨编译器 LAPACK/OMP 归约
+  次序差异。**不是**「2×0.097」「5×1.8e-8」那种算法（旧文档的算式是错的，见报告 51 §5）。
+* 线性分子（CO2/C2H2）两条路径**逐位相同**：`trproj` 与 Eckart 在 3N−5、无分子轴转动时
+  在打印精度内重合，因此 dfreq 为 0.0000（PLAN §8.2 实验 #12 的线性分子情形）。
+* 独立复算（不复用 xtb 代码的 RRHO + 自由转子 Python 实现，报告 49 §1.3）与 xtb 打印值
+  一致到 ΔS ≤ 4.7·10⁻⁵ cal/mol/K、ΔZPE 等于频率表 2 位小数的舍入量。
+* 链实测（报告 49 §3.1）：`sp` −5.070383095219 → `opt` −5.070544447778
+  （== `xtbopt.xyz` 头行）→ `--hess` == 同值 → `--lvib` == 同值，‖g‖ 7.5·10⁻⁶；
+  把几何文件里一个 H 移 0.05 bohr 会改变能量（**无缓存几何**）；
+  `--lvib-hessian file` 把评估数从 19 降到 1。
+* MAPLE：**未运行**（本机 `maple.function.dispatcher` 因缺 `ase`/`torch`/`fairchem`
+  无法导入），只比拓扑；`maple.json` 现在记录 `maple_importable: false` + 非空 error
+  + 缺失依赖名（报告 51 §2 —— 修复前是 `true` + 空 error 的**假绿**）。
+
 **合计 ≈ 21,960 行**（含测试），与 R03 §B 的分文件估算求和同量级。
 
 ---
@@ -1508,7 +1544,7 @@ grep -rn "set%mode_extrun = p_ext_" src/set_module.f90   # :958,:978 —— p_ex
 | `--lopt-level <superloose\|loose\|normal\|tight\|vtight>` | `lset%set_conv_level`；未识别的档名 → `env%error` | ✅ **已实现** |
 | `--lopt-hessian <numerical\|model>` | 设 `lset%hessian_source`（`landscape_hessian_source_known` 校验）；`model` = Lindh-D2 模型 Hessian，作为 BFGS 的初始 Hessian 与 RFO 的 trust-region Hessian；未识别名字 → `env%error` | ✅ **M2 复核轮已实现**（R2-09 遗留项） |
 | `--lscan` | `set_runtyp('lscan')`，不解桁位置参数；全部扫描参数走 `--lscan-*` | ✅ **M2 已实现**（见 §12.10） |
-| `--lts` / `--lirc` / `--ljson` | `--lts`（M4）、`--lirc`（M6 第一阶段）已实现；`--ljson` | ✅ `--lirc` 见 §12.14；❌ `--ljson` 未实现（M7） |
+| `--lts` / `--lirc` / `--ljson` | `--lts`（M4）、`--lirc`（M6 第一阶段）、`--ljson`（M7）**均已实现** | ✅ `--lirc` 见 §12.14；✅ `--ljson` 见 §12.16（本轮修复轮回填：此处原写「`--ljson` 未实现」） |
 
 **与初版计划的差异**：`--lopt` **不**接受位置参数（原计划为 `--lopt [level]`）。原因：
 `TArgParser%nextArg` 无 peek，无条件消费会让 `xtb --lopt water.xyz` 把文件名当作 level 吃掉；
@@ -1571,8 +1607,10 @@ add_test("xtb/landscape-opt" ${CMAKE_COMMAND} -DEXE=... -DINPUT=... -DRUNDIR=...
 
 实际执行的命令为
 `xtb <landscape_h2o.xyz> --gfn 2 --lopt --lopt-engine lbfgs --lopt-level normal --norestart --namespace landscape1`，
-脚本断言：（i）退出码 0；（ii）stdout 含 `landscape: converged`；（iii）`xtbopt.xyz` 与 `xtb.trj`
-存在且非空。meson 侧用 `run_command(python, '-c', ...)` 在 build 目录生成同一几何
+脚本断言：（i）退出码 0；（ii）stdout 含 `landscape: converged`；（iii）`landscape1.xtbopt.xyz` 与
+`landscape1.xtb.trj` 存在且非空（几何与轨迹和其它输出一样遵守 `--namespace`；不带 `--namespace`
+时仍是 `xtbopt.xyz` / `xtb.trj`。此约定原由 `types/log.f90` 遗漏，终轮报告 53 §N-1 修好并加了
+`xtb/landscape-opt-namespace`）。meson 侧用 `run_command(python, '-c', ...)` 在 build 目录生成同一几何
 （meson 总是有 Python，见根 `meson.build`）并注册同名 test。
 （原计划的 `--coffee` 版本已放弃：caffeine 72 个自由度对未调优的 L-BFGS 太慢。）
 
@@ -1799,10 +1837,51 @@ xTB 计算器（与已有的 `acc` 同一机制），CLI 侧在 `main.F90` 三�
 系统差 ~0.04 %（3644 cm⁻¹ 处 ~1.5 cm⁻¹）。与 MAPLE 对拍只能比拓扑/量级（N9），
 不能比 0.01 cm⁻¹。
 
-**INFO-3（全域未收敛扫描的退出码）**：`tasks/scan.f90` 的「无收敛点」分支只发
-`env%warning`，因此 `xtb --lscan-max-steps 0` 以**退出码 0** 结束（同时 TOTAL ENERGY
-打印 NaN）。这是 M2 已接受的语义（R-04：点未收敛是告警不是失败）且已被测试固定；
-M7 收口时若统一「结果不可用 ⇒ 非零退出」，这里要一并改。
+**INFO-3（全域未收敛扫描的退出码；M7 已改，见下）**：`tasks/scan.f90` 的「无收敛点」
+分支在 M2 时只发 `env%warning`，因此 `xtb --lscan-max-steps 0` 以**退出码 0** 结束
+（同时 TOTAL ENERGY 打印 NaN）。**M7 收口轮已按本注的预告统一为 `env%error`**：
+「结果不可用 ⇒ 非零退出」。现在的语义是
+
+| 扫描结果 | 行为 | 退出码 |
+|---|---|---|
+| 有点失败（无能量） | `env%error` | 非零 |
+| **无任何点收敛**（能量保持 NaN） | `env%error`（**M7 改，原为 warning**） | 非零 |
+| 有未收敛点但 ≥1 个收敛点 | `env%warning`，结果可用 | 0 |
+
+被三层测试锁住：CLI `xtb/landscape-scan-max-steps`（断言退出码非零）、单元
+`landscape-scan` 的 `scan-task-unconverged` / `scan-task-no-converged-point`、以及
+CLI `xtb/landscape-e2e-scan-counters`（同时交叉断言 `n_valid`/`n_fail`/`n_unconverged`）。
+注入实验（把 `env%error` 改回 `env%warning`）使前两者变红（报告 49 §6 注入 6）。
+
+**INFO-4（`n_imag = -1` 哨兵）**：`landscape_result%n_imag` 的初值是 `-1`，只有真正做了
+频率确认（`--lvib`、`--lts` 且未加 `--lts-no-verify`）的任务才会把它写成真实模式数；
+`--lopt`/`--lscan`/`--sp` 的 JSON 里因此是 `-1`（不是 0！0 表示「确认过且无虚频」）。
+`--lts-no-verify` 的文档同样是 `n_imag = -1`。
+
+**INFO-5（`ts` 计数器采样时机，本轮修复 M-1）**：`tasks/ts.f90` 的
+`result%n_cache_miss` 必须在 `confirm_saddle`（那一次 6N 确认 Hessian）**之后**采样。
+原来在它之前采样，于是**同一条 stdout** 里同时出现 `cache misses: 77` 与
+`landscape engine: energy evaluations 95`（差 18 = 6N，N=3），而 JSON 与 CLI 断言
+同源于前者 —— 回归比对的语义是错的。现在的约定：
+
+* `result%n_cache_miss` = **完成的一次运行的引擎评估总数**，与同一条 stdout 末尾
+  `landscape engine: energy evaluations` **恒等**（`opt`/`vib`/`scan` 历来如此，`ts` 现已一致）。
+  两个**例外**必须一起读：`irc` 不写 `n_cache_miss`（按方向写 `n_eval_fwd`/`n_eval_bwd`）；
+  **失败的 band 搜索**可能在采样前提前返回（`tasks/ts.f90:235` 先写文档；band 路径的提前返回
+  `tasks/ts.f90:718-724`、搜索内部建路失败 `path/neb.f90:739`、`:837-839`、`:909-913`
+  都到不了 `tasks/ts.f90:932` 的采样点）：在**第一次评估之前**就失败的
+  情形本轮已实测（缺 product 文件：`n_cache_miss: 0` 与 `energy evaluations 0` 一致，退出 1）；
+  而在 band 搜索**之后**才触发的两处返回会让该字段保持默认 `0`，同一条 stdout 的引擎总数却是非零
+  —— 后者是**读码结论、不是实测**（需要 band 坍缩或候选点 SCC 失败才能触发），进程同样非零退出，
+  该字段是默认值而**不是**测量值；
+* `result%write_log`（打印 `cache misses:`）同样移到确认之后，两处调用点
+  （单几何搜索 `landscape_ts` 与 band 收尾 `landscape_ts_finish`）一致；
+* 因此 `--lts-no-verify` 的计数器恰好低**一整份** 6N 中心差分 Hessian；
+* 断言：CLI `xtb/landscape-e2e-ts-counters`（`cache misses` == 引擎总数，且
+  `有确认 − 无确认` 为正的 6N 整数倍）、`xtb/landscape-ljson-ts`（JSON == 引擎总数）；
+  注入「把采样点挪回确认之前（并把后一处删除，即原逻辑）」使两者变红，报告 51 §3。
+* **不弄坏 M4/M6 验收数字**：几何、能量、虚频、失败语义都不涉及该计数器；
+  M4/M6 的 CLI 断言与验收数字在本轮重跑后逐条不变（报告 51 §4）。
 
 ### 12.12 M5（chain-of-states 第一阶段：IDPP / NEB / CI-NEB）实际接线与接口契约
 
@@ -2033,8 +2112,85 @@ hpc 9.59e-4 均 ≤ 1e-3 ⇒ **可达（不移除默认策略）**；但 EulerPC
 + 端点归属负例）。`ctest -R landscape` 77/77，回归 12/12。
 （M6 最终修复轮后为 78/78、单元 35/35；见上一节的变更表与报告 `46-m6-fix-report.md`。）
 
-## 附录 A：环境约束（已实测）
+### 12.16 M7（thermo/validation 收口）实际接线：`--ljson` 的规格与约定
 
+**runtyp**：**不新增**。`--ljson` 只是每个 landscape 任务的一个输出开关
+（抽象基类型 `landscape_settings` 的 `logical :: ljson` 分量，所有任务 settings —— 含
+`landscape_sp_settings` —— 都继承它，`types/settings.f90`），
+它不改变任何 runtyp、不占用位置参数、也不需要自己的常量。`--ljson` 已在
+`src/prog/main.F90` 的 flag 循环（`case ('--ljson')`）与 `src/xhelp.f90` 中注册，
+它把五个 settings 对象上的开关**一起**置真（`lset`/`lsset`/`lvset`/`ltset`/`lircset`），
+由 runtyp 选中的任务自己读它；**`--ljson` 不选任务**，必须与
+`--lopt`/`--lscan`/`--lvib`/`--lts`/`--lirc` 之一同时给出。
+
+**实现文件**：`src/landscape/types/json.f90`（文档构造 + 序列化）、
+`tasks/{sp,opt,scan,vib,ts,irc}.f90`（各自的 `write_json*` 挂钩）、
+`src/landscape/CMakeLists.txt` / `meson.build` 注册。
+
+**文件与命名**：`landscape_<task>.json`，`<task> ∈ {sp, opt, scan, vib, ts, irc}`，
+经 `get_namespace`（`--namespace ns` ⇒ `ns.landscape_<task>.json`）；写完后在 `env%unit`
+打印一行 `wrote <file>`。**2D 扫描写的是同一个 `landscape_scan.json`**（`task` 字段仍是
+`scan`，多出 `n1`/`n2` 两个计数器），不另起文件名。
+
+**Schema（10 个顶层键，顺序固定）**：
+
+```
+format(1) task status status_name converged message counters values flags history
+```
+
+* `counters` / `values` / `flags` 按**任务添加顺序**写出，因此同一任务两次运行的 diff 稳定；
+* `history` 是收敛历史序列（`energy`/`gnorm`/`gmax`/`dispnorm`/`dispmax`/`trust`/`method`，
+  缺哪个就不写哪个），存储用「平铺实数池 + 每序列 offset/length」，避开
+  gfortran 12.2.0 的派生类型内在赋值 stride 缺陷（AGENTS §6.5）；
+* 实数用 **17 位有效数字**（`es25.17e3`，double 逐位往返）；**非有限值写 JSON `null`**，
+  绝不写一个伪造的 `0.0`（PLAN §5.5 的扫描表规则）；
+* **不写任何墙钟时间、路径或随机量** —— 这是「同一输入两次运行字节相同」的前提。
+
+**计数器语义（逐个说明，含各任务的采样时机）**
+
+| 计数器 | 含义 | 采样时机 |
+|---|---|---|
+| `n_eval` | `opt`/`ts`：目标函数调用数（打印为 `energy calls`）；`scan`/`vib`：**引擎评估总数** | 任务末尾 |
+| `n_cache_miss` | 引擎真的调用过 xTB 的次数（几何缓存未命中） | `opt`/`scan`/`vib` 历来在任务末尾；**`ts` 在 `confirm_saddle` 之后**（INFO-5） |
+| `n_steps` | 步数；`scan` 上是**点数** | — |
+| `n_imag` | 虚频数，**`-1` 是「未做频率确认」的哨兵**（INFO-4） | 确认之后 |
+| `n_iter` | 收敛历史长度 | — |
+| `n_points`/`n_forward`/`n_valid`/`n_fail`/`n_unconverged`/`n1`/`n2` | `scan` 的点记账 | 打印 `wrote xtbscan.log with N frame(s), M failed point(s) omitted` 的同一数据 |
+| `method` | `ts`/`irc` 的方法标识符（1..8 / 1..4） | — |
+| `n_fwd`/`n_bwd` | `irc` 两个方向的点数 | — |
+
+**stdout 与 JSON 同源同义**：在**完成的一次运行**上，`counters` 就是任务在 stdout 打印的
+那些数字，**不是第二套记账** —— 这正是 `--ljson` 存在的理由（例外同 INFO-5：`irc` 无
+`n_cache_miss`，失败的 band 搜索里该字段是默认 `0`）。三条弱化它的旧缺陷已在本轮修掉：
+`ts` 的 `n_cache_miss` 采样在确认之前（INFO-5，已移到之后）；`scan` 的 `n_eval` 没有
+CLI 交叉断言（已加）；`n_valid`/`n_fail`/`n_unconverged` 三个计数器没有测试覆盖
+（已由 `xtb/landscape-e2e-scan-counters` 覆盖，含「无收敛点」非零退出分支）。
+
+**status 与退出码**：`0` ok；`1` incomplete（**结果**可解释但有保留：未收敛极小化、
+有未收敛点的扫描、存在虚频）；`-1` error（结果不可用，进程**非零退出**）。
+`status` 是**对结果的分类，不是退出码承诺**：三种情形的退出码见 §12.11 INFO-3 的表
+（未收敛极小化 = `status 1` **且**非零退出；虚频、有未收敛点的扫描 = `status 1`、退出 0；
+结果不可用 = `-1`、非零退出）。
+
+**确定性（实测，不得当成逐位承诺）**：
+
+* **同一线程数下**同一输入的两次运行**字节相同**（6 个任务全部验证）；
+* **跨 OMP 线程数不逐位相同**：OMP=2/4 相对 OMP=1 的递归最大绝对差为
+  opt 1.8·10⁻¹²、scan1D 2.7·10⁻¹²、scan2D 3.2·10⁻¹²、vib 2.4·10⁻¹⁰（报告 49）/
+  3.7·10⁻¹⁰（报告 51 独立重测）、ts 1.2·10⁻¹⁰、irc 4.3·10⁻¹²
+  （AGENTS §6.1 的 OpenMP 归约次序效应被 17 位写法放大）；
+  **计数器在所有线程数下不变**，因此**计数器级比对是线程安全的，字节级比对不是**。
+* ⇒ **任何 JSON 回归基线（或 gold-file 比对）必须先钉死 `OMP_NUM_THREADS`**；
+  交付的 ctest 已用 `ENVIRONMENT "XTBPATH=...;OMP_NUM_THREADS=1"` 钉住。
+
+**测试**：CLI `xtb/landscape-ljson-{opt,scan,scan2d,vib,ts,irc}`（`landscape_e2e_check.py`
+的 `ljson` 模式：标准库 JSON 解析、键序、计数器对 stdout 交叉断言、两进程字节相同、
+namespace 前缀）；单元 `landscape-e2e` 的 `sp-ljson`（`sp` 无 runtyp，只能走 API）与
+`ljson-determinism`；CLI `xtb/landscape-e2e-{ljson-methods,ts-counters,scan-counters}`。
+注入证据（报告 49 §6、报告 51 §3）：`n_eval + 1`、随机 message、`n_points + 1`、
+`n_unconverged + 1`、`n1 + 1`、采样点回移、MAPLE 探测回成浅导入 —— 各自都有命名的红。
+
+## 附录 A：环境约束（已实测）
 | 项 | 实测值 | 对本计划的影响 |
 |---|---|---|
 | `cmake --version` | 4.3.2 | 必须 `-DWITH_CPCMX=OFF`（否则 cpcmx 与 toml-f 目标重名，`CMakeLists.txt:56-58`） |

@@ -77,6 +77,16 @@ module xtb_landscape_results
       !> Zero point energy (hartree) as reported by the thermochemistry
       !> wrapper (`print_thermo`), zero until that wrapper has run
       real(wp) :: zpe = 0.0_wp
+      !> Total enthalpy H(T) (hartree, electronic energy plus the thermal
+      !> contribution) at the highest requested temperature, zero until the
+      !> thermochemistry wrapper has run.  It is the quantity the `--hess`
+      !> property printout reports as `TOTAL ENTHALPY`.
+      real(wp) :: enthalpy = 0.0_wp
+      !> Total Gibbs free energy G(T) (hartree, electronic energy plus the
+      !> RRHO contribution), the quantity the `--hess` printout reports as
+      !> `TOTAL FREE ENERGY` and the reused thermodynamic table as
+      !> `total free energy`
+      real(wp) :: gibbs = 0.0_wp
    end type landscape_vib_result
 
    !> Result of an intrinsic reaction coordinate integration (`irc` task,

@@ -22,6 +22,13 @@
 !> required by PLAN section 4.2: the `optimize/**` layer must stay free of the
 !> xtb private types.
 !>
+!> The file names pass through the xtb file namespace (`get_namespace`), like
+!> every other landscape output name (`tasks/scan.f90:419`, `tasks/vib.f90:390`,
+!> `tasks/ts.f90:600`, `tasks/irc.f90:948`) and like the pre-existing `--opt`,
+!> whose `xtbopt.xyz` is written through `open_file` and therefore carries the
+!> prefix as well.  Without `--namespace` the names stay `xtbopt.xyz` and
+!> `xtb.trj`, so tool chains which read the default names are unaffected.
+!>
 !> Units: coordinates and trajectory frames in bohr, energies in hartree.
 module xtb_landscape_log
    use xtb_mctc_accuracy, only : wp
@@ -29,6 +36,7 @@ module xtb_landscape_log
    use xtb_io_writer, only : writeMolecule
    use xtb_type_environment, only : TEnvironment
    use xtb_type_molecule, only : TMolecule, init
+   use xtb_setparam, only : get_namespace
    use xtb_landscape_settings, only : landscape_opt_settings
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_coords, only : geometry_unpack
@@ -43,7 +51,9 @@ contains
 !>
 !> The final geometry is stored as `<prefix>opt.xyz` and the trajectory as
 !> `<prefix>.trj` (concatenated xyz frames), both through
-!> `xtb_io_writer::writeMolecule`.
+!> `xtb_io_writer::writeMolecule`.  Both names go through `get_namespace`, so a
+!> run with `--namespace ns` writes `ns.<prefix>opt.xyz` / `ns.<prefix>.trj`
+!> and a run without it keeps `xtbopt.xyz` / `xtb.trj`.
 subroutine landscape_write_files(env, mol, settings, traj, result)
    character(len=*), parameter :: source = 'landscape_write_files'
    !> Computational environment
@@ -61,7 +71,7 @@ subroutine landscape_write_files(env, mol, settings, traj, result)
    character(len=:), allocatable :: fname
    integer :: unit, ierr, iframe
 
-   fname = trim(settings%output_prefix)//'opt.xyz'
+   fname = get_namespace(trim(settings%output_prefix)//'opt.xyz')
    open(newunit=unit, file=fname, action='write', iostat=ierr)
    if (ierr /= 0) then
       call env%error("cannot open "//fname, source)
@@ -74,7 +84,7 @@ subroutine landscape_write_files(env, mol, settings, traj, result)
 
    if (.not. allocated(traj)) return
    if (size(traj, 2) == 0) return
-   fname = trim(settings%output_prefix)//'.trj'
+   fname = get_namespace(trim(settings%output_prefix)//'.trj')
    open(newunit=unit, file=fname, action='write', iostat=ierr)
    if (ierr /= 0) then
       call env%error("cannot open "//fname, source)

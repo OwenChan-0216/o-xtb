@@ -1,0 +1,38 @@
+ landscape intrinsic reaction coordinate: gs
+ electronic temperature (frozen):      300.000 K
+ step length:  1.000000E-01 bohr*amu^1/2
+ imaginary modes of the transition state: 1
+ phase component (forward):     0.92881291 (cartesian 1 of atom 1)
+ directions exchanged: F
+ 
+ forward direction
+    point          s/(bohr*amu^1/2)        energy/Eh      |g|/(Eh/bohr)   E/g
+        1         0.0500000000      -5.405390934075    1.134232E-01      1
+        2         0.1440487221      -5.411041635418    1.057489E-01     21
+        3         0.2424657349      -5.417095587241    1.032404E-01     21
+        4         0.3413504700      -5.423151932135    1.023320E-01     21
+ mean energy/gradient evaluations per point:      16.00
+ 
+ backward direction
+    point          s/(bohr*amu^1/2)        energy/Eh      |g|/(Eh/bohr)   E/g
+        1         0.0500000000      -5.410901243764    1.173646E-01      1
+        2         0.1436353131      -5.416746166827    1.086690E-01     21
+        3         0.2419614444      -5.422953777165    1.053754E-01     21
+        4         0.3404851301      -5.429024646547    1.034467E-01     21
+ mean energy/gradient evaluations per point:      16.00
+ 
+ forward endpoint energy:       -5.423151932135 Eh
+ forward arc length:               0.341350 bohr*amu^1/2
+ backward endpoint energy:      -5.429024646547 Eh
+ backward arc length:              0.340485 bohr*amu^1/2
+ termination forward:  max_steps
+ termination backward: max_steps
+ arc length s is the accumulated chord length of the macro steps (not comparable with the integrated length of --lirc-method lqa)
+ endpoint rmsd criterion: rmsd <= rmsd_end = 0.18897000
+ endpoint rmsd is Kabsch aligned (mass free proper rotation onto the relaxed minimum)
+ forward reached minimum:  F (rmsd     0.395018 bohr)
+ forward relaxed minimum:        -5.499075060043 Eh (4 relaxation steps)
+ backward reached minimum: F (rmsd     0.392363 bohr)
+ backward relaxed minimum:       -5.501963568121 Eh (4 relaxation steps)
+ points whose sphere relaxation was pinned at the micro cycle budget: forward 3 of 4 points
+                             backward 3 of 4 points

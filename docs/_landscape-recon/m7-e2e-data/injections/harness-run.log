@@ -1,0 +1,21 @@
+json-counter           partly red  restored=True
+    xtb/landscape-ljson-opt                  exit=8 RED
+    xtb/landscape-ljson-scan                 exit=0 green
+    xtb/landscape-e2e                        exit=8 RED
+json-nondeterministic  partly red  restored=True
+    xtb/landscape-ljson-opt                  exit=8 RED
+    xtb/landscape-e2e                        exit=0 green
+chain-silent-skip      red  restored=True
+    xtb/landscape-e2e-chain-failure          exit=8 RED
+thermo-scaling         red  restored=True
+    xtb/landscape-e2e-chain                  exit=8 RED
+    xtb/landscape-e2e                        exit=8 RED
+scan-exit-semantics    red  restored=True
+    xtb/landscape-scan-max-steps             exit=8 RED
+    xtb/landscape-scan                       exit=8 RED
+json-scan-points       red  restored=True
+    xtb/landscape-ljson-scan                 exit=8 RED
+json-nondeterministic-writer red  restored=True
+    xtb/landscape-ljson-opt                  exit=8 RED
+    xtb/landscape-e2e                        exit=8 RED
+baseline after revert: {'xtb/landscape-ljson-opt': 0, 'xtb/landscape-ljson-scan': 0, 'xtb/landscape-e2e-chain': 0, 'xtb/landscape-e2e-chain-failure': 8, 'xtb/landscape-scan-max-steps': 0, 'xtb/landscape-e2e': 0, 'xtb/landscape-scan': 0}

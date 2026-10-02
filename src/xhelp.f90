@@ -271,6 +271,14 @@ subroutine help(iunit)
    "    call ancopt(3) to perform a geometry optimization, levels from crude, sloppy,", &
    "    loose, normal (default), tight, verytight to extreme can be chosen",&
    "",&
+   "--ljson",&
+   "    write the structured result landscape_<task>.json (status, counters and", &
+   "    the convergence history) for every landscape task; the file is meant for", &
+   "    regression comparison and is written independently of the other output", &
+   "    files.  The switch needs a landscape run type (--lopt, --lscan, --lvib,", &
+   "    --lts or --lirc): on its own it writes nothing and a warning says so", &
+   "    (the sp task has no run type and is reachable through the API only)",&
+   "",&
    "--lopt",&
    "    minimize the geometry with the landscape task suite (src/landscape); the", &
    "    algorithm is selected with --lopt-engine and the thresholds with --lopt-level",&

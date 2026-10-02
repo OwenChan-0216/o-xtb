@@ -50,6 +50,7 @@ set(
   "landscape-saddle"
   "landscape-path"
   "landscape-irc"
+  "landscape-e2e"
   "latticepoint"
   "molecule"
   "model-hessian"
@@ -166,6 +167,11 @@ file(WRITE "${LANDSCAPE-H2O}"
 set(LANDSCAPE-RUNDIR "${CMAKE_CURRENT_BINARY_DIR}/landscape-cli")
 file(MAKE_DIRECTORY "${LANDSCAPE-RUNDIR}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_check.cmake" [=[
+# the rundir is rebuilt, because the check below asserts the *absence* of the
+# unprefixed output names (a leftover file of an earlier run would satisfy the
+# existence checks otherwise)
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}")
 execute_process(
   COMMAND "${EXE}" "${INPUT}" --gfn 2 --lopt --lopt-engine lbfgs
           --lopt-level normal --norestart --namespace landscape1
@@ -180,13 +186,19 @@ endif()
 if(NOT output MATCHES "landscape: converged")
   message(FATAL_ERROR "landscape minimisation did not converge\n${output}")
 endif()
-foreach(name "xtbopt.xyz" "xtb.trj")
+foreach(name "landscape1.xtbopt.xyz" "landscape1.xtb.trj")
   if(NOT EXISTS "${RUNDIR}/${name}")
     message(FATAL_ERROR "${name} was not written")
   endif()
   file(SIZE "${RUNDIR}/${name}" size)
   if(size EQUAL 0)
     message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+# the namespace has to replace the default name, not to supplement it
+foreach(name "xtbopt.xyz" "xtb.trj")
+  if(EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "--namespace landscape1 also wrote the unprefixed ${name}")
   endif()
 endforeach()
 ]=])
@@ -196,6 +208,109 @@ add_test("xtb/landscape-opt"
   -DINPUT=${LANDSCAPE-H2O}
   -DRUNDIR=${LANDSCAPE-RUNDIR}
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_check.cmake")
+
+# Landscape suite: the file namespace of the `--lopt` geometry and trajectory
+# (defect N-1 of the final fix round).
+#
+# The optimised geometry and the trajectory are written by
+# `xtb_landscape_log::landscape_write_files`, which used the bare names
+# `xtbopt.xyz` / `xtb.trj` while every other landscape writer (and the
+# pre-existing `--opt`, whose geometry goes through `open_file`) passes its name
+# through `get_namespace`.  Two `--lopt` runs with different namespaces in one
+# directory therefore overwrote each other's geometry file, which is exactly
+# what the namespace exists to prevent.
+#
+# The check pins both sides of the contract:
+#  1. without `--namespace` the names stay `xtbopt.xyz` / `xtb.trj`
+#     (tool-chain compatibility), and
+#  2. two runs in the *same* directory with `--namespace c1` / `--namespace c2`
+#     write `c1.xtbopt.xyz` / `c2.xtbopt.xyz` (and the matching `.trj` files),
+#     the first geometry survives the second run byte for byte, the two
+#     geometries differ, and no unprefixed `xtbopt.xyz` appears.
+#
+# The two runs use the two convergence levels so that the geometries are
+# genuinely different: comparing the same input twice could not tell an exact
+# overwrite from a correct pair of identical files.
+set(LANDSCAPE-H2O-STRETCH "${CMAKE_CURRENT_BINARY_DIR}/landscape_h2o_stretch.xyz")
+file(WRITE "${LANDSCAPE-H2O-STRETCH}"
+  "3\nstretched water\nO  0.0000000  0.0000000  0.0000000\n"
+  "H  0.0000000  0.0000000  1.3000000\n"
+  "H  1.3000000  0.0000000 -0.4000000\n")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_opt_namespace.cmake" [=[
+# the rundir is rebuilt: the check asserts the *absence* of `xtbopt.xyz`
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}/plain" "${RUNDIR}/two")
+# 1. the default names
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lopt --lopt-level loose --norestart
+  WORKING_DIRECTORY "${RUNDIR}/plain"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the default --lopt run failed with status ${status}\n${output}")
+endif()
+foreach(name "xtbopt.xyz" "xtb.trj")
+  if(NOT EXISTS "${RUNDIR}/plain/${name}")
+    message(FATAL_ERROR "without --namespace the output is still ${name}, but ${name} was not written\n${output}")
+  endif()
+  file(SIZE "${RUNDIR}/plain/${name}" size)
+  if(size EQUAL 0)
+    message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+# 2. two namespaces in one directory
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lopt --lopt-level loose --norestart
+          --namespace c1
+  WORKING_DIRECTORY "${RUNDIR}/two"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the --namespace c1 run failed with status ${status}\n${output}")
+endif()
+if(NOT EXISTS "${RUNDIR}/two/c1.xtbopt.xyz")
+  message(FATAL_ERROR "--namespace c1 wrote no c1.xtbopt.xyz\n${output}")
+endif()
+file(MD5 "${RUNDIR}/two/c1.xtbopt.xyz" c1_before)
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lopt --lopt-level vtight --norestart
+          --namespace c2
+  WORKING_DIRECTORY "${RUNDIR}/two"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the --namespace c2 run failed with status ${status}\n${output}")
+endif()
+foreach(name "c1.xtbopt.xyz" "c2.xtbopt.xyz" "c1.xtb.trj" "c2.xtb.trj")
+  if(NOT EXISTS "${RUNDIR}/two/${name}")
+    message(FATAL_ERROR "${name} was not written\n${output}")
+  endif()
+endforeach()
+if(EXISTS "${RUNDIR}/two/xtbopt.xyz")
+  message(FATAL_ERROR "a namespaced run also wrote the unprefixed xtbopt.xyz")
+endif()
+file(MD5 "${RUNDIR}/two/c1.xtbopt.xyz" c1_after)
+if(NOT c1_before STREQUAL c1_after)
+  message(FATAL_ERROR "the --namespace c2 run overwrote c1.xtbopt.xyz")
+endif()
+file(READ "${RUNDIR}/two/c1.xtbopt.xyz" c1_text)
+file(READ "${RUNDIR}/two/c2.xtbopt.xyz" c2_text)
+if(c1_text STREQUAL c2_text)
+  message(FATAL_ERROR "the two namespaces hold the same geometry; the check cannot tell an overwrite from a correct pair")
+endif()
+]=])
+add_test("xtb/landscape-opt-namespace"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O-STRETCH}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-opt-namespace
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_opt_namespace.cmake")
 
 # Landscape suite: the reported TOTAL ENERGY must be the energy of the
 # converged geometry, i.e. exactly the value written to xtbopt.xyz.
@@ -587,6 +702,18 @@ endif()
 if(NOT output MATCHES "linear molecule: +F")
   message(FATAL_ERROR "water was classified as linear\n${output}")
 endif()
+# The direct run builds the numerical Hessian from 6N displaced single points
+# plus the gradient of the input geometry: 1 + 6*3 = 19 evaluations for water.
+# The counter is asserted, not just printed, because the `--lvib-hessian file`
+# check below claims that the file provider *saves* those evaluations
+# (finding P2-7 of `52-m7-review-round2.md`).
+if(NOT output MATCHES "landscape engine: energy evaluations +([0-9]+)")
+  message(FATAL_ERROR "the direct run reports no evaluation counter\n${output}")
+endif()
+set(direct_eval "${CMAKE_MATCH_1}")
+if(NOT direct_eval EQUAL 19)
+  message(FATAL_ERROR "the direct --lvib run used ${direct_eval} evaluations, expected 1+6N = 19\n${output}")
+endif()
 foreach(name "hessian" "vibspectrum" "vib_normal_modes" "g98.out")
   if(NOT EXISTS "${RUNDIR}/${name}")
     message(FATAL_ERROR "${name} was not written")
@@ -624,6 +751,20 @@ if(NOT status EQUAL 0)
 endif()
 if(NOT file_output MATCHES "Hessian file: +hessian")
   message(FATAL_ERROR "the file provider did not report its file\n${file_output}")
+endif()
+# ... and it must *save* the displaced single points: reading the file needs the
+# gradient of the input geometry only, so the same task drops from 19 to 1
+# evaluation.  Without this assertion a provider that silently recomputed the
+# Hessian would stay green (finding P2-7 of `52-m7-review-round2.md`).
+if(NOT file_output MATCHES "landscape engine: energy evaluations +([0-9]+)")
+  message(FATAL_ERROR "the file run reports no evaluation counter\n${file_output}")
+endif()
+set(file_eval "${CMAKE_MATCH_1}")
+if(NOT file_eval EQUAL 1)
+  message(FATAL_ERROR "--lvib-hessian file used ${file_eval} evaluations, expected 1; the provider did not reuse the file\n${file_output}")
+endif()
+if(NOT direct_eval GREATER file_eval)
+  message(FATAL_ERROR "the Hessian file did not save evaluations (${direct_eval} vs ${file_eval})")
 endif()
 string(REGEX MATCH "eigval : +([-0-9. ]+)" _ "${file_output}")
 string(REGEX REPLACE " +" " " file_freqs "${CMAKE_MATCH_1}")
@@ -715,6 +856,8 @@ add_test("xtb/landscape-vib-etemp"
 # `--lvib-hessian file --lvib-hessian-file hessian --namespace ns` has to find
 # and reproduce it.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_vib_namespace.cmake" [=[
+# rebuilt: the check asserts the *absence* of the unprefixed output names
+file(REMOVE_RECURSE "${RUNDIR}")
 file(MAKE_DIRECTORY "${RUNDIR}")
 execute_process(
   COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart --namespace ns
@@ -732,6 +875,19 @@ endif()
 if(EXISTS "${RUNDIR}/ns.ns.hessian")
   message(FATAL_ERROR "the hessian file name carries the namespace twice")
 endif()
+# every other file of the task goes through the namespace as well, and the
+# unprefixed name must not appear next to it (finding N-2 of the final fix
+# round: `vibspectrum`, `vib_normal_modes` and `g98.out` were namespaced in
+# fact - through `open_file`, this suite's writer and `g98fake2` - but no test
+# pinned it)
+foreach(name "hessian" "vibspectrum" "vib_normal_modes" "g98.out")
+  if(NOT EXISTS "${RUNDIR}/ns.${name}")
+    message(FATAL_ERROR "--namespace ns wrote no ns.${name}\n${output}")
+  endif()
+  if(EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "--namespace ns also wrote the unprefixed ${name}")
+  endif()
+endforeach()
 string(REGEX MATCH "eigval : +([-0-9. ]+)" _ "${output}")
 string(REGEX REPLACE " +" " " vib_freqs "${CMAKE_MATCH_1}")
 execute_process(
@@ -810,8 +966,16 @@ execute_process(
   OUTPUT_VARIABLE output
   ERROR_VARIABLE output
 )
-if(NOT status EQUAL 0)
-  message(FATAL_ERROR "xtb --lscan --lscan-max-steps 0 failed with status ${status}\n${output}")
+# M7 (PLAN section 12.11 INFO-3): a scan without a single converged point has
+# no usable result, so the process has to exit non-zero.  The NaN energy is
+# visible in the scan table (`lowest energy: +NaN`) and *replaces* the trailing
+# TOTAL ENERGY block: `env%error` terminates the process in `env%checkpoint`
+# before that block is printed (finding I-6 of `50-m7-independent-review.md`).
+# Before this round the branch only warned and the run exited 0 (INFO-3 of
+# PLAN section 12.11), which a caller of a scan chain cannot distinguish from
+# a valid result.
+if(status EQUAL 0)
+  message(FATAL_ERROR "a scan without a converged point exited 0\n${output}")
 endif()
 if(NOT output MATCHES "scan completed without a converged point")
   message(FATAL_ERROR "the missing convergence was not reported\n${output}")
@@ -2659,12 +2823,23 @@ set_tests_properties(
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )
 
+# The end-to-end suite runs the opt -> freq -> thermo chain and a TS -> IRC
+# run on real GFN2 calculations; one thread is required for the bitwise
+# reproducibility of the engine (AGENTS.md section 6.1) and for the 340x
+# OpenMP anti-scaling of many small single points (AGENTS.md section 6.8).
+set_tests_properties(
+  "${PROJECT_NAME}/landscape-e2e"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
 # The same holds for every landscape CLI check that runs the engine (PLAN
 # appendix A: scan/Hessian benchmarks and tests always use one thread); the
 # error branches and the unconverged-SCC probe abort before/without a real
 # calculation and keep the plain environment.
 set_tests_properties(
   "xtb/landscape-opt"
+  "xtb/landscape-opt-namespace"
   "xtb/landscape-opt-energy"
   "xtb/landscape-opt-acc"
   "xtb/landscape-opt-hessian"
@@ -2700,6 +2875,195 @@ set_tests_properties(
 # 6.8 turns a 0.2 s run into 30 s.
 set_tests_properties(
   "xtb/landscape-scan-failed-point"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
+# ---------------------------------------------------------------------------
+# M7: `--ljson` and the end-to-end validation script
+# ---------------------------------------------------------------------------
+#
+# `test/unit/landscape_e2e_check.py` implements the layered validation of
+# PLAN section 9.8 and the machine readable checks of `--ljson`: the JSON
+# document is parsed with the standard library, every counter is compared
+# against the number the task printed on stdout, a second run has to be byte
+# identical and `--namespace` has to prefix the file name.  The checks need a
+# JSON parser, so they are driven by the Python interpreter instead of a
+# `cmake -P` script.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(LANDSCAPE-E2E-PY "${CMAKE_CURRENT_SOURCE_DIR}/landscape_e2e_check.py")
+set(LANDSCAPE-E2E-XTB "${XTB-EXE}")
+# the tester executable of this directory (a generator expression would not
+# be expanded inside the quoted -DARGS value)
+set(LANDSCAPE-E2E-TESTER "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-tester")
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${PYTHON}" "${SCRIPT}" ${ARGS}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "landscape_e2e_check.py failed with status ${status}\n${output}")
+endif()
+]=])
+
+# One `--ljson` check per landscape task reachable from the command line.
+# The `sp` task has no run type of its own (it is API only), so it is covered
+# by the unit test `landscape-e2e` case `sp-ljson`.
+foreach(task IN ITEMS opt scan scan2d vib ts irc)
+  if(task STREQUAL "ts" OR task STREQUAL "irc")
+    set(e2e-input "${LANDSCAPE-HCN}")
+  else()
+    set(e2e-input "${LANDSCAPE-H2O}")
+  endif()
+  add_test("xtb/landscape-ljson-${task}"
+    ${CMAKE_COMMAND}
+    -DPYTHON=${Python3_EXECUTABLE}
+    -DSCRIPT=${LANDSCAPE-E2E-PY}
+    "-DARGS=ljson;${LANDSCAPE-E2E-XTB};${e2e-input};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ljson-${task};${task}"
+    -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ljson-${task}
+    -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+endforeach()
+
+# `--ljson` is an output switch, not a run type: without one of `--lopt`,
+# `--lscan`, `--lvib`, `--lts`, `--lirc` it writes nothing, which used to be a
+# silent no-op (finding L-9 of `50-m7-independent-review.md`).  The check pins
+# both halves of the contract: the no-op is reported on stderr, no document is
+# written, and the run itself still exits 0 because the request is not an error.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ljson_norun.cmake" [=[
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --ljson
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --ljson terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "writes nothing without a landscape run type")
+  message(FATAL_ERROR "the --ljson no-op was not reported\n${output}")
+endif()
+file(GLOB documents "${RUNDIR}/landscape_*.json")
+if(documents)
+  message(FATAL_ERROR "--ljson wrote a document without a landscape run type: ${documents}")
+endif()
+]=])
+add_test("xtb/landscape-ljson-no-runtype"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ljson-no-runtype
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ljson_norun.cmake")
+
+# The product endpoint of the HCN/HNC band searches (same atom order as the
+# reactant, HNC on the H-C-N line).  A distinct variable name: `LANDSCAPE-HNC`
+# above is the linear-HNC input of the transition state tests.
+set(LANDSCAPE-HNC-PRODUCT "${CMAKE_CURRENT_BINARY_DIR}/landscape_hnc_product.xyz")
+file(WRITE "${LANDSCAPE-HNC-PRODUCT}"
+  "3\nHNC product\n"
+  "H  1.0000000  0.0000000  0.0000000\n"
+  "C -1.1700000  0.0000000  0.0000000\n"
+  "N  0.0000000  0.0000000  0.0000000\n")
+
+# `--ljson` must produce a valid document for every task method: the eight `ts`
+# methods (four of which are the band searches with their own code path) and the
+# four `irc` methods.  The assertion is the document (task name, method
+# identifier, parseability), not convergence.
+add_test("xtb/landscape-e2e-ljson-methods"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=ljson-methods;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ljson-methods;${LANDSCAPE-HNC-PRODUCT}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ljson-methods
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+
+# The sampling point of the `ts` evaluation counter (PLAN section 12.11): the
+# counter of a run is the complete run, so it equals the engine's own report,
+# and `--lts-no-verify` removes exactly whole 6N confirmation Hessians.
+add_test("xtb/landscape-e2e-ts-counters"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=ts-counters;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ts-counters"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ts-counters
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+
+# The point bookkeeping of a scan (`n_points`/`n_valid`/`n_fail`/
+# `n_unconverged`) against the frames the task writes, converged and not.
+add_test("xtb/landscape-e2e-scan-counters"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=scan-counters;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-scan-counters"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-scan-counters
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+
+# L3: the chain `opt -> hess -> freq -> thermo`, compared against `--hess`.
+add_test("xtb/landscape-e2e-chain"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=chain;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-chain"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-chain
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+
+# The failure path of the chain: step 1 (`--lopt`) succeeds, step 2 (`--lvib`
+# with a missing Hessian file) is misconfigured, and the runner must abort
+# instead of continuing with a step that failed.
+add_test("xtb/landscape-e2e-chain-failure"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=chain-failure;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-chain-failure"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-chain-failure
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+
+# L1 + L2 + L3 in one structured report; the second L3 leg (the `ts -> irc`
+# chain) needs the transition state input, which is passed as a sixth argument.
+add_test("xtb/landscape-e2e-layers"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=layers;${LANDSCAPE-E2E-XTB};${LANDSCAPE-E2E-TESTER};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-layers;${LANDSCAPE-HCN}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-layers
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+
+# The MAPLE comparison: topology only, and an explicit record of whether MAPLE
+# was executed (it is not, its fixtures use machine learning potentials).
+add_test("xtb/landscape-e2e-maple"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=maple;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-maple"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-maple
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+
+# Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
+# 340x OpenMP anti-scaling of many small single points out of the picture
+# (AGENTS.md section 6.8).
+set_tests_properties(
+  "xtb/landscape-ljson-opt"
+  "xtb/landscape-ljson-no-runtype"
+  "xtb/landscape-ljson-scan"
+  "xtb/landscape-ljson-scan2d"
+  "xtb/landscape-ljson-vib"
+  "xtb/landscape-ljson-ts"
+  "xtb/landscape-ljson-irc"
+  "xtb/landscape-e2e-ljson-methods"
+  "xtb/landscape-e2e-ts-counters"
+  "xtb/landscape-e2e-scan-counters"
+  "xtb/landscape-e2e-chain"
+  "xtb/landscape-e2e-chain-failure"
+  "xtb/landscape-e2e-layers"
+  "xtb/landscape-e2e-maple"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

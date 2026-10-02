@@ -40,7 +40,8 @@ module test_landscape_scan
       & newWavefunction
    use xtb_landscape, only : run_landscape
    use xtb_landscape_settings, only : landscape_scan_settings, &
-      & landscape_scan_coord_settings, landscape_log_failed, &
+      & landscape_opt_settings, landscape_scan_coord_settings, &
+      & landscape_log_failed, &
       & landscape_scan_coord_name, landscape_scan_coord_from_name, &
       & landscape_scan_coord_natoms, landscape_scan_coord_known, &
       & landscape_scan_mode_known, &
@@ -192,6 +193,8 @@ subroutine collect_landscape_scan(testsuite)
       new_unittest("scan-2d-bookkeeping", test_2d_bookkeeping), &
       new_unittest("scan-task-gfn2", test_scan_task), &
       new_unittest("scan-task-unconverged", test_scan_task_unconverged), &
+      new_unittest("scan-task-partial-unconverged", &
+      & test_scan_task_partial_unconverged), &
       new_unittest("scan-task-no-converged-point", test_scan_task_no_converged_point), &
       new_unittest("scan-task-missing-energy", test_scan_task_missing_energy), &
       new_unittest("scan-task-no-energy", test_scan_task_no_energy), &
@@ -1501,14 +1504,16 @@ subroutine test_scan_task(error)
 
 end subroutine test_scan_task
 
-!> A scan whose inner relaxations do not converge is not reported as converged.
+!> A scan whose inner relaxations all fail to converge reports an error.
 !>
 !> The step budget is one and the thresholds are `vtight`, so no inner
 !> relaxation can meet its criteria; each one still returns a geometry and an
 !> energy, so no scan point *failed* and every frame reaches `xtbscan.log`.
-!> `result%converged` has to be false nevertheless - a caller that only reads
-!> the flag must not conclude that every point converged
-!> (`docs/_landscape-recon/17-m2-independent-review.md` section 3.1).
+!> `result%converged` is false and - since M7 - the task also reports through
+!> `env`, because without a single converged point there is no minimum and the
+!> result is not usable (PLAN §12.11 INFO-3, the semantics recorded as INFO-3 in
+!> PLAN section 12.11).  A scan with **some** unconverged points still only
+!> warns, see `test_scan_task_partial_unconverged`.
 subroutine test_scan_task_unconverged(error)
    type(error_type), allocatable, intent(out) :: error
    type(TEnvironment) :: env
@@ -1538,9 +1543,12 @@ subroutine test_scan_task_unconverged(error)
    nlog = env%nLog
    call run_landscape(env, mol, chk, calc, set, result)
    if (allocated(error)) return
-   ! no point lost its energy: this scan has no hard failure ...
-   call check(error, .not. landscape_log_failed(env, nlog), &
-      & "the unconverged scan reported a hard failure")
+   ! No point lost its energy, but **no** point met its criteria either, so
+   ! there is no minimum to report.  M7 (PLAN §12.11 INFO-3) turned that branch
+   ! from a warning into an error: a caller of a scan chain must not see exit
+   ! 0 next to a NaN total energy.
+   call check(error, landscape_log_failed(env, nlog), &
+      & "the all-unconverged scan was not reported as an error")
    if (allocated(error)) return
    frames = count_frames('xtbscan.log')
    write(stdout, '(1x,a,i0,a,i0)') "unconverged scan: ", frames, &
@@ -1553,6 +1561,63 @@ subroutine test_scan_task_unconverged(error)
       & "a scan with unconverged points claimed to be converged")
 
 end subroutine test_scan_task_unconverged
+
+!> A scan with **some** unconverged points still has a usable minimum and
+!> keeps exit 0.
+!>
+!> This is the other half of the M7 rule: only a scan without a single
+!> converged point is an error (`test_scan_task_unconverged`).  The geometry is
+!> brought to a minimum first, so the unbiased first scan point (which carries
+!> no constraint bias) converges even with a one step budget while the
+!> displaced points do not - a deterministic partial case without a random
+!> ingredient.
+subroutine test_scan_task_partial_unconverged(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(TMolecule) :: mol
+   type(TRestart) :: chk
+   type(TxTBCalculator) :: calc
+   type(landscape_opt_settings) :: optset
+   type(landscape_scan_settings) :: set
+   type(landscape_result) :: result
+   integer :: nlog
+
+   call init(env)
+   call init(mol, sym, xyz)
+   call newXTBCalculator(env, mol, calc, method=2)
+   call newWavefunction(env, mol, calc, chk)
+
+   optset = landscape_opt_settings()
+   optset%printlevel = 0
+   optset%write_files = .false.
+   call run_landscape(env, mol, chk, calc, optset, result)
+
+   set = landscape_scan_settings()
+   set%printlevel = 0
+   set%write_files = .false.
+   set%bidirectional = .false.
+   set%max_steps = 1
+   call set%set_conv_level('loose')
+   set%coord(1)%ctype = p_landscape_scan_coord_distance
+   set%coord(1)%atoms(1:2) = [1, 2]
+   set%coord(1)%step = 0.05_wp
+   set%coord(1)%nstep = 2
+
+   nlog = env%nLog
+   call run_landscape(env, mol, chk, calc, set, result)
+   call check(error, .not. landscape_log_failed(env, nlog), &
+      & "a scan with a converged point reported an error")
+   if (allocated(error)) return
+   call check(error, .not. result%converged, &
+      & "a scan with unconverged points claimed convergence")
+   if (allocated(error)) return
+   call check(error, landscape_value_present(result%energy), &
+      & "the partially unconverged scan reported no minimum")
+   if (allocated(error)) return
+   call check(error, result%message, "scan completed with unconverged points", &
+      & "the scan did not report the unconverged points")
+
+end subroutine test_scan_task_partial_unconverged
 
 !> A scan in which **no** point converges must not report a minimum.
 !>
@@ -1574,6 +1639,12 @@ end subroutine test_scan_task_unconverged
 subroutine test_scan_task_no_converged_point(error)
    type(error_type), allocatable, intent(out) :: error
    type(TEnvironment) :: env
+   ! A second and third environment: `env%check` (and every core routine that
+   ! uses it, e.g. `xtb_calculator`) tests the **whole** log for errors, so an
+   ! error of the first scan would abort the following ones for the wrong
+   ! reason.  In production an error ends the run, so this is a test level
+   ! concern only.
+   type(TEnvironment) :: env_reference, env_grid
    type(TMolecule) :: mol
    type(TRestart) :: chk
    type(TxTBCalculator) :: calc
@@ -1601,9 +1672,10 @@ subroutine test_scan_task_no_converged_point(error)
    nlog = env%nLog
    call run_landscape(env, mol, chk, calc, set, result)
 
-   ! a point that stops short of its thresholds is not a hard failure
-   call check(error, .not. landscape_log_failed(env, nlog), &
-      & "the unconverged scan reported an error")
+   ! M7: no converged point means no usable result, so the task reports it
+   ! through `env` (non-zero exit) instead of only warning.
+   call check(error, landscape_log_failed(env, nlog), &
+      & "the all-unconverged scan was not reported as an error")
    if (allocated(error)) return
    call check(error, result%n_steps, 3)
    if (allocated(error)) return
@@ -1629,9 +1701,10 @@ subroutine test_scan_task_no_converged_point(error)
    ! the same scan with a real step budget converges and reports a number
    set%max_steps = 256
    call set%set_conv_level('loose')
-   nlog = env%nLog
-   call run_landscape(env, mol, chk, calc, set, result)
-   call check(error, .not. landscape_log_failed(env, nlog), &
+   call init(env_reference)
+   nlog = env_reference%nLog
+   call run_landscape(env_reference, mol, chk, calc, set, result)
+   call check(error, .not. landscape_log_failed(env_reference, nlog), &
       & "the reference scan reported an error")
    if (allocated(error)) return
    call check(error, result%converged, &
@@ -1658,10 +1731,11 @@ subroutine test_scan_task_no_converged_point(error)
    set%coord(2)%step = 0.05_wp
    set%coord(2)%nstep = 1
 
-   nlog = env%nLog
-   call run_landscape(env, mol, chk, calc, set, result)
-   call check(error, .not. landscape_log_failed(env, nlog), &
-      & "the two-dimensional scan reported an error")
+   call init(env_grid)
+   nlog = env_grid%nLog
+   call run_landscape(env_grid, mol, chk, calc, set, result)
+   call check(error, landscape_log_failed(env_grid, nlog), &
+      & "the two-dimensional all-unconverged scan was not reported as an error")
    if (allocated(error)) return
    call check(error, .not. result%converged, &
       & "the two-dimensional scan claimed to be converged")

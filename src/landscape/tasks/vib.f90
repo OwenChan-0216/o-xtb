@@ -62,6 +62,12 @@ module xtb_landscape_tasks_vib
    use xtb_landscape_vib_numhess, only : landscape_vib_hessian
    use xtb_landscape_vib_modes, only : landscape_vib_analysis
    use xtb_landscape_vib_thermo, only : landscape_vib_thermo_output
+   use xtb_landscape_json, only : landscape_json_document, &
+      & landscape_json_document_init, landscape_json_add_result, &
+      & landscape_json_add_counter, landscape_json_add_value, &
+      & landscape_json_add_flag, landscape_json_add_series, &
+      & landscape_json_write, &
+      & landscape_json_status_ok, landscape_json_status_incomplete
    implicit none(type, external)
    private
 
@@ -91,7 +97,7 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
 
    type(landscape_vib_result) :: vib
    real(wp), allocatable :: hess(:, :), gradient(:, :)
-   real(wp) :: energy, final_err, lowest, highest
+   real(wp) :: energy, final_err, lowest, highest, etemp = 0.0_wp
    logical :: fail, ok
    integer :: nlog, n_eval
 
@@ -136,7 +142,7 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
    end if
 
    call landscape_vib_hessian(env, mol, chk, calc, settings, hess, energy, &
-      & gradient, final_err, fail, n_eval)
+      & gradient, final_err, fail, n_eval, etemp)
    if (fail) then
       result%message = "frequency analysis failed"
       return
@@ -177,6 +183,15 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
    result%gmax = result%gnorm
    result%n_eval = n_eval
    result%n_cache_miss = n_eval
+   ! The imaginary mode count of the analysis belongs to the result as well:
+   ! the printed table and `landscape_vib.json` must not report two different
+   ! numbers (`-1` would be the "confirmation not performed" default of the
+   ! saddle tasks).
+   result%n_imag = vib%n_imag
+   ! M4 hard constraint 1: the effective electronic temperature is part of the
+   ! result object, not only of the printed engine report (the same read-back
+   ! the saddle and IRC tasks perform).
+   result%etemp = etemp
    result%converged = .true.
    if (settings%printlevel > 0) then
       write(env%unit, '(1x,a,i0,a,i0,a)') "modes: ", vib%n_vib, " internal, ", &
@@ -196,6 +211,16 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
          & result%gnorm, " Eh/bohr"
       write(env%unit, '(1x,a,es15.6,a)') "zero point energy:        ", &
          & vib%zpe, " Eh"
+      ! H(T) and G(T) are part of the summary as well: the reused
+      ! thermodynamic table prints them, but the `--hess` property printout
+      ! additionally reports `TOTAL ENTHALPY`, and the end-to-end chain
+      ! (`test/unit/landscape_e2e_check.py`, mode `chain`) compares the two
+      ! routes from stdout.  The values are the ones of the highest requested
+      ! temperature (`freq_results%htot/%gtot`).
+      write(env%unit, '(1x,a,f20.12,a)') "total enthalpy H(T):      ", &
+         & vib%enthalpy, " Eh"
+      write(env%unit, '(1x,a,f20.12,a)') "total free energy G(T):   ", &
+         & vib%gibbs, " Eh"
       write(env%unit, '(1x,a,es15.6)') "Hessian residual:         ", final_err
    end if
 
@@ -217,7 +242,57 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
       call env%warning("Hessian on incompletely optimized geometry!", source)
    end if
 
+   if (settings%ljson) call write_json(env, settings, result, vib)
+
 end subroutine landscape_vib
+
+!> Write the structured result `landscape_vib.json`.
+!>
+!> `zpe`, `enthalpy` and `gibbs` are the thermochemical quantities of the
+!> reused model (`freq_results%zp/%htot/%gtot`, hartree); the end-to-end
+!> validation compares them against the `--hess` route
+!> (`test/unit/landscape_e2e_check.py`, mode `chain`).  An imaginary mode does
+!> not make the analysis a failure - it is a legitimate result of a geometry
+!> that is not a minimum (the `--hess` path reports it the same way) - but it
+!> is `incomplete` rather than `ok`, so a regression diff of the status field
+!> catches a changed mode count.
+subroutine write_json(env, settings, result, vib)
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Frequency settings
+   type(landscape_vib_settings), intent(in) :: settings
+   !> Task result
+   type(landscape_result), intent(in) :: result
+   !> Frequency analysis
+   type(landscape_vib_result), intent(in) :: vib
+
+   type(landscape_json_document) :: doc = landscape_json_document()
+   logical :: ok
+   integer :: status
+
+   status = landscape_json_status_ok
+   if (vib%n_imag > 0) status = landscape_json_status_incomplete
+   call landscape_json_document_init(doc, 'vib')
+   call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_counter(doc, 'n_atoms', size(vib%freq)/3)
+   call landscape_json_add_counter(doc, 'n_modes', size(vib%freq))
+   call landscape_json_add_counter(doc, 'n_zero', vib%n_zero)
+   call landscape_json_add_counter(doc, 'n_vib', vib%n_vib)
+   ! `n_imag` is already part of the shared result block, so it is not added a
+   ! second time (a duplicate key would break a key based comparison).
+   call landscape_json_add_value(doc, 'zpe', vib%zpe)
+   call landscape_json_add_value(doc, 'enthalpy', vib%enthalpy)
+   call landscape_json_add_value(doc, 'gibbs', vib%gibbs)
+   call landscape_json_add_value(doc, 'temperature', settings%temperature(1))
+   call landscape_json_add_value(doc, 'freq_scal', settings%freq_scal)
+   call landscape_json_add_flag(doc, 'linear', vib%linear)
+   call landscape_json_add_flag(doc, 'project_tr', settings%project_tr)
+   if (allocated(vib%freq)) then
+      call landscape_json_add_series(doc, 'frequency', vib%freq)
+   end if
+   call landscape_json_write(env, doc, ok)
+
+end subroutine write_json
 
 !> Validate the thermochemical settings of the frequency task.
 !>

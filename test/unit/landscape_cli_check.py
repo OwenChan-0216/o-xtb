@@ -13,6 +13,8 @@ mode mirrors one CMake test one-to-one:
   scanfail <exe> <input> <rundir>     -> xtb/landscape-scan-failed-point
   vib    <exe> <input> <rundir>       -> xtb/landscape-vib-cli
   vibnamespace <exe> <input> <rundir> -> xtb/landscape-vib-namespace
+  optnamespace <exe> <input> <rundir> -> xtb/landscape-opt-namespace
+  ljsonnorun <exe> <input> <rundir>   -> xtb/landscape-ljson-no-runtype
   vibetemp <exe> <input> <rundir>     -> xtb/landscape-vib-etemp
   ts     <exe> <input> <rundir>       -> xtb/landscape-ts-prfo
   tsetemp <exe> <input> <rundir>      -> xtb/landscape-ts-etemp
@@ -37,6 +39,7 @@ like in the CMake build.
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -236,6 +239,15 @@ def check_vib(exe, inp, rundir):
         )
     match = re.search(r"eigval : +([-0-9. ]+)", output)
     vib_freqs = " ".join(match.group(1).split()) if match else ""
+    # the direct run builds the numerical Hessian from 6N displaced single
+    # points plus the gradient of the input geometry: 1 + 6*3 = 19 for water
+    match = re.search(r"landscape engine: energy evaluations +(\d+)", output)
+    if not match:
+        fail("the direct run reports no evaluation counter", output)
+    direct_eval = int(match.group(1))
+    if direct_eval != 19:
+        fail("the direct --lvib run used %d evaluations, expected 1+6N = 19"
+             % direct_eval, output)
     status, file_output = run(
         exe,
         inp,
@@ -247,6 +259,19 @@ def check_vib(exe, inp, rundir):
         fail("reading the Hessian file failed with status %d" % status, file_output)
     if not re.search(r"Hessian file: +hessian", file_output):
         fail("the file provider did not report its file", file_output)
+    # the file provider must *save* the displaced single points: reading the
+    # file needs the gradient of the input geometry only (19 -> 1 for water),
+    # otherwise a provider that silently recomputed the Hessian would be green
+    match = re.search(r"landscape engine: energy evaluations +(\d+)", file_output)
+    if not match:
+        fail("the file run reports no evaluation counter", file_output)
+    file_eval = int(match.group(1))
+    if file_eval != 1:
+        fail("--lvib-hessian file used %d evaluations, expected 1; the "
+             "provider did not reuse the file" % file_eval, file_output)
+    if direct_eval <= file_eval:
+        fail("the Hessian file did not save evaluations (%d vs %d)"
+             % (direct_eval, file_eval))
     match = re.search(r"eigval : +([-0-9. ]+)", file_output)
     file_freqs = " ".join(match.group(1).split()) if match else ""
     if file_freqs != vib_freqs:
@@ -261,10 +286,14 @@ def check_vib_namespace(exe, inp, rundir):
 
     Mirrors the CMake script of `xtb/landscape-vib-namespace`: with
     `--namespace ns` the task writes `ns.hessian` (the name the `--hess` path
-    produces as well), not `ns.ns.hessian`, and the re-run with
-    `--lvib-hessian file --lvib-hessian-file hessian --namespace ns` finds and
-    reproduces it.
+    produces as well), not `ns.ns.hessian`, every other output carries the
+    prefix too (`ns.vibspectrum`, `ns.vib_normal_modes`, `ns.g98.out`), and the
+    re-run with `--lvib-hessian file --lvib-hessian-file hessian --namespace
+    ns` finds and reproduces the file.  The rundir is removed at entry, because
+    the check asserts the *absence* of the unprefixed output names.
     """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
     status, output = run(
         exe, inp, ["--gfn", "2", "--lvib", "--norestart", "--namespace", "ns"], rundir
     )
@@ -274,6 +303,12 @@ def check_vib_namespace(exe, inp, rundir):
         fail("the namespaced hessian file was not written", output)
     if os.path.exists(os.path.join(rundir, "ns.ns.hessian")):
         fail("the hessian file name carries the namespace twice")
+    # every other output of the task carries the namespace as well
+    for name in ("hessian", "vibspectrum", "vib_normal_modes", "g98.out"):
+        if not os.path.exists(os.path.join(rundir, "ns." + name)):
+            fail("--namespace ns wrote no ns.%s" % name, output)
+        if os.path.exists(os.path.join(rundir, name)):
+            fail("--namespace ns also wrote the unprefixed %s" % name)
     match = re.search(r"eigval : +([-0-9. ]+)", output)
     vib_freqs = " ".join(match.group(1).split()) if match else ""
     status, file_output = run(
@@ -565,9 +600,10 @@ def check_maxsteps(exe, inp, rundir):
     """`--lscan-max-steps` reaches the inner relaxation (M2 leftovers M-1/M-2).
 
     Mirrors the CMake script of `xtb/landscape-scan-max-steps`: with a zero
-    step budget no point converges, the run stays successful but reports a
-    missing minimum (NaN) and a readable diagnostic, and every evaluated point
-    still reaches the scan log.  With a real budget the same scan converges.
+    step budget no point converges, the run reports a missing minimum (NaN)
+    and a readable diagnostic with a non-zero exit status, and every evaluated
+    point still reaches the scan log.  With a real budget the same scan
+    converges and exits 0.
     """
     args = [
         "--gfn", "2", "--lscan", "--lscan-coord", "angle",
@@ -575,8 +611,11 @@ def check_maxsteps(exe, inp, rundir):
         "--lscan-max-steps", "0", "--norestart", "--namespace", "landscape4",
     ]
     status, output = run(exe, inp, args, rundir)
-    if status != 0:
-        fail("--lscan-max-steps 0 failed with status %d" % status, output)
+    # M7 (PLAN §12.11 INFO-3): a scan without a single converged point has no
+    # usable result, so the run exits non-zero next to the NaN total energy
+    # (before this round the branch only warned and the run exited 0).
+    if status == 0:
+        fail("a scan without a converged point exited 0", output)
     if "scan completed without a converged point" not in output:
         fail("the missing convergence was not reported", output)
     if not re.search(r"lowest energy: +NaN", output):
@@ -1002,6 +1041,115 @@ def check_irc_swap(exe, inp, rundir):
              % (plain_bwd, swapped_fwd))
 
 
+def check_opt_namespace(exe, inp, rundir):
+    """`--lopt` geometry and trajectory honour `--namespace`.
+
+    Mirrors the CMake script of `xtb/landscape-opt-namespace` (defect N-1 of
+    the final fix round): `xtb_landscape_log::landscape_write_files` used the
+    bare names `xtbopt.xyz`/`xtb.trj` although every other landscape writer and
+    the pre-existing `--opt` pass their names through `get_namespace`, so two
+    minimisations with different namespaces in one directory overwrote each
+    other.  Without `--namespace` the names must stay `xtbopt.xyz`/`xtb.trj`.
+
+    `inp` is ignored: the check writes its own *stretched* water, because two
+    runs of a geometry that is already at the minimum could produce identical
+    files, and an identical pair cannot tell an overwrite from a correct pair.
+    The rundir is removed at entry, because the check asserts the *absence* of
+    the unprefixed `xtbopt.xyz`.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    os.makedirs(os.path.join(rundir, "plain"))
+    os.makedirs(os.path.join(rundir, "two"))
+    stretched = os.path.join(rundir, "stretched_h2o.xyz")
+    with open(stretched, "w") as handle:
+        handle.write("3\nstretched water\n"
+                     "O  0.0000000  0.0000000  0.0000000\n"
+                     "H  0.0000000  0.0000000  1.3000000\n"
+                     "H  1.3000000  0.0000000 -0.4000000\n")
+
+    # 1. the default names (tool-chain compatibility)
+    plain = os.path.join(rundir, "plain")
+    status, output = run(
+        exe, stretched,
+        ["--gfn", "2", "--lopt", "--lopt-level", "loose", "--norestart"],
+        plain,
+    )
+    if status != 0:
+        fail("the default --lopt run failed with status %d" % status, output)
+    for name in ("xtbopt.xyz", "xtb.trj"):
+        path = os.path.join(plain, name)
+        if not os.path.exists(path):
+            fail("without --namespace the output is still %s, but it was not "
+                 "written" % name, output)
+        if os.path.getsize(path) == 0:
+            fail("%s is empty" % name)
+
+    # 2. two namespaces in one directory
+    two = os.path.join(rundir, "two")
+    status, output = run(
+        exe, stretched,
+        ["--gfn", "2", "--lopt", "--lopt-level", "loose", "--norestart",
+         "--namespace", "c1"],
+        two,
+    )
+    if status != 0:
+        fail("the --namespace c1 run failed with status %d" % status, output)
+    first = os.path.join(two, "c1.xtbopt.xyz")
+    if not os.path.exists(first):
+        fail("--namespace c1 wrote no c1.xtbopt.xyz", output)
+    with open(first) as handle:
+        first_text = handle.read()
+
+    status, output = run(
+        exe, stretched,
+        ["--gfn", "2", "--lopt", "--lopt-level", "vtight", "--norestart",
+         "--namespace", "c2"],
+        two,
+    )
+    if status != 0:
+        fail("the --namespace c2 run failed with status %d" % status, output)
+    for name in ("c1.xtbopt.xyz", "c2.xtbopt.xyz", "c1.xtb.trj", "c2.xtb.trj"):
+        if not os.path.exists(os.path.join(two, name)):
+            fail("%s was not written" % name, output)
+    if os.path.exists(os.path.join(two, "xtbopt.xyz")):
+        fail("a namespaced run also wrote the unprefixed xtbopt.xyz")
+    with open(first) as handle:
+        if handle.read() != first_text:
+            fail("the --namespace c2 run overwrote c1.xtbopt.xyz")
+    with open(os.path.join(two, "c2.xtbopt.xyz")) as handle:
+        second_text = handle.read()
+    if first_text == second_text:
+        fail("the two namespaces hold the same geometry; the check cannot "
+             "tell an overwrite from a correct pair")
+
+
+def check_ljson_no_runtype(exe, inp, rundir):
+    """`--ljson` without a landscape run type is reported, not silently ignored.
+
+    Mirrors the CMake script of `xtb/landscape-ljson-no-runtype` (finding L-9 of
+    `50-m7-independent-review.md`): the switch is an output switch, so a run
+    type that does not know it writes nothing.  That used to happen without a
+    message; now the no-op is reported on stderr, no document is written, and
+    the process still exits 0 because the request itself is not an error.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    os.makedirs(rundir)
+    status, output = run(
+        exe, os.path.abspath(inp), ["--gfn", "2", "--ljson"], rundir
+    )
+    if status != 0:
+        fail("xtb --ljson terminated with status %d" % status, output)
+    if "writes nothing without a landscape run type" not in output:
+        fail("the --ljson no-op was not reported", output)
+    documents = [name for name in os.listdir(rundir)
+                 if name.startswith("landscape_") and name.endswith(".json")]
+    if documents:
+        fail("--ljson wrote a document without a landscape run type: %s"
+             % documents)
+
+
 def check_error(exe, inp, rundir, pattern, args):
     """An invalid request must abort with a non-zero status and a message."""
     status, output = run(exe, inp, args, rundir)
@@ -1032,6 +1180,10 @@ def main():
         check_vib_namespace(exe, inp, rundir)
     elif mode == "vibetemp":
         check_vib_etemp(exe, inp, rundir)
+    elif mode == "optnamespace":
+        check_opt_namespace(exe, inp, rundir)
+    elif mode == "ljsonnorun":
+        check_ljson_no_runtype(exe, inp, rundir)
     elif mode == "ts":
         check_ts(exe, inp, rundir)
     elif mode == "tsetemp":

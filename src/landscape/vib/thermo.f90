@@ -141,6 +141,15 @@ subroutine landscape_vib_thermo_output(env, mol, chk, settings, vib, energy, ok)
    end if
 
    vib%zpe = res%zp
+   ! H(T) and G(T) are read back so that the end-to-end chain can assert the
+   ! two against the `--hess` route.  `print_thermo` stores the **thermal**
+   ! contributions in `freq_results%htot/%gtot` (it prints the totals as
+   ! `frqres%etot + frqres%htot` and `frqres%etot + frqres%gtot`,
+   ! `src/main/property.F90:1315`), so the electronic energy is added here and
+   ! the two fields of the result are the totals the `--hess` property
+   ! printout reports as `TOTAL ENTHALPY` and `TOTAL FREE ENERGY`.
+   vib%enthalpy = energy + res%htot
+   vib%gibbs = energy + res%gtot
    if (res%nimag /= vib%n_imag) then
       call env%warning("the thermochemistry counted a different number of "//&
          & "imaginary modes than the mode analysis; a frequency scaling "//&

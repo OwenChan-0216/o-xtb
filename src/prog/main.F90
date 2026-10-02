@@ -934,6 +934,21 @@ contains
 
       ! ------------------------------------------------------------------------
       ! landscape suite (minimisation with the algorithms of src/landscape)
+      !
+      ! `--ljson` is an output switch of the landscape tasks, not a run type: a
+      ! run type that does not know it writes nothing, which used to happen
+      ! without any message and is a silent no-op for a caller who expected a
+      ! document (finding L-9 of
+      ! `docs/_landscape-recon/50-m7-independent-review.md`).  The check is here
+      ! and not in the parser, because the flag and the run type may be given in
+      ! either order.
+      if (lset%ljson .and. set%runtyp /= p_run_lopt .and. &
+         & set%runtyp /= p_run_lscan .and. set%runtyp /= p_run_lvib .and. &
+         & set%runtyp /= p_run_lts .and. set%runtyp /= p_run_lirc) then
+         call env%warning("--ljson writes nothing without a landscape run "//&
+            & "type: add --lopt, --lscan, --lvib, --lts or --lirc", source)
+      end if
+
       if (set%runtyp == p_run_lopt) then
          ! The CLI electronic-structure settings reach the engine only through
          ! its own control object: `xtb_single::singlepoint` forwards `acc` as
@@ -2175,6 +2190,19 @@ contains
 
          case ('--mdopt')
             call set_runtyp('mdopt')
+
+         case ('--ljson')
+            ! Structured result of the landscape suite: every task writes
+            ! `landscape_<task>.json` (`status` / `counters` / convergence
+            ! `history`) independently of `--l*` and of the geometry files
+            ! (PLAN section 5.5).  The option is valid for all five run
+            ! types, so it is set on every settings object and read by
+            ! whichever task the run type selects.
+            lset%ljson = .true.
+            lsset%ljson = .true.
+            lvset%ljson = .true.
+            ltset%ljson = .true.
+            lircset%ljson = .true.
 
          case ('--lopt')
             ! Landscape suite: minimisation with the algorithms of

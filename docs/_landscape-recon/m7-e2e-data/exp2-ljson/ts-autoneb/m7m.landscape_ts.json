@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "task": "ts",
+  "status": 1,
+  "status_name": "incomplete",
+  "converged": false,
+  "message": "autoneb completed",
+  "counters": {
+    "n_eval": 736,
+    "n_cache_miss": 736,
+    "n_steps": 100,
+    "n_imag": 1,
+    "n_iter": 0,
+    "method": 6
+  },
+  "values": {
+    "energy": -5.38737358095051277E+000,
+    "gnorm": 2.38253979341247052E-004,
+    "gmax": 1.69032400555929222E-004,
+    "etemp": 3.00000000000000000E+002,
+    "imag_freq": -1.42492924300430423E+003,
+    "kcal_per_mol": -3.38062796353221711E+003
+  },
+  "flags": {
+    "is_saddle": true,
+    "verify_ts": true
+  },
+  "history": {
+  }
+}

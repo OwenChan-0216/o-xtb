@@ -28,6 +28,7 @@
 !> Units: coordinates in bohr, energies in hartree, gradients in hartree/bohr.
 module xtb_landscape_tasks_opt
    use xtb_mctc_accuracy, only : wp
+   use xtb_mctc_convert, only : autokcal
    use xtb_type_environment, only : TEnvironment
    use xtb_type_molecule, only : TMolecule
    use xtb_type_restart, only : TRestart
@@ -41,6 +42,11 @@ module xtb_landscape_tasks_opt
       & new_landscape_hessian_provider
    use xtb_landscape_optimize, only : landscape_optimize_model
    use xtb_landscape_log, only : landscape_write_files
+   use xtb_landscape_json, only : landscape_json_document, &
+      & landscape_json_document_init, landscape_json_add_result, &
+      & landscape_json_add_counter, landscape_json_add_value, &
+      & landscape_json_write, landscape_json_status_ok, &
+      & landscape_json_status_incomplete, landscape_json_status_error
    implicit none(type, external)
    private
 
@@ -135,6 +141,10 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
    ! separately as the engine cache misses.
    result%n_cache_miss = engine%n_eval
    n_scf_fail = engine%n_scf_fail
+   ! M4 hard constraint 1: the effective electronic temperature is part of the
+   ! result object (read back from the calculator), not only of the printed
+   ! engine report.
+   result%etemp = engine%effective_etemp()
 
    if (settings%printlevel > 0) then
       call result%write_log(env%unit)
@@ -145,6 +155,8 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
    if (settings%write_files) then
       call landscape_write_files(env, mol, settings, traj, result)
    end if
+
+   if (settings%ljson) call write_json(env, result, n_scf_fail)
 
    call engine%destroy()
 
@@ -172,6 +184,35 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
    end if
 
 end subroutine landscape_optimize
+
+!> Write the structured result `landscape_opt.json`.
+!>
+!> `n_scf_fail` separates "the minimisation stopped short" (status
+!> `incomplete`, the caller may still look at the geometry) from "the run is
+!> not trustworthy" (status `error`, the energy/gradient pair of an
+!> unconverged SCC was never accepted by the engine).
+subroutine write_json(env, result, n_scf_fail)
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Minimisation result
+   type(landscape_result), intent(in) :: result
+   !> Number of unconverged SCCs of the run
+   integer, intent(in) :: n_scf_fail
+
+   type(landscape_json_document) :: doc = landscape_json_document()
+   logical :: ok
+   integer :: status
+
+   status = landscape_json_status_ok
+   if (.not. result%converged) status = landscape_json_status_incomplete
+   if (n_scf_fail > 0) status = landscape_json_status_error
+   call landscape_json_document_init(doc, 'opt')
+   call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_counter(doc, 'n_fallback', result%n_fallback)
+   call landscape_json_add_value(doc, 'kcal_per_mol', result%energy*autokcal)
+   call landscape_json_write(env, doc, ok)
+
+end subroutine write_json
 
 !> Energy and gradient of the engine backed model at the flattened coordinates.
 subroutine engine_model_evaluate(self, x, energy, gradient, fail)

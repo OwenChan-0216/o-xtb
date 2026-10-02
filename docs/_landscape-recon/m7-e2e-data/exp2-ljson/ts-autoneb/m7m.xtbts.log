@@ -1,0 +1,21 @@
+ landscape transition state search: autoneb
+ electronic temperature (frozen):      300.000 K
+ initial trust radius:    3.779500E-01 bohr
+ Hessian source: numerical
+ termination: autoneb completed
+ --------------------------------------------------------------
+ landscape: autoneb completed
+ converged:      F
+ steps:          100
+ energy calls:   735
+ cache misses:   736
+ final energy:        -5.387373580951 Eh
+ final gradient:    2.382540E-04 Eh/bohr
+ max gradient:      1.690324E-04 Eh/bohr
+ etemp:               300.000 K
+ --------------------------------------------------------------
+ convergence history
+ criteria (gmax,grms,dmax,drms):  F F F F
+ confirmation imaginary modes: 1
+ is a first order saddle: T
+ most negative frequency:         -1424.93 cm^-1

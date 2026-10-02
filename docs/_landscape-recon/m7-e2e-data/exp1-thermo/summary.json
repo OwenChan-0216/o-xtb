@@ -1,0 +1,462 @@
+{
+ "c2h2": {
+  "frequencies": {
+   "hess": [
+    492.17,
+    492.17,
+    849.0,
+    849.0,
+    2155.46,
+    3351.71,
+    3427.76
+   ],
+   "lvib": [
+    492.17,
+    492.17,
+    849.0,
+    849.0,
+    2155.46,
+    3351.71,
+    3427.76
+   ],
+   "n_internal": 7
+  },
+  "g_total": {
+   "delta": -4.200018111077952e-11,
+   "hess": -5.19933488469,
+   "lvib": -5.199334884732
+  },
+  "h_total": {
+   "delta": -2.100009055538976e-11,
+   "hess": -5.17641023994,
+   "lvib": -5.176410239961
+  },
+  "hess_status": 0,
+  "independent_vs_xtb_hess": {
+   "d_gt": 7.24221403507197e-09,
+   "d_ht": 4.490711628512417e-09,
+   "d_s_tot": 3.275810785652311e-05,
+   "d_zpe": 1.0549610015425648e-08
+  },
+  "independent_vs_xtb_lvib": {
+   "d_gt": 7.24221403507197e-09,
+   "d_ht": 4.490711628512417e-09,
+   "d_s_tot": 3.275810785652311e-05,
+   "d_zpe": 1.0515610014694143e-08
+  },
+  "input": "c2h2.xyz",
+  "lvib_status": 0,
+  "max_dfreq": 0.0,
+  "opt_energy": -5.206771987444,
+  "opt_gnorm": 8.27681e-07,
+  "opt_status": 0,
+  "params": {
+   "imag_cutoff": {
+    "equal": true,
+    "hess": "-20.0000000 cm\u207b\u00b9",
+    "lvib": "-20.0000000 cm\u207b\u00b9"
+   },
+   "linear": {
+    "equal": true,
+    "hess": "true",
+    "lvib": "true"
+   },
+   "n_freq": {
+    "equal": true,
+    "hess": "7",
+    "lvib": "7"
+   },
+   "n_imag": {
+    "equal": true,
+    "hess": "0",
+    "lvib": "0"
+   },
+   "rotational_number": {
+    "equal": true,
+    "hess": "2",
+    "lvib": "2"
+   },
+   "rotor_cutoff": {
+    "equal": true,
+    "hess": "50.0000000 cm\u207b\u00b9",
+    "lvib": "50.0000000 cm\u207b\u00b9"
+   },
+   "scaling_factor": {
+    "equal": true,
+    "hess": "1.0000000",
+    "lvib": "1.0000000"
+   },
+   "symmetry": {
+    "equal": true,
+    "hess": "din",
+    "lvib": "din"
+   },
+   "temp": {
+    "equal": true,
+    "hess": 298.15,
+    "lvib": 298.15
+   }
+  },
+  "s_tot_cal": {
+   "delta": 0.0,
+   "hess": 48.249,
+   "lvib": 48.249
+  },
+  "ts_eh": {
+   "delta": 0.0,
+   "hess": 0.0229246,
+   "lvib": 0.0229246
+  },
+  "zpe": {
+   "delta": -3.400000073150444e-11,
+   "hess": 0.026466099055,
+   "lvib": 0.026466099021
+  },
+  "zpe_identity_hess": 1.0549610011956201e-08,
+  "zpe_identity_lvib": 1.0515610011224696e-08
+ },
+ "ch3oh": {
+  "frequencies": {
+   "hess": [
+    232.12,
+    505.68,
+    705.91,
+    750.21,
+    1129.84,
+    1184.2,
+    1397.66,
+    1469.28,
+    2750.3,
+    2841.3,
+    3340.68,
+    3474.1
+   ],
+   "lvib": [
+    232.1,
+    505.67,
+    705.93,
+    750.27,
+    1129.85,
+    1184.24,
+    1397.63,
+    1469.3,
+    2750.31,
+    2841.28,
+    3340.7,
+    3474.13
+   ],
+   "n_internal": 12
+  },
+  "g_total": {
+   "delta": 2.529989995281312e-07,
+   "hess": -8.05640836221,
+   "lvib": -8.056408109211
+  },
+  "h_total": {
+   "delta": 3.0695800035118737e-07,
+   "hess": -8.02844185226,
+   "lvib": -8.028441545302
+  },
+  "hess_status": 0,
+  "independent_vs_xtb_hess": {
+   "d_gt": -2.0710557178948985e-08,
+   "d_ht": 4.753161234397063e-09,
+   "d_s_tot": 3.473495799966031e-05,
+   "d_zpe": -1.3955196762061028e-08
+  },
+  "independent_vs_xtb_lvib": {
+   "d_gt": 2.022616165872626e-08,
+   "d_ht": 9.85170024465215e-09,
+   "d_s_tot": 4.6338578734150815e-05,
+   "d_zpe": -1.2654989132998562e-08
+  },
+  "input": "ch3oh.xyz",
+  "lvib_status": 0,
+  "max_dfreq": 0.05999999999994543,
+  "opt_energy": -8.078273168158,
+  "opt_gnorm": 5.2541703e-05,
+  "opt_status": 0,
+  "params": {
+   "imag_cutoff": {
+    "equal": true,
+    "hess": "-20.0000000 cm\u207b\u00b9",
+    "lvib": "-20.0000000 cm\u207b\u00b9"
+   },
+   "linear": {
+    "equal": true,
+    "hess": "false",
+    "lvib": "false"
+   },
+   "n_freq": {
+    "equal": true,
+    "hess": "12",
+    "lvib": "12"
+   },
+   "n_imag": {
+    "equal": true,
+    "hess": "0",
+    "lvib": "0"
+   },
+   "rotational_number": {
+    "equal": true,
+    "hess": "1",
+    "lvib": "1"
+   },
+   "rotor_cutoff": {
+    "equal": true,
+    "hess": "50.0000000 cm\u207b\u00b9",
+    "lvib": "50.0000000 cm\u207b\u00b9"
+   },
+   "scaling_factor": {
+    "equal": true,
+    "hess": "1.0000000",
+    "lvib": "1.0000000"
+   },
+   "symmetry": {
+    "equal": true,
+    "hess": "c1",
+    "lvib": "c1"
+   },
+   "temp": {
+    "equal": true,
+    "hess": 298.15,
+    "lvib": 298.15
+   }
+  },
+  "s_tot_cal": {
+   "delta": 9.999999999621423e-05,
+   "hess": 58.8605,
+   "lvib": 58.8606
+  },
+  "ts_eh": {
+   "delta": 1.0000000000287557e-07,
+   "hess": 0.0279665,
+   "lvib": 0.0279666
+  },
+  "zpe": {
+   "delta": 2.974620000040229e-07,
+   "hess": 0.045065057893,
+   "lvib": 0.045065355355
+  },
+  "zpe_identity_hess": -1.3955196762061028e-08,
+  "zpe_identity_lvib": -1.2654989139937456e-08
+ },
+ "co2": {
+  "frequencies": {
+   "hess": [
+    600.32,
+    600.32,
+    1424.78,
+    2593.06
+   ],
+   "lvib": [
+    600.32,
+    600.32,
+    1424.78,
+    2593.06
+   ],
+   "n_internal": 4
+  },
+  "g_total": {
+   "delta": 1.908499847047551e-08,
+   "hess": -10.317260597164,
+   "lvib": -10.317260578079
+  },
+  "h_total": {
+   "delta": 1.2962999562660116e-08,
+   "hess": -10.292932771353,
+   "lvib": -10.29293275839
+  },
+  "hess_status": 0,
+  "independent_vs_xtb_hess": {
+   "d_gt": -2.2235803729536707e-08,
+   "d_ht": 7.441198621692402e-09,
+   "d_s_tot": -1.0774448234940337e-05,
+   "d_zpe": -2.0386857420978677e-08
+  },
+  "independent_vs_xtb_lvib": {
+   "d_gt": -2.2358037296554834e-09,
+   "d_ht": -2.55880137824821e-09,
+   "d_s_tot": -1.0774448234940337e-05,
+   "d_zpe": -3.2988574216047395e-09
+  },
+  "input": "co2.xyz",
+  "lvib_status": 0,
+  "max_dfreq": 0.0,
+  "opt_energy": -10.308452289175,
+  "opt_gnorm": 4.657677e-06,
+  "opt_status": 0,
+  "params": {
+   "imag_cutoff": {
+    "equal": true,
+    "hess": "-20.0000000 cm\u207b\u00b9",
+    "lvib": "-20.0000000 cm\u207b\u00b9"
+   },
+   "linear": {
+    "equal": true,
+    "hess": "true",
+    "lvib": "true"
+   },
+   "n_freq": {
+    "equal": true,
+    "hess": "4",
+    "lvib": "4"
+   },
+   "n_imag": {
+    "equal": true,
+    "hess": "0",
+    "lvib": "0"
+   },
+   "rotational_number": {
+    "equal": true,
+    "hess": "2",
+    "lvib": "2"
+   },
+   "rotor_cutoff": {
+    "equal": true,
+    "hess": "50.0000000 cm\u207b\u00b9",
+    "lvib": "50.0000000 cm\u207b\u00b9"
+   },
+   "scaling_factor": {
+    "equal": true,
+    "hess": "1.0000000",
+    "lvib": "1.0000000"
+   },
+   "symmetry": {
+    "equal": true,
+    "hess": "din",
+    "lvib": "din"
+   },
+   "temp": {
+    "equal": true,
+    "hess": 298.15,
+    "lvib": 298.15
+   }
+  },
+  "s_tot_cal": {
+   "delta": 0.0,
+   "hess": 51.2022,
+   "lvib": 51.2022
+  },
+  "ts_eh": {
+   "delta": 0.0,
+   "hess": 0.0243278,
+   "lvib": 0.0243278
+  },
+  "zpe": {
+   "delta": 1.7087999999373937e-08,
+   "hess": 0.011888551846,
+   "lvib": 0.011888568934
+  },
+  "zpe_identity_hess": -2.0386857420978677e-08,
+  "zpe_identity_lvib": -3.2988574216047395e-09
+ },
+ "h2o": {
+  "frequencies": {
+   "hess": [
+    1539.58,
+    3643.01,
+    3651.16
+   ],
+   "lvib": [
+    1539.58,
+    3643.01,
+    3651.17
+   ],
+   "n_internal": 3
+  },
+  "g_total": {
+   "delta": 1.4291999583804227e-08,
+   "hess": -5.06804522517,
+   "lvib": -5.068045210878
+  },
+  "h_total": {
+   "delta": 1.4263000558401018e-08,
+   "hess": -5.046638776873,
+   "lvib": -5.04663876261
+  },
+  "hess_status": 0,
+  "independent_vs_xtb_hess": {
+   "d_gt": 1.1979378773674387e-09,
+   "d_ht": 4.207723234075922e-09,
+   "d_s_tot": 3.443232064626045e-05,
+   "d_zpe": 1.8172314972253467e-09
+  },
+  "independent_vs_xtb_lvib": {
+   "d_gt": -1.5837393861628524e-09,
+   "d_ht": 4.2077401085985344e-09,
+   "d_s_tot": 3.443235811317891e-05,
+   "d_zpe": -6.676444837955264e-09
+  },
+  "input": "h2o.xyz",
+  "lvib_status": 0,
+  "max_dfreq": 0.010000000000218279,
+  "opt_energy": -5.070544447778,
+  "opt_gnorm": 7.606232e-06,
+  "opt_status": 0,
+  "params": {
+   "imag_cutoff": {
+    "equal": true,
+    "hess": "-20.0000000 cm\u207b\u00b9",
+    "lvib": "-20.0000000 cm\u207b\u00b9"
+   },
+   "linear": {
+    "equal": true,
+    "hess": "false",
+    "lvib": "false"
+   },
+   "n_freq": {
+    "equal": true,
+    "hess": "3",
+    "lvib": "3"
+   },
+   "n_imag": {
+    "equal": true,
+    "hess": "0",
+    "lvib": "0"
+   },
+   "rotational_number": {
+    "equal": true,
+    "hess": "2",
+    "lvib": "2"
+   },
+   "rotor_cutoff": {
+    "equal": true,
+    "hess": "50.0000000 cm\u207b\u00b9",
+    "lvib": "50.0000000 cm\u207b\u00b9"
+   },
+   "scaling_factor": {
+    "equal": true,
+    "hess": "1.0000000",
+    "lvib": "1.0000000"
+   },
+   "symmetry": {
+    "equal": true,
+    "hess": "c2v",
+    "lvib": "c2v"
+   },
+   "temp": {
+    "equal": true,
+    "hess": 298.15,
+    "lvib": 298.15
+   }
+  },
+  "s_tot_cal": {
+   "delta": 0.0,
+   "hess": 45.0537,
+   "lvib": 45.0537
+  },
+  "ts_eh": {
+   "delta": 0.0,
+   "hess": 0.0214064,
+   "lvib": 0.0214064
+  },
+  "zpe": {
+   "delta": 1.4287999998419121e-08,
+   "hess": 0.020124765151,
+   "lvib": 0.020124779439
+  },
+  "zpe_identity_hess": 1.8172314972253467e-09,
+  "zpe_identity_lvib": -6.676444841424711e-09
+ }
+}

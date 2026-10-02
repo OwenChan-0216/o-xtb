@@ -119,6 +119,17 @@ subroutine landscape_optimize_model(env, objective, settings, x0, result, &
    nstagnate = 0
    nreject = 0
    n_evals = 0
+   ! The trajectory is allocated **before** the first evaluation: every early
+   ! return below (a non-finite start, a failed initial evaluation) calls
+   ! `finish`, which copies the trajectory, and a trajectory that was never
+   ! allocated would make that copy undefined.  The first frame is the
+   ! starting geometry on every path, exactly as it was before (the allocation
+   ! used to happen after the first evaluation, which left `frames` and
+   ! `nframes` undefined on the failure path; the stack layout of the release
+   ! build decided whether that was fatal).
+   allocate(frames(ndim, 32))
+   nframes = 1
+   frames(:, 1) = x
 
    ! A non-finite starting geometry poisons every downstream comparison (the
    ! line search would silently reject every trial); reject it explicitly.
@@ -184,10 +195,6 @@ subroutine landscape_optimize_model(env, objective, settings, x0, result, &
          & settings%diis_regularization, settings%diis_min_snapshots)
       call diis%push(x, g)
    end if
-
-   allocate(frames(ndim, 32))
-   nframes = 1
-   frames(:, 1) = x
 
    do istep = 1, settings%max_steps
       d = 0.0_wp

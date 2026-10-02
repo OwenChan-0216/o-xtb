@@ -1,0 +1,1 @@
+maple: executed=False importable=True topology={'saddle_points': 1, 'endpoint_minima': 2, 'endpoint_energies_hartree': [-5.504037644799, -5.504031002295], 'reached_minimum_forward': True, 'reached_minimum_backward': True}

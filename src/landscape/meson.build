@@ -21,6 +21,7 @@ srcs += files(
   'types/coords.f90',
   'types/log.f90',
   'types/hessian.f90',
+  'types/json.f90',
   'engine/engine.f90',
   'optimize/hessian_update.f90',
   'optimize/line_search.f90',
