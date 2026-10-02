@@ -1070,6 +1070,9 @@ subroutine set_runtyp(typ)
    case('lts')
       set%runtyp = p_run_lts
 
+   case('lirc')
+      set%runtyp = p_run_lirc
+
    case('lvib')
       set%runtyp = p_run_lvib
 

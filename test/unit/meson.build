@@ -60,6 +60,7 @@ tests = [
   'landscape-vib',
   'landscape-saddle',
   'landscape-path',
+  'landscape-irc',
   'latticepoint',
   'molecule',
   'model-hessian',
@@ -424,4 +425,47 @@ run_command(
 test('landscape path autoneb depth limit', python, env: landscape_env, args: [
   landscape_cli_check, 'autonebdepth', xtb_exe, nh3_up_xyz,
   landscape_cli_dir / 'landscape-cli-autoneb-depth', nh3_down_xyz,
+])
+
+# CLI checks of the M6 IRC task.  `irc` mirrors `xtb/landscape-irc-cli`: the
+# input is the bent HCN transition state guess and the check converges it with
+# `--lts` first.  The three error branches use the shared `error` mode.
+test('landscape irc cli', python, env: landscape_env, args: [
+  landscape_cli_check, 'irc', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-irc',
+])
+# the endpoint knobs really change the result: `--lirc-level`,
+# `--lirc-rmsd-end` and the `hpc` default (`46-m6-fix-report.md`, M-1)
+test('landscape irc knobs', python, env: landscape_env, args: [
+  landscape_cli_check, 'ircknobs', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-irc-knobs',
+])
+test('landscape irc minimum', python, env: landscape_env, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-error',
+  'not a transition state', '--gfn', '2', '--lirc', '--lirc-method', 'gs',
+])
+test('landscape irc pc', python, env: landscape_env, args: [
+  landscape_cli_check, 'ircpc', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-irc-pc',
+])
+test('landscape irc swap', python, env: landscape_env, args: [
+  landscape_cli_check, 'ircswap', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-irc-swap',
+])
+test('landscape irc method unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-error',
+  'Unknown landscape IRC method', '--gfn', '2', '--lirc', '--lirc-method', 'bogus',
+])
+# a one point DWI surface cannot exist: the capacity is validated
+test('landscape irc dwi n', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-error',
+  'the IRC DWI surface needs at least two sample points',
+  '--gfn', '2', '--lirc', '--lirc-dwi-n', '1',
+])
+test('landscape irc termination', python, env: landscape_env, args: [
+  landscape_cli_check, 'irctermination', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-irc-termination',
 ])

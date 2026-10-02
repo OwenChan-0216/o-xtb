@@ -538,6 +538,110 @@ subroutine help(iunit)
    "--lts-string-history",&
    "    print the growth history (position and perpendicular force of every node)", &
    "",&
+   "--lirc",&
+   "    intrinsic reaction coordinate with the landscape task suite (src/landscape);", &
+   "    the input geometry is the transition state and must have exactly one imaginary", &
+   "    mode; writes irc_forward.xyz, irc_backward.xyz, irc_path.xyz and irc.log", &
+   "",&
+   "--lirc-method NAME",&
+   "    integration method, one of hpc (Hessian based predictor-corrector, default:", &
+   "    most accurate and 1.98 E/g per point), lqa (Page-McIver analytic quadratic", &
+   "    propagation, cheapest at 1.00 E/g), eulerpc (Euler predictor-corrector, use a", &
+   "    step of 0.20 or less) or gs (Gonzalez-Schlegel sphere relaxation, compatible", &
+   "    reference; 16.9-20.3 E/g per point and the largest path deviation)", &
+   "",&
+   "--lirc-step VALUE",&
+   "    step length in bohr*amu^1/2 (mass weighted arc length, default 0.10; use 0.05", &
+   "    for a tight path)", &
+   "",&
+   "--lirc-max-steps N",&
+   "    maximum number of macro steps of one direction (default 256)", &
+   "",&
+   "--lirc-level LEVEL",&
+   "    convergence thresholds of the endpoint relaxation, one of superloose, loose,", &
+   "    normal, tight, vtight (the IRC path itself is left by the gradient and", &
+   "    energy-rise termination signals, see --lirc-grad-tol/--lirc-e-rise)", &
+   "",&
+   "--lirc-swap",&
+   "    exchange the forward and backward directions defined by the phase convention", &
+   "",&
+   "--lirc-oneway",&
+   "    integrate the forward direction only", &
+   "",&
+   "--lirc-target-mode N",&
+   "    which negative mode defines the initial direction, 1 = most negative (default 1)", &
+   "",&
+   "--lirc-micro-cycles N",&
+   "    maximum number of Gonzalez-Schlegel micro cycles per macro step (default 20)", &
+   "",&
+   "--lirc-micro-thresh VALUE",&
+   "    convergence threshold of the sphere relaxation in bohr*amu^1/2 (default 1e-3)", &
+   "",&
+   "--lirc-euler-n N",&
+   "    Euler/Simpson substeps of the analytic LQA propagation (default 5000)", &
+   "",&
+   "--lirc-loose-cycles N",&
+   "    EulerPC coarse phase: use the plain Euler prediction for the first N macro", &
+   "    steps, 0 disables the coarse phase (default 3)", &
+   "", &
+   "--lirc-mbs-tol VALUE",&
+   "    acceptance threshold of the modified Bulirsch-Stoer corrector in", &
+   "    bohr*amu^1/2 (default 1e-5; the HPC paper uses 1e-6)", &
+   "",&
+   "--lirc-mbs-max-k N",&
+   "    maximum extrapolation level of the mBS corrector (default 15)", &
+   "",&
+   "--lirc-mbs-points N",&
+   "    base number of Euler substeps of the mBS corrector (default 20)", &
+   "",&
+   "--lirc-dwi-n N",&
+   "    capacity of the DWI surface fit (default 4). The interpolant is two point by", &
+   "    construction (current and predicted point), so any N >= 2 is equivalent;", &
+   "    N < 2 is rejected", &
+   "",&
+   "--lirc-e-rise N",&
+   "    termination signal (c): stop after N consecutive rising energies (default 3)", &
+   "",&
+   "--lirc-erise-steps N",&
+   "    alias of --lirc-e-rise N", &
+   "", &
+   "--lirc-grad-tol VALUE",&
+   "    termination signal (b): stop when the RMS gradient per Cartesian component", &
+   "    falls below this value in hartree/bohr (default 1e-3)", &
+   "", &
+   "--lirc-recalc N",&
+   "    rebuild the exact Hessian every N macro steps, -1 disables (default -1). Pure", &
+   "    Bofill updates are sufficient for short paths; long or strongly curved paths", &
+   "    drift and need an explicit --lirc-recalc 5 .. 10", &
+   "",&
+   "--lirc-no-endpoint-relax",&
+   "    do not relax the two endpoints to assign them to a minimum", &
+   "",&
+   "--lirc-endpoint-relax",&
+   "    relax the two endpoints to assign them to a minimum (default; the explicit", &
+   "    flag restores it after a --lirc-no-endpoint-relax)", &
+   "", &
+   "--lirc-rmsd-end VALUE",&
+   "    Kabsch aligned RMSD between an endpoint and its relaxed minimum below which", &
+   "    the endpoint counts as having reached a minimum, in bohr (default 0.18897).", &
+   "    The criterion needs a relaxed endpoint and is skipped (and reported as", &
+   "    skipped) with --lirc-no-endpoint-relax", &
+   "",&
+   "--lirc-hessian SOURCE",&
+   "    Hessian backend, one of numerical (default), model (Lindh-D2) or file", &
+   "",&
+   "--lirc-hessian-file NAME",&
+   "    file read by --lirc-hessian file (TURBOMOLE Hessian layout)", &
+   "",&
+   "--lirc-step-hess VALUE",&
+   "    finite difference step of the numerical Hessian in bohr (default 0.005)", &
+   "",&
+   "--lirc-sccacc VALUE",&
+   "    SCC accuracy of the displaced single points of the Hessian (default 0.3)", &
+   "",&
+   "--lirc-restart MODE",&
+   "    wavefunction restart policy of the engine, off (default), pin or warm", &
+   "",&
    "--lvib",&
    "    harmonic frequencies, normal modes and thermochemistry with the landscape task", &
    "    suite (src/landscape); writes vibspectrum, vib_normal_modes, g98.out and hessian", &

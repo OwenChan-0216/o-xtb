@@ -720,23 +720,24 @@ M0/M1 **不**添加空的 stub 类型（避免死代码 / 占位实现）；"预
 
 | 字段 | 单位 | 默认 | 含义 / 对照 |
 |---|---|---|---|
-| `method` | — | `'gs'` | `gs\|hpc\|lqa\|eulerpc` |
+| `method` | — | `'hpc'` | `gs\|hpc\|lqa\|eulerpc`。**M6 行为变更（报告 46）**：默认由 `gs` 改为 `hpc` —— 实测 HPC 更准（MB 对参考 MEP 最大偏离 0.0022 vs GS 0.040 bohr）且便宜 8.5×（1.98 vs 16.9/20.3 E/g，报告 44 §3.3）。`gs` 保留为兼容/对照实现与校正失败的回退；CLI 默认路径由 `xtb/landscape-irc-knobs` 断言 |
 | `target_mode` | — | 1 | 起点模式（1-based，对应 MAPLE `target_mode=1`） |
-| `step_length` | bohr·amu^1/2 | 0.10 | MAPLE `step_length_bohr=0.10`；Gaussian `IRC=StepSize` 默认 0.10（R04 §67）；**推荐区间 0.05(tight)–0.40(HPC)** |
-| `max_steps` | — | 50 | MAPLE `max_steps=50` |
-| `max_micro_cycles` | — | 20 | GS 专用（MAPLE 同值） |
-| `micro_step_thresh` | — | 1.0e-3 | GS 微循环收敛（MAPLE 同值） |
+| `step_length` | bohr·amu^1/2 | 0.10 | MAPLE `step_length_bohr=0.10`；Gaussian `IRC=StepSize` 默认 0.10（R04 §67）；**推荐区间 0.05(tight)–0.20**；**0.40 实测失败**（LQA 偏 3.3e-4、HPC-forward 2.4e-3、EulerPC 双向 5.8e-3/1.1e-2 Eh 且 3 次回退，报告 44 §4.4）⇒ 论文允许但本实现不推荐 |
+| `max_steps` | — | 256 | **实测回填（报告 44 §4.5）**：到达极小点只需 ≤104 步（0.05 步长），PLAN 原引 MAPLE 的 50 会**截断 0.05 步长的正常路径**；物理信号 (b)/(c) 总是先结束正常路径，故保留宽上限 `--lirc-max-steps` |
+| `grad_tol` | Eh/bohr（每分量 RMS） | 1.0e-3 | 终止信号 (b)；实测 gs 5.98e-4、lqa 7.57e-4、hpc 9.59e-4 端点 RMS 均可达到，为 warm 噪声（3.916e-7 Eh/bohr）的 ≈2553 倍（报告 44 §4.2、报告 43 §7.2） |
+| `max_micro_cycles` | — | 20 | GS 专用（MAPLE 同值）。实测微循环**每次都被本预算截断**（判据永不满足，见 §6.5） |
+| `micro_step_thresh` | — | 1.0e-3 | GS 微循环收敛（MAPLE 同值）；实测切空间 Newton 步 1.8–2.4 ≫ 球半径 0.05 ⇒ 判据不可达 |
 | `euler_n` | — | 5000 | LQA/HPC 预测子步（Hratchian & Schlegel Eq.10，R04 §8） |
-| `max_pred_steps` | — | 500 | EulerPC 预测步上限（MAPLE 同值） |
+| `max_pred_steps` | — | — | **未实现（显式偏离，报告 46）**：EulerPC 的预测是**单次显式 Euler 步**（`eulerpc.f90:206`），不存在预测步上限参数。MAPLE 的 500 无对应实现点，记为 API 偏离而非死旋钮 |
 | `loose_cycles` | — | 3 | EulerPC（MAPLE 同值） |
-| `hessian_recalc` | — | -1 | -1 = 从不重算（MAPLE `hessian_recalc=None`）；正数 = 每 N 步重算 |
+| `hessian_recalc` | — | -1 | -1 = 从不重算（MAPLE `hessian_recalc=None`）；正数 = 每 N 步重算。**实测（报告 44 §5.2）**：短路径（4 bohr）纯 Bofill 足够（端点误差 ~1e-5 Eh）；长积分（150 步）HPC-backward 漂到离真实 HCN 极小 6.0e-4 Eh、\|g\|=4.1e-2，`recalc=10` 回到极小（\|g\|=4.4e-7）⇒ 默认保留 -1（已验收数字均由此产生），但长/强弯曲路径**必须显式** `--lirc-recalc 5..10` |
 | `hessian_update` | — | `'bofill'` | EulerPC 论文实测用 Bofill（R04 §17） |
-| `dwi_n` / `mbs_max_k` / `mbs_points` | — | 4 / 15 / 20 | MAPLE 同值 |
+| `dwi_n` / `mbs_max_k` / `mbs_points` | — | 4 / 15 / 20 | `dwi_n` 实测为**容量**：插值面按构造只有 2 点（当前点+预测点），≥2 等效（实测 `--lirc-dwi-n 4` 与 `20` 逐位相同），<2 被拒（报告 46） |
 | `mbs_tol` | bohr·amu^1/2 | 1.0e-5 | MAPLE 同值；HPC 论文的 mBS 接受阈值 1e-6 a.u. 更严（R04 §8） |
-| `forward` / `backward` | — | `.true.` / `.true.` | 双向 |
-| `e_rise_steps` | — | 3 | 终止信号 (c)：能量连续回升 N 步判定已过极小点（R04 §20） |
-| `rmsd_end` | bohr | 1.8897e-1 | 用于报告「落在哪个极小点」（RMSD 到优化后的 R/P） |
-| `conv` | — | `normal` | MAPLE 用 `f_max=2e-3, f_rms=5e-4`（Ha/Å）→ 1.058e-3/2.646e-4 Eh/bohr |
+| `forward` / `backward` | — | `.true.` / `.true.` | 双向（`--lirc-oneway` 关 backward）；oneway 时 `irc.log` 明确写「not requested」（不再打印 error/F，报告 46） |
+| `e_rise_steps` | — | 3 | 终止信号 (c)：能量连续回升 N 步判定已过极小点（R04 §20）；实测端点对它不敏感（<5e-6 Eh）且高于噪声 1e9 倍 |
+| `rmsd_end` | bohr | 1.8897e-1 | 端点归属判据：Kabsch 对齐 RMSD 到弛豫后极小点 ≤ 本值才算「到达极小点」（`endpoint_reached`）；`--lirc-no-endpoint-relax` 时无弛豫极小点，判据不可用并在 `irc.log` 写明已跳过（M-1/M-2，报告 46） |
+| `conv`（`--lirc-level`） | — | `normal` | **仅作用于端点弛豫**的四判据（与 `--lopt-level`/`--lscan-level` 同一 `set_conv_level`）；实测 superloose 1 步到 −5.47213843 Eh、vtight 7 步到 −5.47215989 Eh（报告 46）。路径判据是 `grad_tol`/`e_rise_steps`，不进本档位 |
 
 #### 5.3.8 `THessianSettings` 与 `TVibSettings`
 
@@ -955,12 +956,14 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 
 | 方法 | 文献 | 更新式 / 参数 | 失效模式 | 防护 |
 |---|---|---|---|---|
-| GS | Gonzalez & Schlegel, J. Phys. Chem. **94**, 5523 (1990) Eqs.8–10 | pivot `q*_{k+1} = q_k − ½ s N G g_k`，`N = (gᵀGg)^{-1/2}`；再在半径 `s/2` 球面上约束优化 | micro 循环不收敛（强弯曲路径/大 step，R04 §7）；每点 3–5 次 E/g | `max_micro_cycles=20`、`micro_step_thresh=1e-3`；球约束本身在步长过大时能把点拉回真实路径附近（原文） |
+| GS | Gonzalez & Schlegel, J. Phys. Chem. **94**, 5523 (1990) Eqs.8–10 | pivot `q*_{k+1} = q_k − ½ s N G g_k`，`N = (gᵀGg)^{-1/2}`；再在半径 `s/2` 球面上约束优化 | micro 循环不收敛（强弯曲路径/大 step，R04 §7）。**实测（报告 44 §7、本轮报告 46）：16.9/20.3 E/g 每点（PLAN 预期 3–5），是 HPC 的 8.5 倍；对 MB 参考 MEP 的最大偏离 0.040 bohr 为四法最大（HPC 0.0022）；端点位误差随步长**非单调**（5.1e-5/2.4e-5/8e-9）** ⇒ **GS 已降级为非默认的兼容/对照实现（默认 hpc）** | `max_micro_cycles=20`、`micro_step_thresh=1e-3`；trust-region 限幅（实测：去掉后 forward 路径崩坏——25.27 而非 4.05 bohr*amu^1/2，被步数预算截断） |
+| GS 的 Open item（Lagrange 修复） | MAPLE 的球面约束形式 | 把「切空间 Newton 步 + 限幅」换成**等式约束 Lagrange 步**（Newton 步直接落在球面上） | 微循环实测进入**两点循环**：返回点距球面约束极小 3.4e-4（偶预算）/1.3e-3（奇预算）Eh，且预算 5/20/21/200 给出**完全相同**的值 ⇒ 偏差是结构性的 | **待办（独立于 M7，本轮未做）**：预计省 3–4× E/g；验收方式 = 单元 `gs-sphere-relaxation-quality`（质量上界 2e-3 + 两点循环断言）与 CLI `xtb/landscape-irc-cli`（GS 端点位/弧长 4.051234/E-g 16.9/20.3 的黄金值）在修复后**显式更新**，且 `points pinned` 计数归零。本轮不做是因为 GS 行为基线（报告 42 的拆分回归）刚逐位验收，叠加算法改动无法区分「预期变化」与「又一次静默回归」 |
 | LQA | Page & McIver, JCP **88**, 922 (1988)（R04 §12）；QSD 形式见 Eckert & Werner, Theor. Chem. Acc. **100**, 21 (1998) Eq.6 | 二阶泰勒解析传播，`euler_n=5000` 子步 | **强弯曲路径上振荡并大幅偏离 MEP**（R04 §13）；0.20 步长"轻微困难"，0.40 失控 | 步长默认 0.10，`tight` 档 0.05；文档中**明确写清用的是哪一支推导**（R04 Contradictions #3 的谱系歧义） |
-| HPC | Hratchian & Schlegel JCP **120**, 9918 (2004) Eqs.2–11 | 预测：`x(t)=x0+A(t)g0`，`a_ii(t)=(e^{−λ_i t}−1)/λ_i`；校正：DWI 面 + modified Bulirsch–Stoer（简单 Euler，非 modified midpoint），接受阈值 1e-6 a.u.；每点仅 1 次 E/g；步长可到 0.40 | 校正失败（DWI 导数不可信，semi-implicit mBS 被判不可行） | `mbs_max_k=15`、`mbs_points=20`、`mbs_tol` 可调；失败 → 回退到 GS 一步并告警 |
-| EulerPC | Meisner & Kästner JCP **133**, 224101 (2010) Eqs.2–4 | 预测：`x̃_{i+1} = x_i − (g_i/\|g_i\|)·s`；校正：同 HPC 的 DWI + mBS；**一阶方法**（log-log 斜率 2.016） | 0.20 步长下"无法跟随路径"（原文） | 默认 0.10；`loose_cycles=3` 允许先粗后细；误差 ~O(step) ⇒ 需要更密点 |
-| Hessian 沿路径 | EulerPC 论文统一用 **Bofill** 更新，并测试每 2/5/10 步用解析 Hessian 替换（R04 §17） | `hessian_update='bofill'`、`hessian_recalc=-1` | 纯更新在长时间积分后漂移 | 提供 `hessian_recalc=N`；Bofill 更新后强制对称化 |
-| 端点终止 | 无统一标准（R04 §19） | 三信号：(a) `max_steps`；(b) `\|g\|` 低于阈值；(c) 能量连续回升 `e_rise_steps` 步 | 「落在哪个极小点」不可知 | 输出 `rmsd_to_min_fwd/bwd`（RMSD 到优化后的 R 与 P），并在日志中标注终点归属 |
+| HPC | Hratchian & Schlegel JCP **120**, 9918 (2004) Eqs.2–11 | 预测：`x(t)=x0+A(t)g0`，`a_ii(t)=(e^{−λ_i t}−1)/λ_i`；校正：DWI 面 + modified Bulirsch–Stoer（简单 Euler，非 modified midpoint），接受阈值 1e-6 a.u.；步长可到 0.40 | 校正失败（DWI 导数不可信，semi-implicit mBS 被判不可行）；0.40 步长实测退化（端点偏 2.35e-3 Eh，报告 44 §4.4） | `mbs_max_k=15`、`mbs_points=20`、`mbs_tol` 可调；失败 → 回退到 GS 一步并告警。**实现选择 2 E/g**（论文 1 E/g）：实测 1 E/g 变体端点落在真实 HNC 极小上方 **1e-3..5e-2 Eh**（忠实实现 V1 2.80e-3、加预测 secant 的 V2 4.56e-2，报告 44 §6.1），而 2 E/g 为 5.5e-5 |
+| EulerPC | Meisner & Kästner JCP **133**, 224101 (2010) Eqs.2–4 | 预测：`x̃_{i+1} = x_i − (g_i/\|g_i\|)·s`；校正：同 HPC 的 DWI + mBS；**一阶方法**（log-log 斜率 2.016） | 0.20 步长下"无法跟随路径"（原文）；0.10 实测 forward 偏 0.52 kcal/mol 且由信号 (c) 终止（未收敛到极小点）；**0.40 双向失败**（5.8e-3/1.1e-2 Eh，3 次回退） | 默认 0.10；`loose_cycles=3` 允许先粗后细；误差 ~O(step) ⇒ 需要更密点 |
+| Hessian 沿路径 | EulerPC 论文统一用 **Bofill** 更新，并测试每 2/5/10 步用解析 Hessian 替换（R04 §17） | `hessian_update='bofill'`、`hessian_recalc=-1` | 纯更新在长时间积分后漂移。**实测（报告 44 §5.2）**：短路径无问题；150 步长积分中纯 Bofill 的 HPC-backward 停在离真实 HCN 极小 6.0e-4 Eh、\|g\|=4.1e-2 处，`recalc=10` 恢复（4.4e-7） | 提供 `hessian_recalc=N`（长/强弯曲路径**必须**显式设 5..10）；Bofill 更新后强制对称化 |
+| 端点终止 | 无统一标准（R04 §19） | 三信号：(a) `max_steps`；(b) `\|g\|` 低于 `grad_tol`；(c) 能量连续回升 `e_rise_steps` 步 | 「落在哪个极小点」不可知 | `reached_min_fwd/bwd` = 信号 (b)/(c) **且**弛豫收敛**且** Kabsch 对齐 RMSD ≤ `rmsd_end`；`irc.log` 同时打印弛豫后极小点能量与 `rmsd_end` 判据；未做弛豫时判据不可用并在日志写明已跳过 |
+| 弧长定义（LOW-4） | — | `s` 在 **gs/hpc/eulerpc 是弦长累加**，仅 **lqa 是积分弧长** | 跨方法直接比较 `s`（同一条路径 GS 4.0512 vs LQA 4.2500，差 4.7%） | `irc.log` 逐次打印所用定义（`arc length s is ...`）；文档明确「不可跨方法比较」 |
 
 ### 6.6 Hessian 与频率（M3）
 
@@ -1424,8 +1427,8 @@ grep -rn "set%mode_extrun = p_ext_" src/set_module.f90   # :958,:978 —— p_ex
 |---|---|---|---|---|
 | `p_run_lopt` | 9 | **M0/M1** | 新版极小化套件（`--lopt`） | ✅ 实现在 `src/setparam.f90`（`p_run_omd = 8` 之后） |
 | `p_run_lscan` | 12 | **M2** | 扫描（`--lscan`） | ✅ 实现在 `src/setparam.f90`（`p_run_screen = 11` 之后） |
-| `p_run_lts` | 19 | M4 | 过渡态（`--lts`） | ❌ 未实现 |
-| `p_run_lirc` | 20 | M6 | IRC（`--lirc`） | ❌ 未实现 |
+| `p_run_lts` | 19 | **M4** | 过渡态（`--lts`） | ✅ 实现在 `src/setparam.f90`（`p_run_metaopt = 15` 之后） |
+| `p_run_lirc` | 20 | **M6** | IRC（`--lirc`） | ✅ 实现在 `src/setparam.f90`（`p_run_lts = 19` 之后） |
 
 若仓库所有者倾向「不复用低编号」，退路是取 105–108（当前 `p_run_*` 最大为 104）；
 两种方案都已确认不与任何现有取值冲突，**本轮实现以 `p_run_lopt = 9` 为准**。
@@ -1505,7 +1508,7 @@ grep -rn "set%mode_extrun = p_ext_" src/set_module.f90   # :958,:978 —— p_ex
 | `--lopt-level <superloose\|loose\|normal\|tight\|vtight>` | `lset%set_conv_level`；未识别的档名 → `env%error` | ✅ **已实现** |
 | `--lopt-hessian <numerical\|model>` | 设 `lset%hessian_source`（`landscape_hessian_source_known` 校验）；`model` = Lindh-D2 模型 Hessian，作为 BFGS 的初始 Hessian 与 RFO 的 trust-region Hessian；未识别名字 → `env%error` | ✅ **M2 复核轮已实现**（R2-09 遗留项） |
 | `--lscan` | `set_runtyp('lscan')`，不解桁位置参数；全部扫描参数走 `--lscan-*` | ✅ **M2 已实现**（见 §12.10） |
-| `--lts` / `--lirc` / `--ljson` | —— | ❌ 未实现（后续里程碑） |
+| `--lts` / `--lirc` / `--ljson` | `--lts`（M4）、`--lirc`（M6 第一阶段）已实现；`--ljson` | ✅ `--lirc` 见 §12.14；❌ `--ljson` 未实现（M7） |
 
 **与初版计划的差异**：`--lopt` **不**接受位置参数（原计划为 `--lopt [level]`）。原因：
 `TArgParser%nextArg` 无 peek，无条件消费会让 `xtb --lopt water.xyz` 把文件名当作 level 吃掉；
@@ -1921,6 +1924,114 @@ NH3 反转上 AutoNEB 势垒 6.0823 kcal/mol（与 CI-NEB 相同）、string 5.9
 **已知限制**：string 的生长阶段在**抽象 2 维嵌入**与 **LEPS 第一阶段端点对**上不收敛
 （前者路径急转、后者直连线与 MEP 出射方向正交），二者均以实测数字记录在报告 §5；
 真实分子（NH3）正常。
+
+### 12.14 M6（IRC 第一阶段：GS / LQA / 共享 corrector / driver）实际接线与接口契约
+
+> 代码为准。里程碑 M6 第一阶段，报告 `42-m6-irc-core-implementation-report.md`。
+> HPC / EulerPC 属第二阶段，本轮**不实现**。
+
+**runtyp**：`p_run_lirc = 20`（`src/setparam.f90`，`p_run_lts=19` 与 `p_run_lvib=21` 之间）。
+实测 `p_run_*` 使用 `{1..8,10..15,19,20,21,71,100..104}`，`p_ext_*` 使用
+`{-1,0,1,3,4,5,12..18}`；20 在两个命名空间内均空闲，不撞任何既有取值。
+`src/set_module.f90` 加 `case('lirc'); set%runtyp = p_run_lirc`。
+
+**接口契约（父会话裁定，实现遵循）**
+
+1. **输入几何 = TS 本身**。`xtb xtbts.xyz --gfn2 --lirc --lirc-method gs` 是自然工作流。
+   开始前用 M3 `landscape_vib_analysis` 做**虚频确认**：恰好 1 个虚频才算 TS；
+   0 个（minimum）或 ≥2 个（higher order saddle）→ `env%error` + **非零退出码**，
+   不是 warning（M4 的 H2 教训）。
+2. **forward 方向确定性**。复用 M4 相位约定
+   （`xtb_landscape_saddle_eigenfollow::landscape_transition_mode_set_phase`：最大绝对
+   分量取正），在 stdout 与 `irc.log` 打印该分量值与原子编号；`--lirc-swap` 显式取反
+   并在 `irc.log` 记录（`directions exchanged:`）。同一输入两次运行 `irc_forward.xyz`
+   **逐位相同**（CLI 用例断言）。
+3. **单位契约**：IRC 步长单位 = **`bohr*amu^1/2`**（质量加权弧长）。质量加权用 **amu**
+   （`getAtomicMass*autoamu`），不是振动分析的电子质量 a.u. 度量。所有 CLI、settings、
+   日志均标注该单位；`irc/corrector.f90` 头注释给出 `G = M^{-1}` 等价推导。
+4. **LQA 谱系**：实现 **Page & McIver 支**（JCP **88**, 922 (1988)），即 HPC/EulerPC
+   论文与 Gaussian 所引的二次 Taylor 解析传播；模块头注释明确记录与 Sun–Ruedenberg /
+   Eckert–Werner QSD（`x(u)=x^(k)-H^{-1}(I-uH)g`，三点区分）的差异，QSD **不实现**。
+5. **mBS 用简单 Euler**（不是 modified midpoint），`mbs_max_k=15`、`mbs_points=20`；
+   `mbs_tol` 默认 MAPLE 的 1e-5，HPC 论文的 1e-6 经 `--lirc-mbs-tol 1e-6` 可选；
+   收敛失败返回 `converged=.false.`（供第二阶段回退 GS 一步并告警）。
+6. **Hessian 沿路径**：默认 Bofill（复用 `optimize/hessian_update.f90`，更新后强制
+   对称化），`--lirc-recalc N` 每 N 步用 provider 重建；初始 Hessian 走 M3 provider。
+7. **三终止信号**：(a) `max_steps`；(b) RMS 每分量梯度 ≤ `grad_tol`；(c) 连续
+   `e_rise_steps` 步未刷新**运行最小值**（PLAN §6.5 的「能量回升」实现形式，理由见
+   报告 §10 R-3）。
+8. **`res` 回写**：`src/prog/main.F90` 的 `p_run_lirc` 块把 `lres%energy`（= TS 能量，
+   IRC 的参考点）与 `lres%gnorm` 写回 `res`（AGENTS.md §6 第 7 条）；四个输出文件名
+   全部经 `get_namespace`。
+
+**交付物**：`src/landscape/irc/{corrector,gs,lqa}.f90`、`src/landscape/tasks/irc.f90`、
+`landscape_irc_settings`、`landscape_irc_result`（含每点 E/g 次数与终止信号）、
+`--lirc` + 25 个子选项、`irc_forward.xyz` / `irc_backward.xyz` / `irc_path.xyz`（按弧长
+排序、最高点标 `TS`）/ `irc.log`（逐点表 + 端点归属 + 生效 etemp + 相位）。
+
+**已知偏离**（报告 §10）：GS 每点平均 E/g = 16.9/20.3（PLAN 预期 3–5，根因是微循环
+被 trust-region 限幅钉住；建议第二阶段改用等式约束 Lagrange 步）；相位注入下「逐位
+确定性」不变红（覆盖缺口）；`max_steps` 默认继承 256 而非 50。
+
+### 12.15 M6（IRC 第二阶段：HPC / EulerPC / 端点归属）实际接线与契约
+
+> 代码为准。里程碑 M6 第二阶段，报告 `43-m6-irc-predictor-corrector-report.md`。
+
+**新增模块**：`irc/hpc.f90`（`landscape_irc_hpc_walk`）、`irc/eulerpc.f90`
+（`landscape_irc_eulerpc_walk`）；共享校正内核 `irc/corrector.f90` 新增
+`landscape_irc_corrector_step`（两点 DWI + mBS + DWI 取值）与 `landscape_irc_path_reset`。
+`irc/gs.f90` 拆出公开 `landscape_irc_gs_step`（HPC/EulerPC 的 GS 回退复用）。
+
+**算法契约**
+
+1. HPC 预测 = `landscape_irc_lqa_step`（Eqs.2–11）；EulerPC 预测 = 一阶显式 Euler
+   `q − step·g/|g|`（Eq.2）。两者校正相同：**两点 DWI（当前点, 预测点）+ mBS**。
+2. **`λ→0` 的可去奇点分支 `a_ii → −t`** 在 `corrector.f90` 显式实现（不做除零、不丢模），
+   LQA/HPC 共用；`lqa-zero-curvature-limit` 双向可证伪。
+3. **每点 E/g = 2**（预测点 + 校正点各一次）。论文的 1 E/g 用 DWI 重建校正点梯度，
+   实测该重建使路径漂移（forward 端点高 **1e-3..5e-2 Eh**：忠实实现实测 2.80e-3 / 4.56e-2，
+   报告 44 §6.1；报告 43 §6.3 的原记 1.4e-2 不可复现），故改为评估校正点。
+   参照实现 MAPLE 同类设计为 3 E/g。GS 实测 16.9/20.3、LQA 恒 1.00。
+4. **校正失败 → 回退 `landscape_irc_gs_step` + `env%warning`**（PLAN §6.5）；
+   由单元 `hpc-corrector-fallback` 与 CLI `landscape-irc-pc` 覆盖。
+5. **`loose_cycles`**（EulerPC 粗/细）：最前 `loose_cycles` 个宏步直接记录 Euler 预测（1 E/g），
+   其后启用校正器；`0` 关闭粗阶段。见报告 §3.2（与 MAPLE 的语义差异记录为 R-2/D-4）。
+6. **端点 RMSD = Kabsch 对齐**（`align_geometry`，M5 的 mass-free 正旋转）；
+   `irc.log` 写明对齐方式；弛豫复用同一 engine ⇒ 同一 restart 策略与冻结 `etemp`；
+   弛豫的**四判据**取任务阈值（`--lirc-level`，`set_conv_level`），budget 取 `--lirc-max-steps`
+   （与 `tasks/ts.f90:1069-1075`、`scan/relax_scan.f90:577-585` 同一风格）。
+7. **`endpoint_reached`**：仅 (b)/(c)（且要求弛豫时已收敛**且** Kabsch 对齐 RMSD ≤ `rmsd_end`）
+   算落入极小点；被 `max_steps` 截断的路径记 `F`（CLI 负例 + 注入 (iv)）。
+   未做弛豫时无弛豫极小点，`rmsd_end` 判据**不可用**，日志明确写「已跳过」。
+8. **CLI 新增**：`--lirc-loose-cycles N`、`--lirc-endpoint-relax`、`--lirc-erise-steps N`
+   （`--lirc-e-rise` 的别名）；`--lirc-grad-tol`/`--lirc-euler-n` 沿用 Phase 1。
+9. **HPC 的 1 E/g 偏离更正（原本就需要的更正）**：本节旧版写「实测该重建使路径漂移
+   （forward 端点高 **1.4e-2 Eh**，报告 43 §6.3）」。验证轮把 1 E/g 方案**独立实现**后
+   得到 **2.80e-3**（V1：只评预测点、信 DWI 梯度）与 **4.56e-2**（V2：再加预测 secant 更新）
+   （报告 44 §6.1），两者都不是 1.4e-2。现统一表述为「**量级 1e-3..5e-2 Eh**」，并且**依据换成
+   上述两个实测值**（`hpc.f90:54` 同步订正）；「因此选择 2 E/g（5.5e-5）」的结论不变。
+
+**M6 最终修复轮（报告 46）的行为变更与新契约**
+
+| 项 | 变更 | 依据 / 验收 |
+|---|---|---|
+| 默认积分方法 | `gs` → **`hpc`** | 报告 44 §3.3（更准 0.0022 vs 0.040 bohr、便宜 8.5×）；默认路径由 CLI `xtb/landscape-irc-knobs` 断言「跑的就是 hpc + HNC/HCN 窗口」；`--lirc-method gs` 行为**不变**（重跑报告 42 的 10 个数字逐位一致） |
+| `--lirc-level` | 由「解析后无人读」变为**真正驱动端点弛豫**（4 判据 + budget 拷贝） | CLI `xtb/landscape-irc-knobs`：superloose 1 步/ −5.47213843 Eh vs vtight 7 步/ −5.47215989 Eh；注入「删掉拷贝」→ 红 |
+| `--lirc-rmsd-end` | 由「解析后无人读」接入 `endpoint_reached` | CLI 同上（1e-3 → forward `F`、backward `T`）+ 单元 `endpoint-rmsd-criterion`；注入「去掉判据」→ 两处红 |
+| `--lirc-dwi-n` | 明确为**容量**（两点插值，≥2 等效；<2 拒绝） | 实测 4 vs 20 逐位相同（已记录为设计）；`--lirc-dwi-n 1` 现以 `env%error` 退出 1 |
+| GS 质量 | 新增 `landscape_irc_path%n_pinned` → `irc.log` / result 的「pinned」计数 | CLI `xtb/landscape-irc-cli` 断言 GS 上非零（33/42、38/40）、hpc 上为 0（负对照）；注入「计数器不增」/「hpc 也计数」→ 各自红 |
+| 弧长定义 | `irc.log` 明写 gs/hpc/eulerpc 为弦长累加、lqa 为积分弧长 | LOW-4；跨方法比较已标注不可用 |
+| F-1（path 跨 ndim 复用） | `path_reset` 释放存储 + 异维点重绑（不再写入错形数组） | 单元 `path-cross-dimension-reuse`；注入「旧的 reset（保留 capacity/ndim=0）」→ 红 |
+| 测试计数 | `ctest -R landscape` **78/78**（新增 CLI `xtb/landscape-irc-knobs`），单元 `landscape-irc` 35/35（新增 3 例）；回归 12/12 | — |
+
+**信号 (b) 可达性结案**（M4 σ_g 回填）：冷启动位相等、跨 OMP ≤ 1.11e-15、warm 3.916e-7 Eh/bohr；
+默认 `grad_tol = 1e-3`（RMS 每分量）为 warm 噪声的 ≈2553 倍。实测端点 RMS：gs 5.98e-4、lqa 7.57e-4、
+hpc 9.59e-4 均 ≤ 1e-3 ⇒ **可达（不移除默认策略）**；但 EulerPC forward 由信号 (c) 先触发，
+「(b) 可达但非总是第一个触发」已记录（报告 §7.2）。
+
+**新增测试**：单元 `landscape-irc` 28/28；CLI `xtb/landscape-irc-pc`（HPC+EulerPC 端到端 + 新 flag
++ 端点归属负例）。`ctest -R landscape` 77/77，回归 12/12。
+（M6 最终修复轮后为 78/78、单元 35/35；见上一节的变更表与报告 `46-m6-fix-report.md`。）
 
 ## 附录 A：环境约束（已实测）
 

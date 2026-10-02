@@ -49,6 +49,7 @@ set(
   "landscape-vib"
   "landscape-saddle"
   "landscape-path"
+  "landscape-irc"
   "latticepoint"
   "molecule"
   "model-hessian"
@@ -1296,6 +1297,662 @@ add_test("xtb/landscape-ts-escape-step-missing"
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
 
 # ---------------------------------------------------------------------------
+# Landscape suite: intrinsic reaction coordinate (`--lirc`, M6).
+#
+# The input is the **converged** transition state of the bent HCN guess: the
+# script first runs `--lts` (the guess itself is only near the saddle, and an
+# IRC from a non-stationary geometry funnels both directions into the same
+# basin, measured in report 42).  The IRC has to confirm exactly one imaginary
+# mode, print the frozen etemp and the phase component that defines forward,
+# terminate both directions at a minimum, write the four output files with a
+# single namespace prefix and be **bitwise reproducible** (the phase convention
+# fixes forward deterministically).
+# ---------------------------------------------------------------------------
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+# step 1: converge the transition state of the bent HCN guess
+foreach(name "irc0.xtbts.xyz" "irc0.xtbts.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method prfo --norestart
+          --namespace irc0
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the preparation --lts run failed with status ${status}\n${output}")
+endif()
+if(NOT EXISTS "${RUNDIR}/irc0.xtbts.xyz")
+  message(FATAL_ERROR "the preparation --lts run wrote no xtbts.xyz\n${output}")
+endif()
+# step 2: the IRC from the converged transition state
+foreach(name "irc1.irc_forward.xyz" "irc1.irc_backward.xyz" "irc1.irc_path.xyz" "irc1.irc.log")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/irc0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --norestart --namespace irc1
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lirc terminated with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "landscape: intrinsic reaction coordinate [(]gs[)]")
+  message(FATAL_ERROR "the IRC header was not printed\n${output}")
+endif()
+if(NOT output MATCHES "transition state imaginary modes: +1")
+  message(FATAL_ERROR "the transition state was not confirmed\n${output}")
+endif()
+if(NOT output MATCHES "phase component: +([0-9.]+)")
+  message(FATAL_ERROR "the phase component of the forward direction was not reported\n${output}")
+endif()
+set(PHASE "${CMAKE_MATCH_1}")
+if(PHASE STREQUAL "0.000000")
+  message(FATAL_ERROR "the phase component is zero\n${output}")
+endif()
+if(NOT output MATCHES "landscape engine: etemp +300[.]000 K")
+  message(FATAL_ERROR "the frozen electronic temperature was not reported\n${output}")
+endif()
+if(output MATCHES "termination forward: +error")
+  message(FATAL_ERROR "the forward direction terminated with an error\n${output}")
+endif()
+if(output MATCHES "termination backward: +error")
+  message(FATAL_ERROR "the backward direction terminated with an error\n${output}")
+endif()
+if(NOT output MATCHES "forward reached minimum: +T")
+  message(FATAL_ERROR "the forward endpoint is not assigned to a minimum\n${output}")
+endif()
+if(NOT output MATCHES "backward reached minimum: +T")
+  message(FATAL_ERROR "the backward endpoint is not assigned to a minimum\n${output}")
+endif()
+foreach(name "irc1.irc_forward.xyz" "irc1.irc_backward.xyz" "irc1.irc_path.xyz" "irc1.irc.log")
+  if(NOT EXISTS "${RUNDIR}/${name}")
+    message(FATAL_ERROR "${name} was not written")
+  endif()
+  file(SIZE "${RUNDIR}/${name}" size)
+  if(size EQUAL 0)
+    message(FATAL_ERROR "${name} is empty")
+  endif()
+endforeach()
+# the merged path marks the highest point as the transition state and holds
+# one frame per point of both directions plus the transition state
+file(READ "${RUNDIR}/irc1.irc_path.xyz" pathfile)
+if(NOT pathfile MATCHES " TS")
+  message(FATAL_ERROR "the transition state is not marked in irc_path.xyz")
+endif()
+string(REGEX MATCHALL "frame " frames "${pathfile}")
+list(LENGTH frames nframes)
+if(nframes LESS 5)
+  message(FATAL_ERROR "irc_path.xyz holds only ${nframes} frames")
+endif()
+# the two directions reach **different** minima (HCN and HNC)
+file(READ "${RUNDIR}/irc1.irc.log" irclog)
+string(REGEX MATCH "forward endpoint energy: +(-?[0-9.]+)" _ "${irclog}")
+set(E_FWD "${CMAKE_MATCH_1}")
+string(REGEX MATCH "backward endpoint energy: +(-?[0-9.]+)" _ "${irclog}")
+set(E_BWD "${CMAKE_MATCH_1}")
+if(NOT E_FWD OR NOT E_BWD)
+  message(FATAL_ERROR "the IRC log reports no endpoint energies\n${irclog}")
+endif()
+if(E_FWD STREQUAL E_BWD)
+  message(FATAL_ERROR "both directions reached the same energy (${E_FWD})")
+endif()
+# the phase component and the frozen temperature are recorded in the log
+if(NOT irclog MATCHES "phase component [(]forward[)]: +([0-9.]+)")
+  message(FATAL_ERROR "irc.log does not record the phase component\n${irclog}")
+endif()
+if(NOT irclog MATCHES "electronic temperature [(]frozen[)]: +300[.]000 K")
+  message(FATAL_ERROR "irc.log does not record the effective etemp\n${irclog}")
+endif()
+# --- golden values of the Gonzalez-Schlegel baseline (report 44 section 3) ---
+# The endpoints are pinned to their measured values with a 1e-4 Eh half width:
+# the measured spread of the same basin over the four methods at this step
+# length is 5.0e-5 Eh (gs -5.47213551 / lqa -5.47215487 / hpc -5.47210457),
+# while the only method outside the basin (eulerpc, -5.47130320) is 8.0e-4 Eh
+# away, so the window is 2x the observed scatter and 8x narrower than the
+# spread it has to exclude.  This is the CLI anchor the earlier version of the
+# check lacked (LOW-9 of the M6 review): without it a regression of the
+# reported numbers is invisible at the CLI level.
+#
+# The windows are the measured minima +/- 1e-4 Eh: HNC -5.47215988, HCN
+# -5.50406622 (relaxed endpoints of the same run).
+function(check_basin label value lower upper)
+  if(${value} GREATER ${upper})
+    message(FATAL_ERROR "${label} endpoint ${${value}} is above the basin window (${lower} .. ${upper})")
+  endif()
+  if(${value} LESS ${lower})
+    message(FATAL_ERROR "${label} endpoint ${${value}} is below the basin window (${lower} .. ${upper})")
+  endif()
+endfunction()
+check_basin("forward" E_FWD "-5.47225988" "-5.47205988")
+check_basin("backward" E_BWD "-5.50416622" "-5.50396622")
+if(NOT irclog MATCHES "forward arc length: +4[.]051234")
+  message(FATAL_ERROR "the GS forward arc length is no longer 4.051234\n${irclog}")
+endif()
+if(NOT irclog MATCHES "backward arc length: +3[.]695670")
+  message(FATAL_ERROR "the GS backward arc length is no longer 3.695670\n${irclog}")
+endif()
+if(NOT irclog MATCHES "mean energy/gradient evaluations per point: +16[.]9")
+  message(FATAL_ERROR "the GS forward E/g is no longer 16.9\n${irclog}")
+endif()
+if(NOT irclog MATCHES "mean energy/gradient evaluations per point: +20[.]2")
+  message(FATAL_ERROR "the GS backward E/g is no longer 20.2\n${irclog}")
+endif()
+# the GS defect is demonstrated, not only described: the sphere relaxation is
+# pinned at the micro cycle budget on the forward **and** the backward path
+if(NOT irclog MATCHES "pinned at the micro cycle budget: forward ([0-9]+) of")
+  message(FATAL_ERROR "irc.log does not report the pinned micro cycles\n${irclog}")
+endif()
+set(PINNED_FWD "${CMAKE_MATCH_1}")
+if(PINNED_FWD LESS 1)
+  message(FATAL_ERROR "the GS forward sphere relaxation is no longer pinned (${PINNED_FWD} of the points); the recorded cost of GS has to be updated")
+endif()
+if(NOT irclog MATCHES "backward ([0-9]+) of [0-9]+ points")
+  message(FATAL_ERROR "irc.log does not report the pinned backward micro cycles\n${irclog}")
+endif()
+set(PINNED_BWD "${CMAKE_MATCH_1}")
+if(PINNED_BWD LESS 1)
+  message(FATAL_ERROR "the GS backward sphere relaxation is no longer pinned (${PINNED_BWD})")
+endif()
+# determinism: the same input twice has to give a bitwise identical forward path
+file(READ "${RUNDIR}/irc1.irc_forward.xyz" first_run)
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/irc0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --norestart --namespace irc1
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the repeated --lirc run failed with status ${status}\n${output}")
+endif()
+file(READ "${RUNDIR}/irc1.irc_forward.xyz" second_run)
+if(NOT first_run STREQUAL second_run)
+  message(FATAL_ERROR "irc_forward.xyz is not bitwise reproducible")
+endif()
+# `--lirc-step` has to reach the settings (the printed step length)
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/irc0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --lirc-step 0.2 --norestart --namespace irc2
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lirc --lirc-step 0.2 failed with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "step length: +2[.]000000E-01")
+  message(FATAL_ERROR "--lirc-step 0.2 did not reach the settings\n${output}")
+endif()
+# `--lirc-oneway` runs the forward direction only
+foreach(name "irc3.irc_forward.xyz" "irc3.irc_backward.xyz")
+  if(EXISTS "${RUNDIR}/${name}")
+    file(REMOVE "${RUNDIR}/${name}")
+  endif()
+endforeach()
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/irc0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --lirc-oneway --norestart --namespace irc3
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lirc --lirc-oneway failed with status ${status}\n${output}")
+endif()
+if(NOT EXISTS "${RUNDIR}/irc3.irc_forward.xyz")
+  message(FATAL_ERROR "--lirc-oneway wrote no forward path\n${output}")
+endif()
+if(EXISTS "${RUNDIR}/irc3.irc_backward.xyz")
+  message(FATAL_ERROR "--lirc-oneway wrote a backward path")
+endif()
+]=])
+add_test("xtb/landscape-irc-cli"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-irc
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc.cmake")
+
+# Landscape suite: the IRC endpoint knobs really change the result (M-1 of
+# `45-m6-independent-review.md`).  Two flags used to be parsed and then never
+# read (`--lirc-level`, `--lirc-rmsd-end`), and the default method was `gs`
+# although the validation round measured `hpc` better and 8.5x cheaper.  This
+# check is self contained (it converges its own transition state) and is the
+# executable evidence for all three: each flag has to make the reported
+# numbers move, the default has to be `hpc`, and the sphere relaxation counter
+# of the predictor-corrector has to stay at zero.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_knobs.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method prfo --norestart
+          --namespace ircknob0
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the preparation --lts run failed with status ${status}\n${output}")
+endif()
+if(NOT EXISTS "${RUNDIR}/ircknob0.xtbts.xyz")
+  message(FATAL_ERROR "the preparation --lts run wrote no xtbts.xyz\n${output}")
+endif()
+# the windows are the measured minima +/- 1e-4 Eh (HNC -5.47215988, HCN
+# -5.50406622); see `xtb/landscape-irc-cli` for the derivation
+function(check_basin label value lower upper)
+  if(${value} GREATER ${upper})
+    message(FATAL_ERROR "${label} endpoint ${${value}} is above the basin window (${lower} .. ${upper})")
+  endif()
+  if(${value} LESS ${lower})
+    message(FATAL_ERROR "${label} endpoint ${${value}} is below the basin window (${lower} .. ${upper})")
+  endif()
+endfunction()
+# --- the default method is hpc (M6 behaviour change, PLAN section 12.15) ---
+# `--lirc` without `--lirc-method` must really run the predictor-corrector; a
+# default that is not covered end to end would be another dead knob.
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircknob0.xtbts.xyz" --gfn 2 --lirc --norestart
+          --namespace irc4
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lirc without --lirc-method failed with status ${status}\n${output}")
+endif()
+file(READ "${RUNDIR}/irc4.irc.log" deflog)
+if(NOT deflog MATCHES "intrinsic reaction coordinate: hpc")
+  message(FATAL_ERROR "the default IRC method is no longer hpc\n${deflog}")
+endif()
+string(REGEX MATCH "forward endpoint energy: +(-?[0-9.]+)" _ "${deflog}")
+set(DE_E_FWD "${CMAKE_MATCH_1}")
+string(REGEX MATCH "backward endpoint energy: +(-?[0-9.]+)" _ "${deflog}")
+set(DE_E_BWD "${CMAKE_MATCH_1}")
+check_basin("default forward" DE_E_FWD "-5.47225988" "-5.47205988")
+check_basin("default backward" DE_E_BWD "-5.50416622" "-5.50396622")
+# negative control of the pinned counter: the predictor-corrector has no sphere
+# relaxation, so no point may be pinned
+if(NOT deflog MATCHES "pinned at the micro cycle budget: forward 0 of")
+  message(FATAL_ERROR "the default (hpc) run reports pinned micro cycles\n${deflog}")
+endif()
+# --- `--lirc-rmsd-end` really attributes the endpoint (MEDIUM-1) ---
+# The forward endpoint is 0.0099 bohr away from its relaxed minimum (measured),
+# so a threshold of 1e-3 has to reject it while the backward endpoint (1.6e-5)
+# stays assigned.  Without the criterion the flag changes nothing.
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircknob0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --lirc-rmsd-end 1e-3 --norestart --namespace irc5
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lirc --lirc-rmsd-end 1e-3 failed with status ${status}\n${output}")
+endif()
+file(READ "${RUNDIR}/irc5.irc.log" rmsdlog)
+if(NOT rmsdlog MATCHES "endpoint rmsd criterion: rmsd <= rmsd_end = 0[.]00100000")
+  message(FATAL_ERROR "--lirc-rmsd-end 1e-3 did not reach the settings\n${rmsdlog}")
+endif()
+if(NOT rmsdlog MATCHES "forward reached minimum: +F")
+  message(FATAL_ERROR "--lirc-rmsd-end 1e-3 did not reject the forward endpoint\n${rmsdlog}")
+endif()
+if(NOT rmsdlog MATCHES "backward reached minimum: +T")
+  message(FATAL_ERROR "--lirc-rmsd-end 1e-3 rejected the backward endpoint\n${rmsdlog}")
+endif()
+# --- `--lirc-level` really drives the endpoint relaxation (MEDIUM-1) ---
+# Measured with the GS path: superloose relaxes the forward endpoint in 1 step
+# to -5.47213843 Eh, vtight in 7 steps to -5.47215989 Eh.  Both the step count
+# and the energy of the relaxed minimum have to react to the flag.
+foreach(level "superloose" "vtight")
+  execute_process(
+    COMMAND "${EXE}" "${RUNDIR}/ircknob0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+            --lirc-level ${level} --norestart --namespace irc-${level}
+    WORKING_DIRECTORY "${RUNDIR}"
+    RESULT_VARIABLE status
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE output
+  )
+  if(NOT status EQUAL 0)
+    message(FATAL_ERROR "xtb --lirc-level ${level} failed with status ${status}\n${output}")
+  endif()
+  file(READ "${RUNDIR}/irc-${level}.irc.log" levellog)
+  if(NOT levellog MATCHES "forward relaxed minimum: +(-?[0-9.]+) Eh [(]([0-9]+) relaxation steps[)]")
+    message(FATAL_ERROR "the ${level} log reports no relaxed minimum\n${levellog}")
+  endif()
+  set(E_${level} "${CMAKE_MATCH_1}")
+  set(N_${level} "${CMAKE_MATCH_2}")
+  message(STATUS "--lirc-level ${level}: forward minimum ${CMAKE_MATCH_1} Eh after ${CMAKE_MATCH_2} steps")
+endforeach()
+if(N_superloose GREATER_EQUAL N_vtight)
+  message(FATAL_ERROR "--lirc-level vtight did not need more relaxation steps than superloose (${N_vtight} vs ${N_superloose})")
+endif()
+if(E_vtight GREATER_EQUAL E_superloose)
+  message(FATAL_ERROR "--lirc-level vtight did not relax further than superloose (${E_vtight} vs ${E_superloose})")
+endif()
+# --- `--lirc-no-endpoint-relax` (the documented fallback of the criterion) ---
+# Without a relaxation there is no relaxed minimum: `reached_min` falls back to
+# the termination signal and the log has to say so instead of printing a
+# satisfied distance check (M-2 of the M6 review).
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircknob0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --lirc-no-endpoint-relax --norestart --namespace irc6
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lirc --lirc-no-endpoint-relax failed with status ${status}\n${output}")
+endif()
+file(READ "${RUNDIR}/irc6.irc.log" norelaxlog)
+if(NOT norelaxlog MATCHES "forward reached minimum: +T")
+  message(FATAL_ERROR "--lirc-no-endpoint-relax lost the termination based attribution\n${norelaxlog}")
+endif()
+if(norelaxlog MATCHES "forward relaxed minimum:")
+  message(FATAL_ERROR "--lirc-no-endpoint-relax still reports a relaxed minimum\n${norelaxlog}")
+endif()
+if(NOT norelaxlog MATCHES "the rmsd_end criterion was skipped")
+  message(FATAL_ERROR "--lirc-no-endpoint-relax does not report the skipped rmsd criterion\n${norelaxlog}")
+endif()
+]=])
+add_test("xtb/landscape-irc-knobs"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-irc-knobs
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_knobs.cmake")
+
+# Landscape suite: `--lirc-swap` exchanges the two directions defined by the
+# phase convention.  The forward endpoint of the plain run is the backward
+# endpoint of the swapped run, so the two endpoint energies are exchanged.
+# The script converges the transition state itself, so the test is independent
+# of the order ctest runs the landscape checks in.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_swap.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+# converge the transition state (self-contained, see `xtb/landscape-irc-cli`)
+execute_process(
+  COMMAND "${EXE}" "${GUESS}" --gfn 2 --lts --lts-method prfo --norestart
+          --namespace ircswap0
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the preparation --lts run failed with status ${status}\n${output}")
+endif()
+if(NOT EXISTS "${RUNDIR}/ircswap0.xtbts.xyz")
+  message(FATAL_ERROR "the preparation --lts run wrote no xtbts.xyz\n${output}")
+endif()
+function(run_case args suffix)
+  execute_process(
+    COMMAND "${EXE}" "${RUNDIR}/ircswap0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+            --norestart --namespace ${suffix} ${args}
+    WORKING_DIRECTORY "${RUNDIR}"
+    RESULT_VARIABLE status
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE output
+  )
+  if(NOT status EQUAL 0)
+    message(FATAL_ERROR "xtb --lirc ${args} failed with status ${status}\n${output}")
+  endif()
+  file(READ "${RUNDIR}/${suffix}.irc.log" log)
+  string(REGEX MATCH "forward endpoint energy: +(-?[0-9.]+)" _ "${log}")
+  set(${suffix}_fwd "${CMAKE_MATCH_1}" PARENT_SCOPE)
+  string(REGEX MATCH "backward endpoint energy: +(-?[0-9.]+)" _ "${log}")
+  set(${suffix}_bwd "${CMAKE_MATCH_1}" PARENT_SCOPE)
+endfunction()
+run_case("" ircswap1)
+run_case("--lirc-swap" ircswap2)
+if(NOT ircswap1_fwd OR NOT ircswap1_bwd)
+  message(FATAL_ERROR "the plain run reports no endpoint energies")
+endif()
+if(ircswap1_fwd STREQUAL ircswap1_bwd)
+  message(FATAL_ERROR "both directions reached the same energy (${ircswap1_fwd}); the swap check would be vacuous")
+endif()
+if(NOT ircswap1_fwd STREQUAL ircswap2_bwd)
+  message(FATAL_ERROR "--lirc-swap did not exchange the forward endpoint: ${ircswap1_fwd} vs ${ircswap2_bwd}")
+endif()
+if(NOT ircswap1_bwd STREQUAL ircswap2_fwd)
+  message(FATAL_ERROR "--lirc-swap did not exchange the backward endpoint: ${ircswap1_bwd} vs ${ircswap2_fwd}")
+endif()
+]=])
+add_test("xtb/landscape-irc-swap"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DGUESS=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-irc-swap
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_swap.cmake")
+
+# Landscape suite: termination signal (c) at the command line.  With the
+# gradient threshold disabled (`--lirc-grad-tol 0`) the only physical signal
+# left is the energy rise, so both directions have to terminate with
+# `energy_rise` and still be assigned to a minimum.  This is the endpoint
+# attribution check of the PLAN experiment 7 and the client of the signal (c)
+# branch (a run with the default threshold terminates by signal (b) first, so
+# the default `xtb/landscape-irc-cli` cannot see the difference).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_termination.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${GUESS}" --gfn 2 --lts --lts-method prfo --norestart
+          --namespace ircterm0
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the preparation --lts run failed with status ${status}\n${output}")
+endif()
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircterm0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --lirc-grad-tol 0 --norestart --namespace ircterm1
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "xtb --lirc --lirc-grad-tol 0 failed with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "termination forward: +energy_rise")
+  message(FATAL_ERROR "the forward direction did not terminate by signal (c)\n${output}")
+endif()
+if(NOT output MATCHES "termination backward: +energy_rise")
+  message(FATAL_ERROR "the backward direction did not terminate by signal (c)\n${output}")
+endif()
+if(NOT output MATCHES "forward reached minimum: +T")
+  message(FATAL_ERROR "the forward endpoint is not assigned to a minimum\n${output}")
+endif()
+if(NOT output MATCHES "backward reached minimum: +T")
+  message(FATAL_ERROR "the backward endpoint is not assigned to a minimum\n${output}")
+endif()
+if(NOT output MATCHES "landscape engine: etemp +300[.]000 K")
+  message(FATAL_ERROR "the frozen electronic temperature was not reported\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-irc-termination"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DGUESS=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-irc-termination
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_termination.cmake")
+
+# Landscape suite: the predictor-corrector integrators (`--lirc-method hpc` and
+# `--lirc-method eulerpc`, M6 phase 2).  Both have to confirm exactly one
+# imaginary mode, reach a minimum in both directions, write the four output
+# files and keep the per point energy/gradient cost at the predictor-corrector
+# level (two E/g per point on the converged path).  The same script also
+# exercises the new `--lirc-loose-cycles` and `--lirc-erise-steps` flags.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_pc.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${EXE}" "${GUESS}" --gfn 2 --lts --lts-method prfo --norestart
+          --namespace ircpc0
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the preparation --lts run failed with status ${status}\n${output}")
+endif()
+foreach(method "hpc" "eulerpc")
+  foreach(name "${method}.irc_forward.xyz" "${method}.irc_backward.xyz" "${method}.irc_path.xyz" "${method}.irc.log")
+    if(EXISTS "${RUNDIR}/${name}")
+      file(REMOVE "${RUNDIR}/${name}")
+    endif()
+  endforeach()
+  execute_process(
+    COMMAND "${EXE}" "${RUNDIR}/ircpc0.xtbts.xyz" --gfn 2 --lirc --lirc-method ${method}
+            --norestart --namespace ${method}
+    WORKING_DIRECTORY "${RUNDIR}"
+    RESULT_VARIABLE status
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE output
+  )
+  if(NOT status EQUAL 0)
+    message(FATAL_ERROR "xtb --lirc --lirc-method ${method} failed with status ${status}\n${output}")
+  endif()
+  if(NOT output MATCHES "landscape: intrinsic reaction coordinate [(]${method}[)]")
+    message(FATAL_ERROR "the ${method} IRC header was not printed\n${output}")
+  endif()
+  if(NOT output MATCHES "transition state imaginary modes: +1")
+    message(FATAL_ERROR "${method}: the transition state was not confirmed\n${output}")
+  endif()
+  if(NOT output MATCHES "termination forward: +(gradient|energy_rise)")
+    message(FATAL_ERROR "${method}: the forward direction did not reach a stationary point\n${output}")
+  endif()
+  if(NOT output MATCHES "termination backward: +(gradient|energy_rise)")
+    message(FATAL_ERROR "${method}: the backward direction did not reach a stationary point\n${output}")
+  endif()
+  if(NOT output MATCHES "forward reached minimum: +T")
+    message(FATAL_ERROR "${method}: the forward endpoint is not assigned to a minimum\n${output}")
+  endif()
+  if(NOT output MATCHES "backward reached minimum: +T")
+    message(FATAL_ERROR "${method}: the backward endpoint is not assigned to a minimum\n${output}")
+  endif()
+  foreach(name "${method}.irc_forward.xyz" "${method}.irc_backward.xyz" "${method}.irc_path.xyz" "${method}.irc.log")
+    if(NOT EXISTS "${RUNDIR}/${name}")
+      message(FATAL_ERROR "${name} was not written")
+    endif()
+    file(SIZE "${RUNDIR}/${name}" size)
+    if(size EQUAL 0)
+      message(FATAL_ERROR "${name} is empty")
+    endif()
+  endforeach()
+  file(READ "${RUNDIR}/${method}.irc.log" log)
+  string(REGEX MATCH "mean energy/gradient evaluations per point: +([0-9.]+)" _ "${log}")
+  set(mean_ev "${CMAKE_MATCH_1}")
+  if(NOT mean_ev)
+    message(FATAL_ERROR "${method}: the log reports no mean E/g\n${log}")
+  endif()
+  # the predictor-corrector costs a small integer number of E/g per point; the
+  # upper bound guards against a regression towards the 16.9-20.3 of the GS
+  # micro-cycle relaxer
+  if(mean_ev GREATER 6.0)
+    message(FATAL_ERROR "${method}: the mean E/g per point is ${mean_ev}, far above the predictor-corrector level\n${log}")
+  endif()
+  if(NOT log MATCHES "forward endpoint energy: +-5[.]47")
+    message(FATAL_ERROR "${method}: the forward endpoint did not reach the HNC basin\n${log}")
+  endif()
+  if(NOT log MATCHES "backward endpoint energy: +-5[.]50")
+    message(FATAL_ERROR "${method}: the backward endpoint did not reach the HCN basin\n${log}")
+  endif()
+endforeach()
+# `--lirc-loose-cycles 0` reaches the EulerPC settings (the coarse phase off)
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircpc0.xtbts.xyz" --gfn 2 --lirc --lirc-method eulerpc
+          --lirc-loose-cycles 0 --norestart --namespace epc1
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the --lirc-loose-cycles 0 run failed with status ${status}\n${output}")
+endif()
+# `--lirc-erise-steps` (the alias of --lirc-e-rise) reaches the EulerPC settings
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircpc0.xtbts.xyz" --gfn 2 --lirc --lirc-method eulerpc
+          --lirc-erise-steps 5 --lirc-grad-tol 0 --norestart --namespace epc2
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the --lirc-erise-steps run failed with status ${status}\n${output}")
+endif()
+# a path cut off by the step budget must NOT be assigned to a minimum
+# (the endpoint assignment is the client of `endpoint_reached`)
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircpc0.xtbts.xyz" --gfn 2 --lirc --lirc-method hpc
+          --lirc-max-steps 3 --norestart --namespace epc3
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the --lirc-max-steps 3 run failed with status ${status}\n${output}")
+endif()
+if(NOT output MATCHES "termination forward: +max_steps")
+  message(FATAL_ERROR "the step budget did not report signal (a)\n${output}")
+endif()
+if(NOT output MATCHES "forward reached minimum: +F")
+  message(FATAL_ERROR "a path cut off by the step budget was assigned to a minimum\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-irc-pc"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DGUESS=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-irc-pc
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_pc.cmake")
+
+# Landscape suite: the IRC error branches.  An input that is not a first order
+# saddle point (water is a minimum) and an unknown method name both have to
+# abort with a non-zero status and the documented message.
+add_test("xtb/landscape-irc-minimum"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lirc --lirc-method gs"
+  "-DPATTERN=not a transition state"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-irc-method-unknown"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-HCN}
+  "-DARGS=--gfn 2 --lirc --lirc-method bogus"
+  "-DPATTERN=Unknown landscape IRC method"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+# an IRC DWI surface with a single sample point cannot exist (`dwi_n` is a
+# capacity and the interpolant is two point by construction): the flag is
+# validated instead of silently doing nothing (L-2 of the M6 review)
+add_test("xtb/landscape-irc-dwi-n"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lirc --lirc-dwi-n 1"
+  "-DPATTERN=the IRC DWI surface needs at least two sample points"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-error
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+
+# ---------------------------------------------------------------------------
 # Landscape suite: chain-of-states band searches (`--lts --lts-method neb`).
 #
 # The input contract of `landscape_path_settings` is exercised end to end: the
@@ -2028,6 +2685,12 @@ set_tests_properties(
   "xtb/landscape-path-autoneb"
   "xtb/landscape-path-autoneb-depth-limit"
   "xtb/landscape-path-string"
+  "xtb/landscape-irc-cli"
+  "xtb/landscape-irc-knobs"
+  "xtb/landscape-irc-swap"
+  "xtb/landscape-irc-termination"
+  "xtb/landscape-irc-pc"
+  "xtb/landscape-irc-minimum"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

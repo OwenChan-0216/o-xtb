@@ -35,12 +35,13 @@ module xtb_landscape_driver
    use xtb_type_calculator, only : TCalculator
    use xtb_landscape_settings, only : landscape_settings, landscape_opt_settings, &
       & landscape_sp_settings, landscape_scan_settings, landscape_vib_settings, &
-      & landscape_ts_settings
-   use xtb_landscape_results, only : landscape_result
+      & landscape_ts_settings, landscape_irc_settings
+   use xtb_landscape_results, only : landscape_result, landscape_irc_result
    use xtb_landscape_tasks_opt, only : landscape_optimize
    use xtb_landscape_tasks_scan, only : landscape_scan
    use xtb_landscape_tasks_vib, only : landscape_vib
    use xtb_landscape_tasks_ts, only : landscape_ts
+   use xtb_landscape_tasks_irc, only : landscape_irc
    use xtb_landscape_sp, only : landscape_single_point
    implicit none(type, external)
    private
@@ -116,6 +117,8 @@ subroutine landscape_run(env, mol, chk, calc, settings, result)
          call env%error("the 'ts' task requires landscape_ts_settings", source)
          return
       end select
+   case ('irc')
+      call run_irc_task(env, mol, chk, calc, settings, result)
    case default
       call env%error("unknown landscape task: "//settings%task(), source)
       return
@@ -130,5 +133,50 @@ subroutine landscape_run(env, mol, chk, calc, settings, result)
    end if
 
 end subroutine landscape_run
+
+!> The `irc` task returns a `landscape_irc_result`, not the generic
+!> `landscape_result` the driver hands to every other task.  It is dispatched
+!> through a small wrapper that keeps the driver signature uniform while the
+!> IRC result (two paths, arc lengths, endpoint assignment) is filled by the
+!> task itself.  The generic `result` receives the transition state energy so
+!> that the caller can write it back into `res`.
+subroutine run_irc_task(env, mol, chk, calc, settings, result)
+   character(len=*), parameter :: source = 'landscape_run'
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> Molecular structure
+   type(TMolecule), intent(inout) :: mol
+   !> Wavefunction data
+   type(TRestart), intent(inout) :: chk
+   !> Single point calculator
+   class(TCalculator), intent(in) :: calc
+   !> Task settings
+   class(landscape_settings), intent(in) :: settings
+   !> Task result
+   type(landscape_result), intent(inout) :: result
+
+   type(landscape_irc_result) :: irc
+
+   select type (ircset => settings)
+   type is (landscape_irc_settings)
+      call landscape_irc(env, mol, chk, calc, ircset, irc)
+   class default
+      call env%error("the 'irc' task requires landscape_irc_settings", source)
+      return
+   end select
+
+   ! The generic result carries the transition state energy (the reference of
+   ! the IRC), the gradient norm and the message; the paths themselves are
+   ! written by the task.  Without this write-back the caller would report the
+   ! energy of the starting geometry as 0.0.
+   result%energy = irc%energy_ts
+   result%gnorm = irc%gnorm_ts
+   result%n_imag = irc%n_imag
+   result%is_saddle = irc%is_saddle
+   result%etemp = irc%etemp
+   result%converged = (irc%n_imag == 1)
+   if (allocated(irc%message)) result%message = irc%message
+
+end subroutine run_irc_task
 
 end module xtb_landscape_driver

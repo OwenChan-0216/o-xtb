@@ -105,9 +105,11 @@ module xtb_prog_main
    use xtb_landscape, only: run_landscape
    use xtb_landscape_settings, only: landscape_opt_settings, &
       & landscape_scan_settings, landscape_vib_settings, landscape_ts_settings, &
+      & landscape_irc_settings, &
       & landscape_opt_algorithm_from_name, landscape_conv_level_known, &
       & landscape_ts_method_known, landscape_ts_method_from_name, &
       & landscape_ts_init_mode_known, landscape_ts_ninit_known, &
+      & landscape_irc_method_known, landscape_irc_method_from_name, &
       & landscape_scan_coord_from_name, landscape_scan_coord_known, &
       & landscape_scan_coord_natoms, landscape_scan_mode_known, &
       & p_landscape_scan_coord_distance, p_landscape_restart_off, &
@@ -149,6 +151,7 @@ contains
       type(landscape_scan_settings) :: lsset
       type(landscape_vib_settings) :: lvset
       type(landscape_ts_settings) :: ltset
+      type(landscape_irc_settings) :: lircset
       type(landscape_result) :: lres
 !  store important names and stuff like that in FORTRAN strings
       character(len=:), allocatable :: fname    ! geometry input file
@@ -245,7 +248,7 @@ contains
       ! read the command line arguments
       call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset, lvset, ltset)
+         & lsset, lvset, ltset, lircset)
 
 
       ! No solvation available for PTB!
@@ -588,7 +591,7 @@ contains
             call env%terminate('This is an internal error, please define your runtypes!')
          case (p_run_prescc,p_run_scc, p_run_grad, p_run_opt, p_run_hess, p_run_ohess, p_run_bhess, &
                p_run_md, p_run_omd, p_run_path, p_run_screen, &
-               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt, p_run_lscan, p_run_lts, p_run_lvib)
+               p_run_modef, p_run_mdopt, p_run_metaopt, p_run_lopt, p_run_lscan, p_run_lts, p_run_lvib, p_run_lirc)
             if (set%mode_extrun == p_ext_gfnff) then
                fnv = xfind(p_fname_param_gfnff)
             elseif (set%mode_extrun .eq. p_ext_ptb) then
@@ -999,6 +1002,25 @@ contains
       end if
 
       ! ------------------------------------------------------------------------
+      ! landscape suite (intrinsic reaction coordinate of src/landscape)
+      if (set%runtyp == p_run_lirc) then
+         ! M4/M6 hard constraint: the electronic temperature is frozen for the
+         ! whole run and recorded.  The task copies it into the engine control
+         ! it hands to the engine.
+         lircset%engine%acc = set%acc
+         lircset%etemp = set%etemp
+         call start_timing(3)
+         call run_landscape(env, mol, chk, calc, lircset, lres)
+         call stop_timing(3)
+         ! Report the transition state energy (the reference of the IRC):
+         ! `res` feeds the TOTAL ENERGY line (`write_energy`) and xtbout.json,
+         ! while the four `irc_*` files are written by the landscape task.
+         res%e_total = lres%energy
+         res%gnorm = lres%gnorm
+         call env%checkpoint("Landscape task terminated")
+      end if
+
+      ! ------------------------------------------------------------------------
       ! landscape suite (harmonic frequencies and thermochemistry of src/landscape)
       if (set%runtyp == p_run_lvib) then
          lvset%engine%acc = set%acc
@@ -1402,7 +1424,7 @@ contains
 !> Parse command line arguments and forward them to settings
    subroutine parseArguments(env, args, inputFile, paramFile, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset, lvset, ltset)
+         & lsset, lvset, ltset, lircset)
 
       use xtb_mctc_global, only: persistentEnv
 
@@ -1468,6 +1490,9 @@ contains
 
       !> Landscape transition state settings (`--lts`, `--lts-method`, ...)
       type(landscape_ts_settings), intent(inout) :: ltset
+
+      !> Landscape intrinsic reaction coordinate settings (`--lirc`, ...)
+      type(landscape_irc_settings), intent(inout) :: lircset
 
 !$    integer :: omp_get_num_threads, nproc
       integer :: nFlags
@@ -3225,6 +3250,371 @@ contains
             if (set%runtyp /= p_run_lts) call set_runtyp('lts')
             ltset%path%string_history = .true.
 
+         case ('--lirc')
+            ! Landscape suite: intrinsic reaction coordinate
+            ! (src/landscape/irc); the method and the integrator parameters are
+            ! set by the dedicated `--lirc-*` flags below.  The input geometry
+            ! is the transition state.
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+
+         case ('--lirc-method')
+            ! IRC integration method (hpc default | lqa | eulerpc | gs); the default
+            ! is `hpc` since the M6 validation round measured it both more accurate
+            ! and 8.5x cheaper than `gs` (PLAN section 12.15, behaviour change)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_irc_method_known(sec)) then
+                  lircset%method = landscape_irc_method_from_name(sec)
+               else
+                  call env%error("Unknown landscape IRC method '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lirc-method flag requires a method name", source)
+            end if
+
+         case ('--lirc-step')
+            ! Step length of the IRC integration (bohr*amu^1/2, mass weighted
+            ! arc length)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lircset%step_length = ddum
+               else
+                  call env%error("The --lirc-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lirc-step flag requires a number", source)
+            end if
+
+         case ('--lirc-max-steps')
+            ! Maximum number of macro steps of one direction
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%max_steps = idum2
+               else
+                  call env%error("The --lirc-max-steps flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-max-steps flag requires an integer", source)
+            end if
+
+         case ('--lirc-level')
+            ! Convergence thresholds of the inner endpoint relaxation (the four
+            ! minimisation criteria; the path criteria are --lirc-grad-tol and
+            ! --lirc-e-rise, and the relaxation step budget is --lirc-max-steps)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_conv_level_known(sec)) then
+                  call lircset%set_conv_level(sec)
+               else
+                  call env%error("Unknown landscape convergence level '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lirc-level flag requires a level name", source)
+            end if
+
+         case ('--lirc-swap')
+            ! Exchange the forward and backward directions
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            lircset%swap = .true.
+
+         case ('--lirc-oneway')
+            ! Integrate the forward direction only
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            lircset%both_directions = .false.
+
+         case ('--lirc-target-mode')
+            ! Which negative mode defines the initial direction (1-based)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%target_mode = idum2
+               else
+                  call env%error("The --lirc-target-mode flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-target-mode flag requires an integer", source)
+            end if
+
+         case ('--lirc-micro-cycles')
+            ! Maximum number of GS micro cycles per macro step
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%max_micro_cycles = idum2
+               else
+                  call env%error("The --lirc-micro-cycles flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-micro-cycles flag requires an integer", source)
+            end if
+
+         case ('--lirc-micro-thresh')
+            ! Convergence threshold of the sphere relaxation (bohr*amu^1/2)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lircset%micro_step_thresh = ddum
+               else
+                  call env%error("The --lirc-micro-thresh flag requires a number", source)
+               end if
+            else
+               call env%error("The --lirc-micro-thresh flag requires a number", source)
+            end if
+
+         case ('--lirc-euler-n')
+            ! Number of Euler substeps of the analytic LQA propagation
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%euler_n = idum2
+               else
+                  call env%error("The --lirc-euler-n flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-euler-n flag requires an integer", source)
+            end if
+
+         case ('--lirc-loose-cycles')
+            ! EulerPC coarse phase: the first N macro steps use the plain
+            ! Euler prediction (no corrector), 0 disables the coarse phase
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%loose_cycles = idum2
+               else
+                  call env%error("The --lirc-loose-cycles flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-loose-cycles flag requires an integer", source)
+            end if
+
+         case ('--lirc-mbs-tol')
+            ! Acceptance threshold of the mBS corrector (bohr*amu^1/2); 1e-5 is
+            ! the MAPLE default, 1e-6 the stricter HPC paper value
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lircset%mbs_tol = ddum
+               else
+                  call env%error("The --lirc-mbs-tol flag requires a number", source)
+               end if
+            else
+               call env%error("The --lirc-mbs-tol flag requires a number", source)
+            end if
+
+         case ('--lirc-mbs-max-k')
+            ! Maximum extrapolation level of the mBS corrector
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%mbs_max_k = idum2
+               else
+                  call env%error("The --lirc-mbs-max-k flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-mbs-max-k flag requires an integer", source)
+            end if
+
+         case ('--lirc-mbs-points')
+            ! Base number of Euler substeps of the mBS corrector
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%mbs_points = idum2
+               else
+                  call env%error("The --lirc-mbs-points flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-mbs-points flag requires an integer", source)
+            end if
+
+         case ('--lirc-dwi-n')
+            ! Capacity of the DWI surface fit; the interpolant is two point by
+            ! construction, so every value >= 2 is behaviourally equivalent
+            ! (`check_irc_settings` rejects values below 2)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%dwi_n = idum2
+               else
+                  call env%error("The --lirc-dwi-n flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-dwi-n flag requires an integer", source)
+            end if
+
+         case ('--lirc-e-rise', '--lirc-erise-steps')
+            ! Termination signal (c): number of consecutive rising energies
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%e_rise_steps = idum2
+               else
+                  call env%error("The --lirc-e-rise flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-e-rise flag requires an integer", source)
+            end if
+
+         case ('--lirc-grad-tol')
+            ! Termination signal (b): gradient norm threshold (hartree/bohr)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lircset%grad_tol = ddum
+               else
+                  call env%error("The --lirc-grad-tol flag requires a number", source)
+               end if
+            else
+               call env%error("The --lirc-grad-tol flag requires a number", source)
+            end if
+
+         case ('--lirc-recalc')
+            ! Rebuild the exact Hessian every N macro steps (-1 disables)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%hessian_recalc = idum2
+               else
+                  call env%error("The --lirc-recalc flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-recalc flag requires an integer", source)
+            end if
+
+         case ('--lirc-no-endpoint-relax')
+            ! Skip the M1 relaxation of the two endpoints
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            lircset%endpoint_relax = .false.
+
+         case ('--lirc-endpoint-relax')
+            ! Perform the M1 relaxation of the two endpoints (default; the
+            ! explicit flag restores it after a --lirc-no-endpoint-relax)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            lircset%endpoint_relax = .true.
+
+         case ('--lirc-rmsd-end')
+            ! Threshold of the endpoint attribution: the Kabsch aligned RMSD
+            ! between the endpoint and its relaxed minimum has to be below this
+            ! value (`endpoint_reached`, PLAN section 6.5)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lircset%rmsd_end = ddum
+               else
+                  call env%error("The --lirc-rmsd-end flag requires a number", source)
+               end if
+            else
+               call env%error("The --lirc-rmsd-end flag requires a number", source)
+            end if
+
+         case ('--lirc-hessian')
+            ! Hessian backend of the IRC (initial Hessian and recalculations)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               if (landscape_hessian_source_known(sec)) then
+                  lircset%hessian_source = sec
+               else
+                  call env%error("Unknown landscape Hessian source '"//sec//"'", source)
+               end if
+            else
+               call env%error("The --lirc-hessian flag requires a source name", source)
+            end if
+
+         case ('--lirc-hessian-file')
+            ! File read by `--lirc-hessian file`
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               lircset%hessian_file = sec
+            else
+               call env%error("The --lirc-hessian-file flag requires a file name", source)
+            end if
+
+         case ('--lirc-step-hess')
+            ! Finite difference step of the numerical Hessian (bohr)
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lircset%engine%hess_step = ddum
+               else
+                  call env%error("The --lirc-step-hess flag requires a number", source)
+               end if
+            else
+               call env%error("The --lirc-step-hess flag requires a number", source)
+            end if
+
+         case ('--lirc-sccacc')
+            ! SCC accuracy of the displaced single points of the Hessian
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lircset%engine%hess_acc = ddum
+               else
+                  call env%error("The --lirc-sccacc flag requires a number", source)
+               end if
+            else
+               call env%error("The --lirc-sccacc flag requires a number", source)
+            end if
+
+         case ('--lirc-restart')
+            ! Wavefunction restart policy of the engine
+            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               select case(sec)
+               case('off')
+                  lircset%engine%restart_mode = p_landscape_restart_off
+               case('pin')
+                  lircset%engine%restart_mode = p_landscape_restart_pin
+               case('warm')
+                  lircset%engine%restart_mode = p_landscape_restart_warm
+               case default
+                  call env%error("The --lirc-restart flag requires off, pin or warm", source)
+               end select
+            else
+               call env%error("The --lirc-restart flag requires off, pin or warm", source)
+            end if
+
          case ('--lvib')
             ! Landscape suite: harmonic frequencies and thermochemistry
             ! (src/landscape/vib); the Hessian backend and the thermochemical
@@ -3615,6 +4005,9 @@ contains
       end if
       if (set%runtyp == p_run_lvib) then
          call prtiming(3, 'landscape frequencies')
+      end if
+      if (set%runtyp == p_run_lirc) then
+         call prtiming(3, 'landscape IRC')
       end if
       if (set%runtyp == p_run_path) then
          call prtiming(4, 'path finder')

@@ -23,6 +23,11 @@ mode mirrors one CMake test one-to-one:
   scanhess <exe> <input> <rundir>     -> xtb/landscape-scan-hessian
   autonebdepth <exe> <input> <rundir> <product>
                                      -> xtb/landscape-path-autoneb-depth-limit
+  irc    <exe> <input> <rundir>       -> xtb/landscape-irc-cli
+  ircpc  <exe> <input> <rundir>       -> xtb/landscape-irc-pc
+  ircknobs <exe> <input> <rundir>     -> xtb/landscape-irc-knobs
+  irctermination <exe> <input> <rundir> -> xtb/landscape-irc-termination
+  ircswap <exe> <input> <rundir>     -> xtb/landscape-irc-swap
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
 
@@ -639,6 +644,364 @@ def check_scanhess(exe, inp, rundir):
         fail("the scan Hessian source was not reported", output)
 
 
+def check_basin(label, energy, lower, upper):
+    """Require an endpoint energy to lie inside the measured basin window."""
+    value = float(energy)
+    if value > upper or value < lower:
+        fail("the %s endpoint %s is outside the basin window (%s .. %s)"
+             % (label, energy, lower, upper))
+
+
+def read_log(rundir, name):
+    """Read one IRC log file of the run directory."""
+    with open(os.path.join(rundir, name)) as handle:
+        return handle.read()
+
+
+def endpoint_energy(log, direction):
+    """Endpoint energy of one direction of an IRC log."""
+    match = re.search(r"%s endpoint energy: +(-?[0-9.]+)" % direction, log)
+    if not match:
+        fail("the IRC log reports no %s endpoint energy" % direction, log)
+    return match.group(1)
+
+
+def check_irc(exe, inp, rundir):
+    """`--lirc` from a converged transition state (xtb/landscape-irc-cli).
+
+    The input is the bent HCN transition state **guess**: the check first runs
+    `--lts` to converge it, because an IRC started from a non-stationary
+    geometry funnels both directions into the same basin (report 42).
+    """
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "irc0"],
+        rundir,
+    )
+    if status != 0:
+        fail("the preparation --lts run failed with status %d" % status, output)
+    ts = os.path.join(rundir, "irc0.xtbts.xyz")
+    if not os.path.exists(ts):
+        fail("the preparation --lts run wrote no xtbts.xyz", output)
+    irc_args = ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--norestart",
+                "--namespace", "irc1"]
+    status, output = run(exe, ts, irc_args, rundir)
+    if status != 0:
+        fail("xtb --lirc terminated with status %d" % status, output)
+    for pattern in [
+        r"landscape: intrinsic reaction coordinate [(]gs[)]",
+        r"transition state imaginary modes: +1",
+        r"phase component: +[0-9.]+",
+        r"landscape engine: etemp +300[.]000 K",
+        r"forward reached minimum: +T",
+        r"backward reached minimum: +T",
+    ]:
+        if not re.search(pattern, output):
+            fail("missing %r in the --lirc output" % pattern, output)
+    for name in ["irc1.irc_forward.xyz", "irc1.irc_backward.xyz",
+                 "irc1.irc_path.xyz", "irc1.irc.log"]:
+        path = os.path.join(rundir, name)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            fail("%s was not written" % name, output)
+    with open(os.path.join(rundir, "irc1.irc_path.xyz")) as handle:
+        pathfile = handle.read()
+    if " TS" not in pathfile:
+        fail("the transition state is not marked in irc_path.xyz", pathfile)
+    with open(os.path.join(rundir, "irc1.irc.log")) as handle:
+        log = handle.read()
+    match = re.search(r"forward endpoint energy: +(-?[0-9.]+)", log)
+    if not match:
+        fail("the IRC log reports no forward endpoint energy", log)
+    fwd = match.group(1)
+    match = re.search(r"backward endpoint energy: +(-?[0-9.]+)", log)
+    if not match:
+        fail("the IRC log reports no backward endpoint energy", log)
+    if fwd == match.group(1):
+        fail("both IRC directions reached the same energy (%s)" % fwd)
+    bwd = match.group(1)
+    # golden values of the Gonzalez-Schlegel baseline (report 44 section 3):
+    # the measured minima +/- 1e-4 Eh, 2x the measured same-basin spread of
+    # the four methods (5.0e-5 Eh) and 8x narrower than the distance of the
+    # one method outside the basin (eulerpc, 8.0e-4 Eh)
+    check_basin("forward", fwd, -5.47225988, -5.47205988)
+    check_basin("backward", bwd, -5.50416622, -5.50396622)
+    for pattern in [r"forward arc length: +4[.]051234",
+                    r"backward arc length: +3[.]695670",
+                    r"mean energy/gradient evaluations per point: +16[.]9",
+                    r"mean energy/gradient evaluations per point: +20[.]2",
+                    r"endpoint rmsd criterion: rmsd <= rmsd_end = 0[.]18897000"]:
+        if not re.search(pattern, log):
+            fail("missing %r in irc.log" % pattern, log)
+    # the GS defect is demonstrated, not only described
+    match = re.search(r"pinned at the micro cycle budget: forward ([0-9]+) of", log)
+    if not match or int(match.group(1)) < 1:
+        fail("the GS sphere relaxation is no longer pinned on the forward path", log)
+    match = re.search(r"backward ([0-9]+) of [0-9]+ points", log)
+    if not match or int(match.group(1)) < 1:
+        fail("the GS sphere relaxation is no longer pinned on the backward path", log)
+    with open(os.path.join(rundir, "irc1.irc_forward.xyz")) as handle:
+        first = handle.read()
+    status, output = run(exe, ts, irc_args, rundir)
+    if status != 0:
+        fail("the repeated --lirc run failed with status %d" % status, output)
+    with open(os.path.join(rundir, "irc1.irc_forward.xyz")) as handle:
+        second = handle.read()
+    if first != second:
+        fail("irc_forward.xyz is not bitwise reproducible")
+
+
+def check_irc_knobs(exe, inp, rundir):
+    """`--lirc-level`, `--lirc-rmsd-end` and the default method (M-1).
+
+    Each of the three has to make the reported numbers move: the two flags were
+    parsed and then never read before the M6 fix round, and the default method
+    was `gs` although `hpc` is both more accurate and 8.5x cheaper.
+    """
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "ircknob0"],
+        rundir,
+    )
+    if status != 0:
+        fail("the preparation --lts run failed with status %d" % status, output)
+    ts = os.path.join(rundir, "ircknob0.xtbts.xyz")
+    if not os.path.exists(ts):
+        fail("the preparation --lts run wrote no xtbts.xyz", output)
+    # the default method is hpc (M6 behaviour change, PLAN section 12.15)
+    status, output = run(
+        exe, ts, ["--gfn", "2", "--lirc", "--norestart", "--namespace", "irc4"],
+        rundir,
+    )
+    if status != 0:
+        fail("xtb --lirc without --lirc-method failed with status %d" % status, output)
+    log = read_log(rundir, "irc4.irc.log")
+    if not re.search(r"intrinsic reaction coordinate: hpc", log):
+        fail("the default IRC method is no longer hpc", log)
+    check_basin("default forward", endpoint_energy(log, "forward"),
+                -5.47225988, -5.47205988)
+    check_basin("default backward", endpoint_energy(log, "backward"),
+                -5.50416622, -5.50396622)
+    if not re.search(r"pinned at the micro cycle budget: forward 0 of", log):
+        fail("the default (hpc) run reports pinned micro cycles", log)
+    # `--lirc-rmsd-end` attributes the endpoint (the forward endpoint is
+    # 0.0099 bohr from its relaxed minimum, the backward one 1.6e-5)
+    status, output = run(
+        exe, ts,
+        ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--lirc-rmsd-end", "1e-3",
+         "--norestart", "--namespace", "irc5"],
+        rundir,
+    )
+    if status != 0:
+        fail("xtb --lirc --lirc-rmsd-end 1e-3 failed with status %d" % status, output)
+    log = read_log(rundir, "irc5.irc.log")
+    if not re.search(r"endpoint rmsd criterion: rmsd <= rmsd_end = 0[.]00100000", log):
+        fail("--lirc-rmsd-end 1e-3 did not reach the settings", log)
+    if not re.search(r"forward reached minimum: +F", log):
+        fail("--lirc-rmsd-end 1e-3 did not reject the forward endpoint", log)
+    if not re.search(r"backward reached minimum: +T", log):
+        fail("--lirc-rmsd-end 1e-3 rejected the backward endpoint", log)
+    # `--lirc-level` drives the endpoint relaxation (measured: 1 step at
+    # superloose to -5.47213843 Eh, 7 steps at vtight to -5.47215989 Eh)
+    minima = {}
+    for level in ["superloose", "vtight"]:
+        status, output = run(
+            exe, ts,
+            ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--lirc-level", level,
+             "--norestart", "--namespace", "irc-" + level],
+            rundir,
+        )
+        if status != 0:
+            fail("xtb --lirc-level %s failed with status %d" % (level, status), output)
+        log = read_log(rundir, "irc-%s.irc.log" % level)
+        match = re.search(
+            r"forward relaxed minimum: +(-?[0-9.]+) Eh [(]([0-9]+) relaxation steps[)]",
+            log,
+        )
+        if not match:
+            fail("the %s log reports no relaxed minimum" % level, log)
+        minima[level] = (float(match.group(1)), int(match.group(2)))
+    if minima["vtight"][1] <= minima["superloose"][1]:
+        fail("--lirc-level vtight did not need more relaxation steps than superloose "
+             "(%d vs %d)" % (minima["vtight"][1], minima["superloose"][1]))
+    if minima["vtight"][0] >= minima["superloose"][0]:
+        fail("--lirc-level vtight did not relax further than superloose (%g vs %g)"
+             % (minima["vtight"][0], minima["superloose"][0]))
+    # without a relaxation there is no relaxed minimum: the attribution falls
+    # back to the termination signal and the log has to say so
+    status, output = run(
+        exe, ts,
+        ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--lirc-no-endpoint-relax",
+         "--norestart", "--namespace", "irc6"],
+        rundir,
+    )
+    if status != 0:
+        fail("xtb --lirc --lirc-no-endpoint-relax failed with status %d" % status, output)
+    log = read_log(rundir, "irc6.irc.log")
+    if not re.search(r"forward reached minimum: +T", log):
+        fail("--lirc-no-endpoint-relax lost the termination based attribution", log)
+    if re.search(r"forward relaxed minimum:", log):
+        fail("--lirc-no-endpoint-relax still reports a relaxed minimum", log)
+    if not re.search(r"the rmsd_end criterion was skipped", log):
+        fail("--lirc-no-endpoint-relax does not report the skipped rmsd criterion", log)
+
+
+def check_irc_pc(exe, inp, rundir):
+    """`--lirc-method hpc` and `eulerpc` (xtb/landscape-irc-pc).
+
+    Both predictor-corrector integrators have to reach a minimum in both
+    directions, write the four output files and keep the mean E/g per point at
+    the predictor-corrector level (see the module header of `irc/hpc.f90`).
+    """
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "ircpc0"],
+        rundir,
+    )
+    if status != 0:
+        fail("the preparation --lts run failed with status %d" % status, output)
+    ts = os.path.join(rundir, "ircpc0.xtbts.xyz")
+    if not os.path.exists(ts):
+        fail("the preparation --lts run wrote no xtbts.xyz", output)
+    for method in ["hpc", "eulerpc"]:
+        status, output = run(
+            exe, ts,
+            ["--gfn", "2", "--lirc", "--lirc-method", method, "--norestart",
+             "--namespace", method],
+            rundir,
+        )
+        if status != 0:
+            fail("xtb --lirc --lirc-method %s failed with status %d" % (method, status), output)
+        for pattern in [
+            r"landscape: intrinsic reaction coordinate [(]%s[)]" % method,
+            r"transition state imaginary modes: +1",
+            r"termination forward: +(gradient|energy_rise)",
+            r"termination backward: +(gradient|energy_rise)",
+            r"forward reached minimum: +T",
+            r"backward reached minimum: +T",
+        ]:
+            if not re.search(pattern, output):
+                fail("missing %r in the %s output" % (pattern, method), output)
+        for name in ["%s.irc_forward.xyz" % method, "%s.irc_backward.xyz" % method,
+                     "%s.irc_path.xyz" % method, "%s.irc.log" % method]:
+            path = os.path.join(rundir, name)
+            if not os.path.exists(path) or os.path.getsize(path) == 0:
+                fail("%s was not written" % name, output)
+        with open(os.path.join(rundir, "%s.irc.log" % method)) as handle:
+            log = handle.read()
+        match = re.search(r"mean energy/gradient evaluations per point: +([0-9.]+)", log)
+        if not match:
+            fail("%s: the log reports no mean E/g" % method, log)
+        mean_ev = float(match.group(1))
+        if not 1.0 <= mean_ev <= 6.0:
+            fail("%s: the mean E/g per point is %s, far above the predictor-corrector level" % (method, mean_ev), log)
+        if not re.search(r"forward endpoint energy: +-5[.]47", log):
+            fail("%s: the forward endpoint did not reach the HNC basin" % method, log)
+        if not re.search(r"backward endpoint energy: +-5[.]50", log):
+            fail("%s: the backward endpoint did not reach the HCN basin" % method, log)
+    # the new flags reach the settings
+    status, output = run(
+        exe, ts,
+        ["--gfn", "2", "--lirc", "--lirc-method", "eulerpc",
+         "--lirc-loose-cycles", "0", "--lirc-erise-steps", "5",
+         "--lirc-endpoint-relax", "--norestart", "--namespace", "ircpc1"],
+        rundir,
+    )
+    if status != 0:
+        fail("the new --lirc flags failed with status %d" % status, output)
+    # a path cut off by the step budget is not assigned to a minimum
+    status, output = run(
+        exe, ts,
+        ["--gfn", "2", "--lirc", "--lirc-method", "hpc", "--lirc-max-steps", "3",
+         "--norestart", "--namespace", "ircpc2"],
+        rundir,
+    )
+    if status != 0:
+        fail("the --lirc-max-steps 3 run failed with status %d" % status, output)
+    if not re.search(r"termination forward: +max_steps", output):
+        fail("the step budget did not report signal (a)", output)
+    if not re.search(r"forward reached minimum: +F", output):
+        fail("a path cut off by the step budget was assigned to a minimum", output)
+
+
+def check_irc_termination(exe, inp, rundir):
+    """Termination signal (c) at the command line (xtb/landscape-irc-termination)."""
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "ircterm0"],
+        rundir,
+    )
+    if status != 0:
+        fail("the preparation --lts run failed with status %d" % status, output)
+    ts = os.path.join(rundir, "ircterm0.xtbts.xyz")
+    if not os.path.exists(ts):
+        fail("the preparation --lts run wrote no xtbts.xyz", output)
+    status, output = run(
+        exe, ts,
+        ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--lirc-grad-tol", "0",
+         "--norestart", "--namespace", "ircterm1"],
+        rundir,
+    )
+    if status != 0:
+        fail("xtb --lirc --lirc-grad-tol 0 failed with status %d" % status, output)
+    for pattern in [
+        r"termination forward: +energy_rise",
+        r"termination backward: +energy_rise",
+        r"forward reached minimum: +T",
+        r"backward reached minimum: +T",
+        r"landscape engine: etemp +300[.]000 K",
+    ]:
+        if not re.search(pattern, output):
+            fail("missing %r in the --lirc output" % pattern, output)
+
+
+def check_irc_swap(exe, inp, rundir):
+    """`--lirc-swap` exchanges the two directions (xtb/landscape-irc-swap).
+
+    Mirrors the inline CMake script of the CMake build.  The input is the bent
+    HCN transition state guess, converged with `--lts` first (see
+    `check_irc`).  The swap check would be vacuous if both directions reached
+    the same energy, so that is asserted as well.
+    """
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "ircswap0"],
+        rundir,
+    )
+    if status != 0:
+        fail("the preparation --lts run failed with status %d" % status, output)
+    ts = os.path.join(rundir, "ircswap0.xtbts.xyz")
+    if not os.path.exists(ts):
+        fail("the preparation --lts run wrote no xtbts.xyz", output)
+
+    def case(suffix, swap):
+        args = ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--norestart",
+                "--namespace", suffix]
+        if swap:
+            args.append("--lirc-swap")
+        status, output = run(exe, ts, args, rundir)
+        if status != 0:
+            fail("xtb --lirc %s failed with status %d" % (suffix, status), output)
+        log = read_log(rundir, "%s.irc.log" % suffix)
+        return endpoint_energy(log, "forward"), endpoint_energy(log, "backward")
+
+    plain_fwd, plain_bwd = case("ircswap1", False)
+    swapped_fwd, swapped_bwd = case("ircswap2", True)
+    if plain_fwd == plain_bwd:
+        fail("both directions reached the same energy (%s); the swap check "
+             "would be vacuous" % plain_fwd)
+    if plain_fwd != swapped_bwd:
+        fail("--lirc-swap did not exchange the forward endpoint: %s vs %s"
+             % (plain_fwd, swapped_bwd))
+    if plain_bwd != swapped_fwd:
+        fail("--lirc-swap did not exchange the backward endpoint: %s vs %s"
+             % (plain_bwd, swapped_fwd))
+
+
 def check_error(exe, inp, rundir, pattern, args):
     """An invalid request must abort with a non-zero status and a message."""
     status, output = run(exe, inp, args, rundir)
@@ -685,6 +1048,16 @@ def main():
         check_maxsteps(exe, inp, rundir)
     elif mode == "scanhess":
         check_scanhess(exe, inp, rundir)
+    elif mode == "irc":
+        check_irc(exe, inp, rundir)
+    elif mode == "ircknobs":
+        check_irc_knobs(exe, inp, rundir)
+    elif mode == "ircpc":
+        check_irc_pc(exe, inp, rundir)
+    elif mode == "ircswap":
+        check_irc_swap(exe, inp, rundir)
+    elif mode == "irctermination":
+        check_irc_termination(exe, inp, rundir)
     elif mode == "autonebdepth":
         if len(rest) < 1:
             fail("the autonebdepth mode needs the product geometry")

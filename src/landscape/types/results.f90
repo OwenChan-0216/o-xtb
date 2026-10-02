@@ -28,10 +28,26 @@ module xtb_landscape_results
    private
 
    public :: landscape_vib_result
+   public :: landscape_irc_result
    public :: landscape_step, landscape_result, landscape_convergence_report
    public :: landscape_result_add_step, landscape_report_add, landscape_result_trim
    public :: landscape_print_step, landscape_result_write, landscape_report_write
+   public :: landscape_irc_result_write
    public :: p_landscape_bound_trust, p_landscape_bound_step_max
+   public :: p_landscape_irc_term_error, p_landscape_irc_term_max_steps
+   public :: p_landscape_irc_term_grad, p_landscape_irc_term_energy_rise
+   public :: landscape_irc_term_name
+
+   !> Termination signal of an IRC integration: an error (no path was built).
+   integer, parameter :: p_landscape_irc_term_error = 0
+   !> Termination signal (a) of PLAN section 6.5: the step budget is exhausted.
+   integer, parameter :: p_landscape_irc_term_max_steps = 1
+   !> Termination signal (b): `|g|` fell below the threshold (a stationary
+   !> point was reached).
+   integer, parameter :: p_landscape_irc_term_grad = 2
+   !> Termination signal (c): the energy rose over `e_rise_steps` consecutive
+   !> points (the path passed the minimum and is climbing again).
+   integer, parameter :: p_landscape_irc_term_energy_rise = 3
 
    !> Result of a vibrational analysis (`vib` task, PLAN section 5.4).
    !>
@@ -62,6 +78,106 @@ module xtb_landscape_results
       !> wrapper (`print_thermo`), zero until that wrapper has run
       real(wp) :: zpe = 0.0_wp
    end type landscape_vib_result
+
+   !> Result of an intrinsic reaction coordinate integration (`irc` task,
+   !> PLAN section 5.4).
+   !>
+   !> One path point is a geometry `(3, n)` (bohr) together with its energy
+   !> (hartree), the mass weighted arc length from the transition state
+   !> (bohr*amu^1/2) and the cost of the point (number of energy/gradient
+   !> evaluations the integrator spent on it).  The transition state itself is
+   !> the common first point of both directions and is not duplicated in the
+   !> arrays: `xyz_fwd(:,:,1)` is the first point **after** the transition
+   !> state (half a step away), the same for `xyz_bwd`.
+   type :: landscape_irc_result
+      !> Integration method, one of the `p_landscape_irc_*` identifiers
+      integer :: method = 0
+      !> Number of recorded points of the forward direction
+      integer :: n_fwd = 0
+      !> Number of recorded points of the backward direction
+      integer :: n_bwd = 0
+      !> Forward geometries `(3, nat, n_fwd)` (bohr)
+      real(wp), allocatable :: xyz_fwd(:, :, :)
+      !> Backward geometries `(3, nat, n_bwd)` (bohr)
+      real(wp), allocatable :: xyz_bwd(:, :, :)
+      !> Forward energies (hartree)
+      real(wp), allocatable :: e_fwd(:)
+      !> Backward energies (hartree)
+      real(wp), allocatable :: e_bwd(:)
+      !> Forward arc lengths from the transition state (bohr*amu^1/2)
+      real(wp), allocatable :: s_fwd(:)
+      !> Backward arc lengths from the transition state (bohr*amu^1/2)
+      real(wp), allocatable :: s_bwd(:)
+      !> Forward gradient norms (hartree/bohr, Euclidean Cartesian norm)
+      real(wp), allocatable :: gnorm_fwd(:)
+      !> Backward gradient norms (hartree/bohr)
+      real(wp), allocatable :: gnorm_bwd(:)
+      !> Energy/gradient evaluations spent on each forward point
+      integer, allocatable :: n_eval_fwd(:)
+      !> Energy/gradient evaluations spent on each backward point
+      integer, allocatable :: n_eval_bwd(:)
+      !> Termination signal of the forward direction, one of the
+      !> `p_landscape_irc_term_*` identifiers
+      integer :: term_fwd = p_landscape_irc_term_error
+      !> Termination signal of the backward direction
+      integer :: term_bwd = p_landscape_irc_term_error
+      !> True if the forward endpoint reached a minimum: termination by (b) or
+      !> (c), a converged endpoint relaxation and an aligned RMSD below
+      !> `rmsd_end`
+      logical :: reached_min_fwd = .false.
+      !> True if the backward endpoint reached a minimum
+      logical :: reached_min_bwd = .false.
+      !> Kabsch aligned RMSD between the forward endpoint and its relaxed
+      !> minimum (bohr); the endpoint is rigid-body aligned to the minimum
+      !> with the mass free Kabsch rotation before the distance is taken
+      real(wp) :: rmsd_to_min_fwd = 0.0_wp
+      !> Kabsch aligned RMSD between the backward endpoint and its relaxed
+      !> minimum (bohr)
+      real(wp) :: rmsd_to_min_bwd = 0.0_wp
+      !> Energy of the relaxed forward minimum (hartree); zero when the
+      !> endpoint relaxation was not requested
+      real(wp) :: e_min_fwd = 0.0_wp
+      !> Energy of the relaxed backward minimum (hartree)
+      real(wp) :: e_min_bwd = 0.0_wp
+      !> Macro steps of the forward endpoint relaxation (`--lirc-level` sets
+      !> its thresholds)
+      integer :: n_relax_fwd = 0
+      !> Macro steps of the backward endpoint relaxation
+      integer :: n_relax_bwd = 0
+      !> Number of forward points whose Gonzalez-Schlegel sphere relaxation was
+      !> stopped by the micro cycle budget instead of its own convergence
+      !> criterion.  Measured: on a GFN2 path this is every GS point (16.9 /
+      !> 20.3 E/g per point instead of the 3-5 of PLAN section 6.5); the
+      !> predictor-corrector methods report 0
+      integer :: n_pinned_fwd = 0
+      !> Number of backward points whose sphere relaxation was pinned
+      integer :: n_pinned_bwd = 0
+      !> Energy of the transition state (hartree)
+      real(wp) :: energy_ts = 0.0_wp
+      !> Gradient norm at the transition state (hartree/bohr)
+      real(wp) :: gnorm_ts = 0.0_wp
+      !> Frozen electronic temperature read back from the calculator (kelvin)
+      real(wp) :: etemp = 0.0_wp
+      !> Arc length of one macro step (bohr*amu^1/2)
+      real(wp) :: step_length = 0.0_wp
+      !> Number of imaginary modes of the transition state confirmation
+      integer :: n_imag = -1
+      !> Component index (flat, 1-based) of the largest absolute component of
+      !> the mass weighted transition vector after the phase convention
+      integer :: phase_index = 0
+      !> Value of that component (bohr*amu^1/2, unit mass weighted vector)
+      real(wp) :: phase_value = 0.0_wp
+      !> True if `--lirc-swap` exchanged the two directions
+      logical :: swapped = .false.
+      !> True if exactly one imaginary mode was found, i.e. the input really is
+      !> a first order saddle point
+      logical :: is_saddle = .false.
+      !> Human readable termination message
+      character(len=:), allocatable :: message
+   contains
+      !> Print a summary of the integration
+      procedure :: write_log => landscape_irc_result_write
+   end type landscape_irc_result
 
    !> Semantics of `landscape_step%trust_radius`: a genuine trust radius
    !> (the minimisers, P-RFO and B-P-RFO).
@@ -407,5 +523,111 @@ subroutine landscape_report_write(self, unit)
    end do
 
 end subroutine landscape_report_write
+
+!> Human readable name of an IRC termination signal identifier.
+pure function landscape_irc_term_name(term) result(name)
+   !> Termination signal identifier
+   integer, intent(in) :: term
+   !> Lower case signal name
+   character(len=:), allocatable :: name
+
+   select case (term)
+   case (p_landscape_irc_term_max_steps)
+      name = 'max_steps'
+   case (p_landscape_irc_term_grad)
+      name = 'gradient'
+   case (p_landscape_irc_term_energy_rise)
+      name = 'energy_rise'
+   case default
+      name = 'error'
+   end select
+
+end function landscape_irc_term_name
+
+!> Print a summary of an intrinsic reaction coordinate integration.
+subroutine landscape_irc_result_write(self, unit)
+   !> Result to print
+   class(landscape_irc_result), intent(in) :: self
+   !> Output unit
+   integer, intent(in) :: unit
+
+   write(unit, '(1x,a)') repeat('-', 62)
+   if (allocated(self%message)) then
+      write(unit, '(1x,a)') "irc: "//self%message
+   end if
+   write(unit, '(1x,a,f20.12,a)') "transition state energy:  ", self%energy_ts, " Eh"
+   write(unit, '(1x,a,es15.6,a)') "transition state gradient: ", self%gnorm_ts, " Eh/bohr"
+   write(unit, '(1x,a,i0)') "imaginary modes:          ", self%n_imag
+   write(unit, '(1x,a,l1)') "first order saddle point: ", self%is_saddle
+   write(unit, '(1x,a,es13.6,a)') "step length:              ", &
+      & self%step_length, " bohr*amu^1/2"
+   write(unit, '(1x,a,a)') "termination forward:      ", &
+      & landscape_irc_term_name(self%term_fwd)
+   if (self%n_bwd > 0) then
+      write(unit, '(1x,a,a)') "termination backward:     ", &
+         & landscape_irc_term_name(self%term_bwd)
+   else
+      write(unit, '(1x,a)') "termination backward:     not requested (--lirc-oneway)"
+   end if
+   write(unit, '(1x,a,i0)') "forward points:           ", self%n_fwd
+   write(unit, '(1x,a,i0)') "backward points:          ", self%n_bwd
+   if (self%n_fwd > 0) then
+      write(unit, '(1x,a,f16.6,a)') "forward arc length:       ", &
+         & self%s_fwd(self%n_fwd), " bohr*amu^1/2"
+      write(unit, '(1x,a,f20.12,a)') "forward endpoint energy:  ", &
+         & self%e_fwd(self%n_fwd), " Eh"
+   end if
+   if (self%n_bwd > 0) then
+      write(unit, '(1x,a,f16.6,a)') "backward arc length:      ", &
+         & self%s_bwd(self%n_bwd), " bohr*amu^1/2"
+      write(unit, '(1x,a,f20.12,a)') "backward endpoint energy: ", &
+         & self%e_bwd(self%n_bwd), " Eh"
+      call write_attribution(unit, "backward", self%reached_min_bwd, &
+         & self%rmsd_to_min_bwd, self%e_min_bwd)
+   else
+      write(unit, '(1x,a)') "backward direction: not requested (--lirc-oneway)"
+   end if
+   call write_attribution(unit, "forward", self%reached_min_fwd, &
+      & self%rmsd_to_min_fwd, self%e_min_fwd)
+   write(unit, '(1x,a,i0,a,i0,a)') "sphere relaxation pinned:  ", &
+      & self%n_pinned_fwd + self%n_pinned_bwd, " of ", self%n_fwd + self%n_bwd, &
+      & " points (GS micro cycle budget; 0 for the predictor-corrector)"
+   write(unit, '(1x,a,i0,a,f12.6,a)') "phase component:          ", &
+      & self%phase_index, " (value ", self%phase_value, ")"
+   write(unit, '(1x,a,l1)') "directions swapped:       ", self%swapped
+   if (self%etemp > 0.0_wp) then
+      write(unit, '(1x,a,f12.3,a)') "etemp:                    ", self%etemp, " K"
+   end if
+   write(unit, '(1x,a)') repeat('-', 62)
+
+end subroutine landscape_irc_result_write
+
+!> Print the endpoint attribution of one direction.
+!>
+!> Without an endpoint relaxation there is no relaxed minimum and therefore no
+!> Kabsch aligned RMSD: the assignment rests on the termination signal alone
+!> and `e_min` is zero.  The summary says so instead of printing a `0.000000`
+!> distance next to a satisfied criterion (M-2 of `45-m6-independent-review.md`).
+subroutine write_attribution(unit, direction, reached, rmsd, e_min)
+   !> Output unit
+   integer, intent(in) :: unit
+   !> Direction label
+   character(len=*), intent(in) :: direction
+   !> True if the endpoint is assigned to a minimum
+   logical, intent(in) :: reached
+   !> Kabsch aligned RMSD to the relaxed minimum (bohr)
+   real(wp), intent(in) :: rmsd
+   !> Energy of the relaxed minimum (hartree, zero without a relaxation)
+   real(wp), intent(in) :: e_min
+
+   if (e_min == 0.0_wp) then
+      write(unit, '(1x,a,a,l1,a)') direction, " reached minimum: ", reached, &
+         & " (no endpoint relaxation, the rmsd criterion was skipped)"
+   else
+      write(unit, '(1x,a,a,l1,a,f12.6,a,f20.12,a)') direction, " reached minimum: ", &
+         & reached, " (rmsd ", rmsd, " bohr, minimum ", e_min, " Eh)"
+   end if
+
+end subroutine write_attribution
 
 end module xtb_landscape_results

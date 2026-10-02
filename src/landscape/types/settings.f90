@@ -43,6 +43,7 @@ module xtb_landscape_settings
    public :: landscape_scan_settings, landscape_scan_coord_settings
    public :: landscape_vib_settings, landscape_ts_settings
    public :: landscape_path_settings
+   public :: landscape_irc_settings
    public :: landscape_engine_control
    public :: p_landscape_opt_sd, p_landscape_opt_cg, p_landscape_opt_lbfgs
    public :: p_landscape_opt_bfgs
@@ -69,6 +70,10 @@ module xtb_landscape_settings
    public :: landscape_ts_method_is_string
    public :: landscape_ts_init_mode_known
    public :: landscape_ts_ninit_known
+   public :: p_landscape_irc_gs, p_landscape_irc_hpc, p_landscape_irc_lqa
+   public :: p_landscape_irc_eulerpc
+   public :: landscape_irc_method_name, landscape_irc_method_from_name
+   public :: landscape_irc_method_known
 
    !> Minimisation algorithm identifiers (`landscape_opt_settings%algorithm`)
    integer, parameter :: p_landscape_opt_sd = 1
@@ -112,6 +117,20 @@ module xtb_landscape_settings
    !> Alias of `string`; the generalised variant shares the implementation
    !> and differs only in the amount of book keeping kept in the report
    integer, parameter :: p_landscape_ts_gsm = 8
+
+   !> Intrinsic reaction coordinate integration methods
+   !> (`landscape_irc_settings%method`).
+   !>
+   !> `gs` is Gonzalez-Schlegel (J. Phys. Chem. 94, 5523 (1990)); `hpc` the
+   !> Hessian based predictor-corrector and `eulerpc` the Euler predictor of
+   !> Hratchian & Schlegel (J. Chem. Phys. 120, 9918 (2004)) and Meisner &
+   !> Kaestner (J. Chem. Phys. 133, 224101 (2010)); `lqa` the quadratic
+   !> analytic propagation of Page & McIver (J. Chem. Phys. 88, 922 (1988)).
+   !> The four identifiers share one namespace and are unique.
+   integer, parameter :: p_landscape_irc_gs = 1
+   integer, parameter :: p_landscape_irc_hpc = 2
+   integer, parameter :: p_landscape_irc_lqa = 3
+   integer, parameter :: p_landscape_irc_eulerpc = 4
 
    !> Settings of the chain-of-states band searches (PLAN section 6.4).
    !>
@@ -731,6 +750,176 @@ module xtb_landscape_settings
       procedure :: task => landscape_ts_settings_task
    end type landscape_ts_settings
 
+   !> Settings of an intrinsic reaction coordinate integration (`irc` task,
+   !> PLAN section 5.3.7 / 6.5).
+   !>
+   !> -------------------------------------------------------------------
+   !> Unit contract (the largest trap of this task)
+   !> -------------------------------------------------------------------
+   !> IRC is defined in **mass weighted Cartesian coordinates** and one
+   !> atomic unit along the path is **1 bohr*amu^1/2** (Hratchian & Schlegel,
+   !> J. Chem. Phys. 120, 9918 (2004), Eq. 1: `dx(s)/ds = -g(x)/|g(x)|`).
+   !> `step_length`, `micro_step_thresh`, `rmsd_end`, `mbs_tol` and the arc
+   !> lengths `s` of the result are all in `bohr*amu^1/2`; the mass weighted
+   !> coordinates use `sqrt(m/amu) * r/bohr`.  This is **not** the electron
+   !> mass (a.u.) metric of the vibrational analysis: the IRC mass weighting
+   !> uses amu so that the Gaussian `IRC=StepSize=10` / 0.10 `bohr*amu^1/2`
+   !> convention of the literature is reproduced exactly.
+   !> -------------------------------------------------------------------
+   !>
+   !> The direction of the two runs is fixed deterministically: `swap =
+   !> .false.` defines "forward" as the transition vector whose largest
+   !> absolute (mass weighted) component is positive
+   !> (`xtb_landscape_saddle_eigenfollow::landscape_transition_mode_set_phase`,
+   !> the M4 phase convention), `swap = .true.` exchanges the two directions.
+   !>
+   !> Calibration of the method default and of the endpoint criteria
+   !> (M6 validation round, report 44): the **default method is now `hpc`**.
+   !> Measured on identical input the predictor-corrector is both **more
+   !> accurate** (maximum deviation from the analytic Mueller-Brown minimum
+   !> energy path 0.0022 bohr versus 0.040 bohr for Gonzalez-Schlegel) and
+   !> **cheaper** (1.98 E/g per point versus 16.9/20.3).  `gs` is retained as
+   !> the compatible/reference implementation and as the fallback of a failed
+   !> predictor-corrector correction, `lqa` as the cheapest (1.00 E/g)
+   !> reference; the GS cost is documented in its module header and in PLAN
+   !> section 6.5.
+   !>
+   !> The four convergence thresholds of the inherited minimisation criteria
+   !> (`g_max`, `g_rms`, `d_max`, `d_rms`, `e_tol`) are **not** the IRC path
+   !> criteria: they are the criteria of the optional endpoint relaxation and
+   !> are set by `--lirc-level` (`set_conv_level`).  The path itself is left by
+   !> the three termination signals of PLAN section 6.5, whose thresholds are
+   !> `grad_tol` and `e_rise_steps`.  `max_steps` is the **path** budget only;
+   !> the endpoint relaxation keeps the minimiser budget.
+   !>
+   !> Calibration provenance: `step_length`, `euler_n`, `dwi_n`,
+   !> `mbs_max_k`, `mbs_points`, `micro_step_thresh` and `max_micro_cycles`
+   !> are the values of the MAPLE reference (report 04) and of the original
+   !> publications.  `e_rise_steps`, `grad_tol` and `hessian_recalc` were
+   !> **measured** on the analytic LEPS and Mueller-Brown surfaces in the M6
+   !> validation round (report 42): the values below are the calibrated
+   !> defaults, the `[待校准]` markers of PLAN section 5.3.7 are retired where
+   !> a measurement exists and kept where none does.
+   type, extends(landscape_settings) :: landscape_irc_settings
+      !> Integration method, one of `p_landscape_irc_*`.  Default `hpc`: the
+      !> M6 validation round measured it more accurate *and* 8.5x cheaper than
+      !> `gs` (report 44 section 3.3), see the type comment above
+      integer :: method = p_landscape_irc_hpc
+      !> Which negative mode defines the initial direction (1-based,
+      !> 1 = most negative), the `target_mode` of the MAPLE reference
+      integer :: target_mode = 1
+      !> Arc length of one macro step (bohr*amu^1/2).  Default 0.10
+      !> (Gaussian `IRC=StepSize`, MAPLE `step_length_bohr`); `tight` is
+      !> 0.05, HPC may use up to 0.40.  Range recommended by report 04
+      !> section 1.3: 0.05 (tight) - 0.40 (HPC only).
+      real(wp) :: step_length = 1.0e-1_wp
+      ! Maximum number of macro steps of one direction: the inherited field
+      ! `landscape_settings%max_steps` is reused (its default is 256).  PLAN
+      ! section 5.3.7 quoted 50, but the physical termination signals (b)/(c)
+      ! end a normal run far earlier, so a generous cap is the safer default;
+      ! `--lirc-max-steps` overrides it.
+      !> Number of GS micro cycles per macro step.  **Measured**: the GS
+      !> sphere relaxation does not meet its own criterion and is stopped by
+      !> this budget on every macro step (report 44 section 7.1); the value is
+      !> the MAPLE reference and is kept because lowering it to 5 still gives
+      !> the correct path at 5.0 E/g, while 1 does not converge.  20 is the
+      !> conservative setting for the fallback use of the GS step.
+      integer :: max_micro_cycles = 20
+      !> GS micro cycle convergence: the projected Newton step is accepted
+      !> when its norm falls below this value (bohr*amu^1/2).  Measured: the
+      !> tangent Newton step is 1.8-2.4 bohr*amu^1/2, i.e. 1800-2400 times
+      !> this threshold, so the criterion is never met with the trust region
+      !> of the sphere (radius `step_length/2`); see the GS module header for
+      !> the root cause and the planned Lagrange step fix
+      real(wp) :: micro_step_thresh = 1.0e-3_wp
+      !> Number of Euler substeps of the analytic (LQA) propagation over one
+      !> macro step (Hratchian & Schlegel, Eq. 10: `N_Euler = 5000`)
+      integer :: euler_n = 5000
+      !> Number of coarse macro steps of EulerPC before the corrector is used
+      !> (MAPLE `loose_cycles`); unused by `gs`, `lqa` and `hpc`
+      integer :: loose_cycles = 3
+      !> **Capacity** of the distance weighted interpolation (DWI) surface fit
+      !> (MAPLE `dwi_n`).  The implemented interpolant is **two point by
+      !> construction** - the current and the predicted point of the step
+      !> (`landscape_irc_corrector_step`) - so every value >= 2 is behaviourally
+      !> equivalent (measured: `--lirc-dwi-n 4` and `20` are bitwise identical);
+      !> the value below is only an allocation size.  Values below 2 are
+      !> rejected by the task (`check_irc_settings`).
+      integer :: dwi_n = 4
+      !> Maximum number of extrapolation levels of the modified
+      !> Bulirsch-Stoer corrector (MAPLE `mbs_max_k`)
+      integer :: mbs_max_k = 15
+      !> Maximum number of ODE evaluations of one mBS integration
+      !> (MAPLE `mbs_points`)
+      integer :: mbs_points = 20
+      !> Acceptance threshold of the modified Bulirsch-Stoer corrector
+      !> (bohr*amu^1/2).  Default is the MAPLE value 1.0e-5; the stricter
+      !> 1.0e-6 of the HPC paper is available as `--lirc-mbs-tol 1e-6`
+      !> (report 04 section 1.3).
+      real(wp) :: mbs_tol = 1.0e-5_wp
+      !> Termination signal (c): the path is left when the energy has risen
+      !> over this many consecutive recorded points (report 04 section 1.6)
+      !> [待校准]
+      integer :: e_rise_steps = 3
+      !> Termination signal (b): the path is left when the **RMS Cartesian
+      !> gradient per component** (Euclidean norm divided by `sqrt(3N)`,
+      !> hartree/bohr) falls below this threshold.  The default 1.0e-3 is the
+      !> MAPLE GS endpoint criterion (`f_rms_th = 5e-4` hartree/angstrom =
+      !> 9.45e-4 hartree/bohr, report 04 section 1.2) rounded up; the Euclidean
+      !> norm used for the recorded `|g|` is `sqrt(3N)` times this value
+      !> [待校准]
+      real(wp) :: grad_tol = 1.0e-3_wp
+      !> Hessian update along the path, one of `p_landscape_hess_update_*`
+      !> (Bofill is the consensus default of the EulerPC paper, report 04
+      !> section 1.5)
+      integer :: hessian_update = p_landscape_hess_update_bofill
+      !> Rebuild the exact Hessian through the provider every N macro steps;
+      !> -1 (or 0) disables the recalculation, so the path runs on the update
+      !> alone (MAPLE `hessian_recalc=None`).
+      !>
+      !> **Measured** (report 44 section 5): on a short path (4 bohr, step
+      !> 0.10) the pure Bofill update is sufficient - the endpoint error is
+      !> ~1e-5 hartree and every method still stops in the same minimum - which
+      !> is why the default stays `-1` (all accepted M6 numbers were produced
+      !> with it).  On a **long** integration it drifts: HPC backward after 150
+      !> steps ended 6.0e-4 hartree above the true HCN minimum with
+      !> `|g| = 4.1e-2` (a spurious stationary point of the interpolant),
+      !> while `hessian_recalc = 10` returns to the minimum (`|g| = 4.4e-7`).
+      !> Long, strongly curved paths therefore require an explicit
+      !> `--lirc-recalc 5 .. 10`.
+      integer :: hessian_recalc = -1
+      !> Exchange the forward and backward directions defined by the phase
+      !> convention (`--lirc-swap`)
+      logical :: swap = .false.
+      !> Integrate both directions; `.false.` runs the forward direction only
+      !> (`--lirc-oneway`)
+      logical :: both_directions = .true.
+      !> Relax the two endpoints with the M1 minimiser to assign them to a
+      !> minimum and to report `rmsd_to_min` (PLAN section 6.5)
+      logical :: endpoint_relax = .true.
+      !> Kabsch aligned RMSD between the endpoint and its relaxed minimum
+      !> below which the endpoint counts as having reached a minimum (bohr).
+      !> MAPLE `rmsd_end` is 1.8897e-1 bohr = 0.1 angstrom.  The criterion is
+      !> part of `endpoint_reached` and therefore of `result%reached_min_*`;
+      !> it needs a relaxed endpoint and is **not applied** when
+      !> `endpoint_relax = .false.` (there is no relaxed minimum to compare
+      !> with, the endpoint is then assigned by the termination signal alone;
+      !> `irc.log` reports the criterion and states when it was skipped)
+      real(wp) :: rmsd_end = 1.8897e-1_wp
+      !> Electronic temperature frozen for the whole run (kelvin); copied
+      !> into the engine control and pushed into the calculator (M4 hard
+      !> constraint 1)
+      real(wp) :: etemp = 300.0_wp
+      !> Write `irc_forward.xyz`, `irc_backward.xyz`, `irc_path.xyz` and
+      !> `irc.log`
+      logical :: write_files = .true.
+      !> File name prefix of the four output files
+      character(len=64) :: output_prefix = 'irc'
+   contains
+      !> This type implements the intrinsic reaction coordinate task
+      procedure :: task => landscape_irc_settings_task
+   end type landscape_irc_settings
+
 contains
 
 !> Evaluate the four convergence measures of a displacement based optimisation.
@@ -969,6 +1158,75 @@ function landscape_ts_settings_task(self) result(name)
    name = 'ts'
 
 end function landscape_ts_settings_task
+
+!> Task name of the intrinsic reaction coordinate integration
+function landscape_irc_settings_task(self) result(name)
+   !> Settings instance
+   class(landscape_irc_settings), intent(in) :: self
+   !> Task name
+   character(len=:), allocatable :: name
+
+   name = 'irc'
+
+end function landscape_irc_settings_task
+
+!> Human readable name of an IRC integration method identifier
+pure function landscape_irc_method_name(method) result(name)
+   !> Method identifier
+   integer, intent(in) :: method
+   !> Lower case method name
+   character(len=:), allocatable :: name
+
+   select case (method)
+   case (p_landscape_irc_gs)
+      name = 'gs'
+   case (p_landscape_irc_hpc)
+      name = 'hpc'
+   case (p_landscape_irc_lqa)
+      name = 'lqa'
+   case (p_landscape_irc_eulerpc)
+      name = 'eulerpc'
+   case default
+      name = 'unknown'
+   end select
+
+end function landscape_irc_method_name
+
+!> Reverse lookup of an IRC integration method from its name.
+!>
+!> Returns 0 for an unknown name, which is not a valid method identifier; the
+!> caller is responsible for reporting the error.
+function landscape_irc_method_from_name(name) result(method)
+   !> Lower case method name
+   character(len=*), intent(in) :: name
+   !> Method identifier, 0 for an unknown name
+   integer :: method
+
+   select case (trim(name))
+   case ('gs')
+      method = p_landscape_irc_gs
+   case ('hpc')
+      method = p_landscape_irc_hpc
+   case ('lqa')
+      method = p_landscape_irc_lqa
+   case ('eulerpc')
+      method = p_landscape_irc_eulerpc
+   case default
+      method = 0
+   end select
+
+end function landscape_irc_method_from_name
+
+!> True if `name` names one of the supported IRC integration methods.
+function landscape_irc_method_known(name) result(known)
+   !> Method name
+   character(len=*), intent(in) :: name
+   !> True if the name resolves to a method identifier
+   logical :: known
+
+   known = landscape_irc_method_from_name(name) /= 0
+
+end function landscape_irc_method_known
 
 !> Human readable name of a transition state search method identifier
 pure function landscape_ts_method_name(method) result(name)

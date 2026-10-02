@@ -1,0 +1,93 @@
+# Testing: landscape-irc
+  Starting mass-weighting-roundtrip ... (1/28)
+       ... mass-weighting-roundtrip [PASSED]
+  Starting arc-length-unit ... (2/28)
+       ... arc-length-unit [PASSED]
+  Starting lqa-1d-exact ... (3/28)
+       ... lqa-1d-exact [PASSED]
+  Starting lqa-2d-consistency ... (4/28)
+       ... lqa-2d-consistency [PASSED]
+  Starting mbs-1d-exact ... (5/28)
+       ... mbs-1d-exact [PASSED]
+  Starting mbs-vs-lqa ... (6/28)
+       ... mbs-vs-lqa [PASSED]
+  Starting dwi-interpolation ... (7/28)
+       ... dwi-interpolation [PASSED]
+  Starting phase-determinism ... (8/28)
+       ... phase-determinism [PASSED]
+  Starting direction-rejects-minimum ... (9/28)
+       ... direction-rejects-minimum [PASSED]
+  Starting mb-gs-minima ... (10/28)
+       ... mb-gs-minima [PASSED]
+  Starting mb-lqa-minima ... (11/28)
+       ... mb-lqa-minima [PASSED]
+  Starting mb-sphere-chord ... (12/28)
+       ... mb-sphere-chord [PASSED]
+  Starting mass-metric-effect ... (13/28)
+       ... mass-metric-effect [PASSED]
+  Starting leps-irc-descent ... (14/28)
+       ... leps-irc-descent [PASSED]
+  Starting lqa-step-scan ... (15/28)
+       ... lqa-step-scan [PASSED]
+  Starting termination-max-steps ... (16/28)
+       ... termination-max-steps [PASSED]
+  Starting termination-grad-tol ... (17/28)
+       ... termination-grad-tol [PASSED]
+  Starting termination-energy-rise ... (18/28)
+       ... termination-energy-rise [PASSED]
+  Starting lqa-zero-curvature-limit ... (19/28)
+       ... lqa-zero-curvature-limit [PASSED]
+  Starting hpc-mb-minima ... (20/28)
+       ... hpc-mb-minima [PASSED]
+  Starting eulerpc-mb-minima ... (21/28)
+       ... eulerpc-mb-minima [PASSED]
+  Starting pc-eval-distribution ... (22/28)
+       ... pc-eval-distribution [PASSED]
+  Starting hpc-corrector-fallback ... (23/28)
+       ... hpc-corrector-fallback [PASSED]
+  Starting eulerpc-loose-cycles ... (24/28)
+       ... eulerpc-loose-cycles [PASSED]
+  Starting eulerpc-convergence-order ... (25/28)
+       ... eulerpc-convergence-order [PASSED]
+  Starting termination-gradient-scale ... (26/28)
+       ... termination-gradient-scale [PASSED]
+  Starting termination-all-methods ... (27/28)
+       ... termination-all-methods [PASSED]
+  Starting four-method-crosscheck ... (28/28)
+       ... four-method-crosscheck [PASSED]
+   cartesian length     0.300000 mass weighted length     1.559164
+   1D LQA dx:  -0.500000000001
+   2D LQA dx:  -0.2565272598  0.1498252203 s   0.30000000
+   1D mBS x:  -0.500000000000  evals 60
+   mBS error single   4.8006E-02 extrapolated   5.4766E-12
+   DWI midpoint energy   0.2500000000
+   transition vector     0.99152280   -0.12993279
+   MB GS fwd end    -0.006908    0.461293 term 3 bwd end    -0.528794    1.470796 term 3
+   MB GS endpoint energies  -1.283786E-01 -2.332135E-01  points 24
+   MB LQA fwd end    -0.050011    0.466694 term 3 bwd end    -0.558224    1.441726 term 3
+   MB LQA endpoint energies  -1.287117E-01 -2.337806E-01  points 24
+   chord min   0.0963904801 max   0.1000000000 step   0.1000000000
+   mass metric: first point gap   9.1382E-03  arc length gap   5.0133E-02
+   LEPS IRC end energy  -1.549809E-01  r12     5.129968 r23     1.414074
+   step  0.050  max deviation   7.9063E-03  endpoint distance   1.0995E+00
+   step  0.100  max deviation   1.5970E-02  endpoint distance   1.0995E+00
+   step  0.200  max deviation   1.0446E-01  endpoint distance   1.0995E+00
+   step  0.400  max deviation   1.0983E-01  endpoint distance   1.0995E+00
+   energy-rise term 3 n 24 last e  -1.283786E-01
+   zero-curvature dx    -0.49045222   -0.09375423 s     0.50000000
+   method 2 fwd end   -0.050010   0.466695 bwd end   -0.558224   1.441725 mean E/g    1.962   1.972
+   method 4 fwd end   -0.035960   0.494874 bwd end   -0.539150   1.462424 mean E/g    1.800   1.833
+   mean E/g  lqa   1.0000 hpc   1.9615 eulerpc   1.8000
+   HPC E/g histogram (0..5)      0     1    25     0     0     0
+   fallback mean E/g   11.818  points 22
+   coarse/fine mean E/g    1.000   1.983  endpoint gap   3.9893E-03
+   EulerPC deviation at s=0.8 (0.05/0.10/0.20)   1.0764E-03  4.0851E-02  9.3751E-02
+   EulerPC deviation with corrector                 1.8880E-02  4.3027E-02  9.4590E-02
+   order slope (least squares over 0.05-0.20, 3 points)   3.2222  points 3
+   local order 0.10 -> 0.20  pure Euler   1.1985 with corrector   1.1364
+   gradient criterion magnitude pinned on gs/lqa/hpc/eulerpc
+   three termination signals fired on gs/lqa/hpc/eulerpc
+   crosscheck forward endpoint rmsd     0.04440420
+   crosscheck backward endpoint rmsd     0.04136695
+   crosscheck forward  dE   1.081951E-03
+   crosscheck backward dE   5.670563E-04
