@@ -114,6 +114,17 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
          & landscape_restart_name(settings%engine%restart_mode)
       write(env%unit, '(1x,a,a)') "Hessian source:           ", &
          & trim(settings%hessian_source)
+      ! D3 of the CLI redesign section 8.3: the native `--opt` runs ANCopt,
+      ! this task defaults to lbfgs, so the active engine is echoed.  The
+      ! notice is printed only when the engine was not named on the command
+      ! line (`--lopt-engine`), which is what `algorithm_was_set` records.
+      if (.not. settings%algorithm_was_set) then
+         write(env%unit, '(a,a,a)') "[NOTICE] --lopt-engine default ", &
+            & trim(landscape_opt_algorithm_name(settings%algorithm)), &
+            & " (the native --opt runs ANCopt)"
+         write(env%unit, '(a)') &
+            & "         pass --lopt-engine <name> to choose another minimiser"
+      end if
    end if
 
    call new_landscape_engine(engine, settings%engine)

@@ -23,7 +23,7 @@
 
 ---
 
-## 修订记录（R1..R28）
+## 修订记录（R1..R38）
 
 > 本节只说明"改了什么、依据是什么"。每条都在正文里有对应改动点。
 > 证据类型沿用全文：`[实测]` / `[代码]` / `[文档]` / `[未验证]`。
@@ -64,7 +64,9 @@
 | **R34** | **U15 / U16 定案**：U15 = **(b) 打 `[WARNING]`**（实现点 `set_module.f90:1884-1886` 的 `.not.allocated` 守卫分支；它只在 `set%opt_engine` 已被显式赋值时命中，即只可能在 `--method <native>` 之后 ⇒ 不触碰任何既有原生运行）；U16 = **允许**（原生行为逐字不变、不加警告，4 条理由见 §16.7） | 复核 15 §7 INFO-1/INFO-2 + §10 确认项 3；`set_module.f90:1884-1893` | §12 U15/U16、§3.8、§16.7 |
 | **R35** | **新增 §17「阶段 1 工作清单」**（5 组可直接执行的条目，每条含 file:line / 验收方式 / 需要的测试），并把阶段阻塞状态更新为**四态**（阶段 1 / 2 / 3-`--opt` / 3-`--ohess`）；`13-*.md §4` 同步为 4 行 | 复核 15 §11 + 本轮设计 | §17、`13-*.md §4` |
 | **R27** | **决策 3 的两个缺口**：(a) `--lopt-level`/`--lscan-level`/`--lts-level`/`--lirc-level` **不**接收上游 8 档名（只 5 个套件名，理由给出），上游名仅经 `--opt`/`--ohess` 桥接；(b) 点出 `--acc` 优先级的实现处 `main.F90:996/1013/1033/1062/1078` 是**无条件** `engine%acc = set%acc`，R5 的"显式 `--acc` > 档位派生"要求改为"仅显式 `--acc` 时同步" | 复核 14 §11、L-4/L-5；`settings.f90:1497-1510`、`main.F90:1665` | §3.5、§3.10b、§6.2 #4 |
+| **R36** | **阶段 1（A 组）实施留痕**：§17.1（`select_runtyp` 冲突检测）与 §17.5（5a 未知旗标 + 5b 枚举大小写）已落地并在 `17-stage1-impl-a.md` 留全证据。**三处订正设计**：(a) 5a 选**解析尾**方案（§17.5 的第一个方案 `[实测]` 打红 5 条既有回归测试，见 §10 末 R36 注）；(b) 5b 的 lowercase 覆盖**必须**含**存储点**（`lsset%mode`/`ltset%init_mode`/`ltset%n_init`/`l*-hessian_source` 的值会被下游用 `trim(...) == 'model'`/`'rigid'`/`'force'` 比较，只归一化谓词会造出**新的静默错算**）——父会话 §17.5 清单只列了 5 个谓词，实测缺 4 个谓词 + 5 个存储点；(c) `man/` 对套件旗标 **0 命中**（`man/xtb.1.adoc` 里 `landscape|--lopt|--lscan|--lirc|--lvib` 计数均为 0）⇒ §17.5 要求的"同步 man/"无对象，只有 `xhelp.f90` 需要改。另：F4 入册，计数 16 → **17** | §17.1/§17.5 实施；`_simplify-recon/17-stage1-impl-a.md`（含 6 个反向突变 + BC-4 逐位对比） | §10 F4、§10 末 R36 注、§8.5 |
 | **R28** | **LOW/INFO 逐条处置**（进 §14.7）：L-1（§5.1 #21 措辞→error）、L-2（6 处行号）、L-3（补 `optimizer.f90:801` 的逐帧写点）、L-6（G15 单列）、I-2（编号重建规则）；**另发现并修正** §4.1/§4.8 的两处**文件误归属**（`l_ancopt`/`fire` 实在 `relaxation_engine.f90:400/131`，旧稿写 `optimizer.f90`） | 复核 14 §4/§5；本轮 `grep -n` file:line | §14.7、§4.1、§3.9 |
+| **R38** | **阶段 1 收尾（父会话四项裁定，`22-stage1-final-report.md`）**：(a) §17.1 的**爆炸半径入册**为 **C8**（两个及以上互斥 runtype 旗标 → error 并点名第二个；`--sp --lopt-engine bfgs` 0 → 1），C 类 7 → **8**、总计数 17 → **18**，并更新本节的计数口径（§10 汇总行为权威）；(b) **D4 不改代码**（`--lscan` 默认双向是 M2 有意的滞回自检，改默认单向等于删自检；其关切由 D1 的 `--lscan-fc` 回显 + M2 的滞回文档覆盖），§17.3 的清单修正为 D1/D2/D3/D7；(c) 新增 **§17.7**：5 处库入口字面比较改用 `landscape_lowercase`（各配一条大/小写等值单测）、IRC 启动 banner 新增**生效** `Hessian source:` 回显（默认打、显式也给） | 父会话四项裁定；本轮 6 个反向突变（全部红 -> 还原绿）+ `ctest -R landscape` 118/118 与回归子集 12/12 全绿 + BC-4 逐位对比 | §10 C8/汇总行/R29 注、§8.3 D 清单、§17.1、§17.3、§17.7 |
 
 > **复核编号与计数的不一致（本轮记录）**：复核声明 HIGH 5 / MEDIUM 8 / LOW 7 / INFO 4，但正文只显式编号了
 > H1/H2/H3/H5、M1/M2/M4/M5/M6/M7/M8、LOW-1..LOW-7、2 条 INFO。**§14 按内容补足到与计数一致**，
@@ -84,7 +86,7 @@
 | 套件参数总量 | **122 个拼写**（121 个 case 标签），0 个未文档化（W0 审计已核） |
 | 统一选择器 | `--method <name>`，取值域 = 6 最小化 + 8 鞍点 + 4 IRC（逐条 `file:line`，§4.1） |
 | `--opt` 语义 | **方案 C**：默认套件优化器（实测依据 → lbfgs，§3.3）；`--method ancopt` 是出口；**明确列入破坏性变更** |
-| 破坏性变更 | **C 下逐条核实**：原为 6 类，**R1/R4 修订后 = A 类 3 条 + B 类 0 条（清零）+ C 类 6 条 + D 类 1 条 + E 类 1 条 + F 类 3 条**，另加"阶段 3 测试层后果"1 条（`xtb/landscape-scan-xcontrol`），见 §10。**不是 1 条**。**R23（第 2 轮复核）后 = A 3 + B 0 + C 7 + D 1 + E 1 + F 3 + G 1 = 16 条** |
+| 破坏性变更 | **C 下逐条核实**：原为 6 类，**R1/R4 修订后 = A 类 3 条 + B 类 0 条（清零）+ C 类 6 条 + D 类 1 条 + E 类 1 条 + F 类 3 条**，另加"阶段 3 测试层后果"1 条（`xtb/landscape-scan-xcontrol`），见 §10。**不是 1 条**。**R23（第 2 轮复核）后 = A 3 + B 0 + C 7 + D 1 + E 1 + F 3 + G 1 = 16 条**；**R36（阶段 1 实施）后 = A 3 + B 0 + C 7 + D 1 + E 1 + F 4 + G 1 = 17 条**；**R38（阶段 1 收尾）后 = A 3 + B 0 + C 8 + D 1 + E 1 + F 4 + G 1 = 18 条**（权威口径见 §10 汇总行） |
 | 原生引擎出口（R21/R22） | `--method ancopt\|rf\|lancopt\|l-ancopt\|fire\|inertial\|pbc_lbfgs` = 4 个**原生**出口，仅在 `--opt`/`--ohess` 下合法；由**单一** `landscape_native_engine` 标志（取值 = `p_engine_rf/lbfgs/inertial/pbc_lbfgs`）驱动，谓词与三条守卫全读它，见 §3.11/§4.7/§4.8 |
 | 原生专属情形（R1） | **三类**（`$scan`、周期体系、xcontrol `$opt` 键）改派后**响亮报错**（`env%error`，exit 1），文本指向 `--method ancopt` / `--lscan`；逐条给检测点，见 §3.8 |
 | 遗留文件契约（R4） | 套件**按上游语义补写全部 4 个**：`.xtboptok`（仅收敛时）/ `xtbopt.log`（非隐藏名）/ `xtblast.xyz`（失败时）/ `compliance.dat` ⇒ **B 类清零**，见 §3.9 |
@@ -2001,11 +2003,20 @@ landscape/native run type conflict: --opt already selected the 'opt' run type,
 
 **清单**（审计 §3.3）：D1 `--lscan-fc`、D2 `--lirc-method=hpc`（M6 已改默认）、
 D3 `--lopt-engine=lbfgs`（在 C 之后与 `--opt` 的旧默认不同）、
-D4 `--lscan` 默认双向、D5 `$thermo`（**R18 修订：此条已不是缺陷** ——
+**D4 `--lscan` 默认双向（R38 裁定：无代码变更，见下面的注）**、D5 `$thermo`（**R18 修订：此条已不是缺陷** ——
 W0 已把 `--lvib` 改为"**显式 CLI > xcontrol `$thermo` > 内置默认**"，`src/landscape/vib/thermo.f90:32-35,51-53` 与
 `landscape_vib_set_thermo_settings`/`landscape_vib_check_thermo_settings` 两个入口可核；旧稿"无条件覆盖"
 与 `vib/thermo.f90:167-180` 的行号均**已过期**，不再是"危险默认"，只是一个正常默认）、
 D7 `--lts-escape-step` 移动输入几何。
+
+> **R38 裁定（D4）：`--lscan` 默认双向是 M2 有意确立的默认，不是缺陷 —— 无代码变更。**
+> 双向扫描（正反两个方向各扫一遍）就是**滞回自检**：两份剖面在同一约束残差水平上一致，才说明扫描
+> 点数/内层收敛足以支撑一个结论（M2 的测量与结论：`docs/_landscape-recon/14-m2-validation-experiments.md`、
+> 以及 `AGENTS.md` §6.8 的"滞回是收敛产物而非物理"）。把它改成默认单向等于删掉这个自检。
+> 用户真正需要知道的"默认与上游不同"那一面已由 **D1 的 `--lscan-fc` 回显**覆盖（回显文本就指向
+> `--lscan-fc 0.05` 的旧 tool-chain 语义），需要单向时用 `--lscan-oneway`。
+> ⇒ 本节与 §17.3 的 D 列表里 **D4 不再是一条待实施的改动**（旧稿把它与 D1/D2/D3/D7 并列属于自相矛盾，
+> 第 21 号报告的 L7 已登记；R38 以本节为准确认）。
 
 ### 8.4 `--help` 与实现的**双向一致性检查**机制
 
@@ -2223,6 +2234,8 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 > **形式**：条目 / 现象 / 影响谁 / 缓解措施 / 是否可避免。
 > **R19 汇总**：**A 类 3 条 + B 类 0 条（清零）+ C 类 6 条 + D 类 1 条（已定：映射）+ E 类 1 条 + F 类 3 条 + G 类 1 条**。
 > **R23 补丁**：新增 **C7**（套件 run type + xcontrol `$opt` 块），C 类 6 → **7**，总计数 15 → **16**。
+> **R38 补丁**：新增 **C8**（两个及以上互斥 runtype 旗标），C 类 7 → **8**，总计数 17 → **18**
+> （本节的汇总行是**唯一权威口径**；上面的 R19/R23 与本行都是修订历史）。
 > 用户四项决策已闭合 H1/H2/H4/H5/M1：**三类原生专属情形从"静默丢失"变为"响亮拒绝"**（H 类），B 类因 R4 清零。
 
 ### A 类 — `--opt` 改派的直接后果
@@ -2284,6 +2297,24 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
   以及本项目已抓到的 4 次"同一类缺陷"（`--lirc-level` 死旋钮、`$thermo` 覆盖、两次输出命名）直接冲突。
   ⇒ **选择：全量作用域 + 入册 C7 + 计数 +1**。
 
+**C8（R38，阶段 1 实施；`17-stage1-impl-a.md`、`21-stage1-fix-report.md`）. 两个及以上互斥 runtype 旗标同给** ——
+`--lopt --lscan`、`--opt --hess`、`--lopt --lscan --lts`、`--sp --lopt-engine bfgs` 等今天**首选项静默获胜并 exit 0**
+（`set_module.f90:1031-1038` 的 `set_runtyp` 锁消息进了 `persistentEnv` 而**从未打印**），
+改后 `select_runtyp`（`main.F90:3965-4003`）第二次要求**不同** runtyp 即 `env%error`：exit 1，消息**点名第二个旗标**。
+
+- 现象（这是 §17.1 的爆炸半径，R38 之前**未入册**，由复核 §14.2 / 验证 §6.4 提出）：
+  `--sp --lopt-engine bfgs` 由 exit 0 → **1**；`--lopt --lscan` 由“跑 `--lopt`” → **error**；
+  `--lopt --lscan --lts` 同样报错并点名最后一个被拒的旗标。
+  `[实测]`（阶段 1）`xtb water.xyz --gfn 2 --sp --lopt-engine bfgs`：0 → 1。
+- 影响谁：把两个 runtype 旗标写进同一条命令（无论有意还是手滑）的脚本；它们今天得到的是
+  “未定义的**第一名**获胜”，现在是可读的错误。
+- **爆炸半径**：`[实测]` 仓库内 `--opt ` **1 命中**（即 R2）、双 runtype 组合 **0 命中**（§8.7 的强制 grep）。
+  阶段 1 的 `ctest -R landscape` 118/118 与回归子集 12/12 全绿，**0 条既有测试变红**；
+  冲突族本身由阶段 1 新增的 8 条测试断言（`20-stage1-review.md` §6、`21-stage1-fix-report.md` §2）。
+- 缓解：拆成两条命令（或 `--ohess`，它在一个任务里做 Hessian + 优化）；`--lopt-engine` 等**子选项**
+  只隐含“同一个 runtyp”，重复选择不报错（§17.1 的注），所以 `--lopt --lopt-engine bfgs` **仍 exit 0**。
+- 可避免：⚠️ 与 C1–C7 同根（§1.1 目标 4 “绝不静默”）；**选择响亮**。
+
 **可避免**：⚠️ 这是"绝不静默"与百分百兼容的直接冲突；用户决策 4 已选择"响亮"。
 
 ### D 类 — `--cycles`（**R5 已定：映射，不再是无解静默**）
@@ -2312,6 +2343,7 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 | F1 | `-o <level>` | 原生 ANCopt | 套件 | 同 A3 |
 | F2 | `--strict --zzzz` | exit 0 | **非零** | 所有依赖"容错 exit 0"的脚本（§8.5） |
 | F3 | `--opt banana` | 静默→normal | **error** | 依赖容错的脚本（§8.5） |
+| F4 | 套件枚举值的大小写（`--lopt-engine BFGS`、`--lopt-level TIGHT`、`--lscan-coord ANGLE`、`--lscan-method CG`、`--lscan-mode RIGID`、`--lts-method PRFO`、`--lts-init-mode FORCE`、`--lts-ninit FORCE`、`--lirc-method LQA`、`--l*-hessian MODEL`、`--l*-restart WARM`） | **error**（`Unknown landscape ...`，`settings.f90:1112/1229/1295/1425/1497` 等按原始大小写比较） | **接受**，等同小写拼写（§7.5） | 只影响依赖"大写必须报错"的脚本；`[实测]` 仓库内 0 个这样的调用（`grep -rn '"[A-Z][A-Za-z]*"' test/unit/test_landscape_*.f90` 只有 `LBFGS` 断言，R36 已同步更新） |
 
 ### G 类 — 阶段 3 的**测试层后果**（R2 新增；已知且必须同步修复）
 
@@ -2322,13 +2354,28 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 - 缓解/处置（必须）：阶段 3 把该段改为"断言响亮报错 + 文本含 `--method ancopt`/`--lscan`"，**保留 466-491 段**。
 - 可避免：❌（改派的必然后果，但**必须入册**，不能静默改测试）。
 
-**汇总：A 3 + B 0 + C 7 + D 1 + E 1 + F 3 + G 1 = 16 条**（R23 后；其中 B 类已清零；A/C/D/E/F/G 需用户逐条确认）。
+**汇总：A 3 + B 0 + C 8 + D 1 + E 1 + F 4 + G 1 = 18 条**（R38 后；其中 B 类已清零；A/C/D/E/F/G 需用户逐条确认）。
 
-> **R29/R35：计数不变（仍 16）**。第 3 轮复核 HIGH-1（`--ohess` 跑两遍）与本轮的两个新增读者
+> **R38（阶段 1 最终微修，`22-stage1-final-report.md`）：C 类补登 C8（§17.1 的互斥 runtype 旗标爆炸半径，
+> 复核 §14.2 / 验证 §6.4 提出），C 7 → **8**，总计数 17 → **18**。除 C8 外本轮无新增/删除条目
+> （D4 按父会话裁定**不改代码**，见 §8.3 的 R38 注与 §17.3）。**
+
+> **R29/R35：计数不变（当时仍 16）**。第 3 轮复核 HIGH-1（`--ohess` 跑两遍）与本轮的两个新增读者
 > （`xtbopt.xyz` 二次写、计时标签）都是**改派内部的重复工作/错标**，修掉后对**用户可见的契约**而言：
 > 文件集合不变、stdout 行不变（`fres` 桥正是为了**不**少两行，见 §3.11.1 的实测）；
 > 唯一新增行为是套件 `--ohess --json` 与 `set%property_file` 里出现了热化学键（与原生 `--ohess` **同形**，属 BC-3 的"新增"）。
-> 若用户采纳 §16.8 的 **U17**（套件运行 + `--o1nh` 从死旋钮改响亮报错），计数才变 **17**（候选 C8，**未定**）。
+> 若用户采纳 §16.8 的 **U17**（套件运行 + `--o1nh` 从死旋钮改响亮报错），计数才变为 **18**（候选 C8，**未定**）。
+> **R38 订正：C8 已被 §17.1 的互斥 runtype 旗标占用（见上面 C 类的 C8 条），所以 U17 若日后采纳只能是 C9；
+> 且当前口径下的总计数已是 18（见上一行的汇总）。**
+>
+> **R36（阶段 1 实施，`17-stage1-impl-a.md`）**：**F4 已落地**（套件枚举值大小写不敏感，§7.5 / §17.5 5b），
+> 因此计数从 16 变为 **17**；`--strict --zzzz` 的 **F2 也已落地**。另外：
+> 5a 选用了 §17.5 的**第二个**方案（未知旗标在**解析尾**统一报），因为第一个方案
+> （`case('--strict')` 处立即置 `env%strict`）会把**解析期间的一切** warning 变成致命错误，
+> `[实测]` 直接打红 5 条既有回归测试（`xtb/Singlepoint`、`GFN0-xTB`、`GFN1-xTB`、`GFN2-xTB/GBSA`、`GFN2-FF`，
+> 它们用 `--coffee --strict` 跑无几何输入的冒烟运行，而 `--coffee` 缺文件只是一条 warning），
+> 超出 F2 登记的"只有未知旗标变响亮"范围。解析尾方案的实测行为：
+> `--strict --zzzz` 与 `--zzzz --strict` 都 exit 1（**与位置无关**），`--zzzz` 单独仍 exit 0（BC-1）。
 
 ---
 
@@ -2373,7 +2420,7 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 | **U16（R28 新）** | `pbc_lbfgs` 在**非周期**体系上的 `relax_pbc` 物理意义（未评估 `set%optcell` 交互；只测了 "exit 0 + `current lattice:`"，§13c #8） | **已定（R34）：允许，不加警告、行为与原生逐字相同**。理由 4 条：(1) §4.8 的契约就是"四个名字 = 今天的原生行为"，加一行 warning 就破了它；(2) 同一个键今天经 `$opt engine=pbc_lbfgs` 可达且**无**任何提示，
 若 `--method` 有提示而 `$opt` 没有，就出现"同一语义两拼写不同行为"（§4.3 明令禁止）；(3) `npbc==0` 时格子自由度为零，`relax_pbc` 退化为普通 L-BFGS——行为**不多余也不算错**（实测 exit 0、6× `current lattice:`）；
 (4) 警告必须入册为**原生路径上的新输出**（BC-4），成本大于收益。⇒ 只把"非周期上冗余"写进 `--help`/`man`（文档级缓减），不改代码、不改计数。若用户后续要求提示，实现点 = §3.8(b) 守卫族同一块（`main.F90:491-510`），条件 `mol%npbc == 0 .and. set%opt_engine == p_engine_pbc_lbfgs` |
-| **U17（R29 新，待用户裁定）** | 套件运行 + 原生 Hessian 子选项 `--o1nh`（`set%o1numhess`，`main.F90:2181`）：套件 `vib` 任务只拒绝**套件侧**的 `settings%engine%odlr`（`vib/numhess.f90:111-116`），而 `--o1nh` 只写 `set%o1numhess`，**两者今天不同源** ⇒ `--ohess`(套件) 下 `--o1nh` 是**死旋钮 + 静默**（HEAD 上 `--lopt --o1nh` 已经是这种状态，非本设计引入） | **未定**：候选 C8（套件 run + `--o1nh` ⇒ `env%error` 指向 `--method ancopt`，计数 16→17），或把 `set%o1numhess` 转发到 `l*set%engine%odlr` 让套件自己的拒绝文本生效（改动更小、与已有错误文本一致）。两者都属 R13 的"原生子选项 + 非原生路径"规则族，**不阻塞**阶段 1-3（留待与本轮四分项一起裁定） |
+| **U17（R29 新，待用户裁定）** | 套件运行 + 原生 Hessian 子选项 `--o1nh`（`set%o1numhess`，`main.F90:2181`）：套件 `vib` 任务只拒绝**套件侧**的 `settings%engine%odlr`（`vib/numhess.f90:111-116`），而 `--o1nh` 只写 `set%o1numhess`，**两者今天不同源** ⇒ `--ohess`(套件) 下 `--o1nh` 是**死旋钮 + 静默**（HEAD 上 `--lopt --o1nh` 已经是这种状态，非本设计引入） | **未定**：候选 C9（套件 run + `--o1nh` ⇒ `env%error` 指向 `--method ancopt`，计数 18→19，若采纳；C8 已被互斥 runtype 旗标占用），或把 `set%o1numhess` 转发到 `l*set%engine%odlr` 让套件自己的拒绝文本生效（改动更小、与已有错误文本一致）。两者都属 R13 的"原生子选项 + 非原生路径"规则族，**不阻塞**阶段 1-3（留待与本轮四分项一起裁定） |
 | **U18（R29 新，已定）** | `--lvib`/`--lopt` 是否也用 `fres` 桥（让它们的最后能量块也打 `TOTAL ENTHALPY`/`TOTAL FREE ENERGY`） | **已定：不用**。它们**今天就**在**自己的**汇总里打 H(T)/G(T)（M7 的 `--lvib` 输出实测含 `landscape task terminated: frequency analysis completed` 与 `total enthalpy H(T)` 行），加桥会变成两处重复且改动已验收的 M3/M7 输出契约 |
 
 ---
@@ -2762,14 +2809,15 @@ grep -rn "两个逻辑标志" docs/_simplify-recon/11-cli-redesign.md docs/_simp
 
 | # | 现象 | 证据 | 处置 |
 |---|---|---|---|
-| **U17** | 套件 `--ohess` 下 `--o1nh`（ODLR）成为死旋钮：套件只拒绝 `settings%engine%odlr`（`vib/numhess.f90:111-116`），而 `--o1nh` 只写 `set%o1numhess`（`main.F90:2181`），两者不同源 | 本轮读源码；HEAD 上 `--lopt --o1nh` 已经是静默（非本设计引入） | **登记为开放项**（候选 C8，计数 16→17），需用户/下一轮裁定；不阻塞阶段 1-3（详 §12 U17） |
+| **U17** | 套件 `--ohess` 下 `--o1nh`（ODLR）成为死旋钮：套件只拒绝 `settings%engine%odlr`（`vib/numhess.f90:111-116`），而 `--o1nh` 只写 `set%o1numhess`（`main.F90:2181`），两者不同源 | 本轮读源码；HEAD 上 `--lopt --o1nh` 已经是静默（非本设计引入） | **登记为开放项**（候选 C9，计数 18→19，若采纳；C8 已被互斥 runtype 旗标占用），需用户/下一轮裁定；不阻塞阶段 1-3（详 §12 U17） |
 | — | `:1300-1306` 的 `set%property_file` 写点也是 `fres` 读者（复核只列了 `:1324`） | 本轮读源码 | 已纳入 T3 的覆盖（§3.11 读点表 #12） |
 | — | `main_xtb_json`（`:1287-1298`）也是 `fres` 读者，但其数组分支有 `n3true > 0` 守卫 | `json.F90:102/111` | 同上；并推翻了复核的"半修即崩"（§3.11.1 的订正段） |
 
 ### 16.9 更新后的计数与阶段状态
 
-**破坏性计数：仍为 16 条**（A 3 + B 0 + C 7 + D 1 + E 1 + F 3 + G 1），理由见 §10 末的 R29/R35 注。
-**若采纳 U17 → 17**（候选 C8，未定）。
+**破坏性计数：R38 后为 18 条**（A 3 + B 0 + C 8 + D 1 + E 1 + F 4 + G 1），理由见 §10 末的 R29/R35/R36/R38 注
+（R36 只在 F 类加了**已实施**的 F4；R38 在 C 类补登 C8，其余计数不变）。
+**若采纳 U17 → 19**（候选 C9，未定；C8 已被互斥 runtype 旗标占用，见 §10 的 R38 订正）。
 
 | 阶段 | 状态（本轮末） | 依据 |
 |---|---|---|
@@ -2800,6 +2848,7 @@ grep -rn "两个逻辑标志" docs/_simplify-recon/11-cli-redesign.md docs/_simp
 | 测试 | 新增 `xtb/landscape-runtype-conflict`（`--lopt --lscan`）；`xtb/landscape-opt-hess-conflict`（`--opt --hess`）；旧测试回归子集重跑（`-R landscape`） |
 | 反向突变 | 去掉第二次冲突判定 ⇒ 两个新测试红 |
 | 注意（阶段 1 的 BC-4） | `--lopt-engine` 等**子选项**会隐含 `set_runtyp('lopt')`（`:2249` 等）；`select_runtyp` 必须把"同一 typ 的重复选择"当无操作，否则会误报 |
+| **R38：爆炸半径已入册** | 本节把"首选项静默获胜"变成响亮错误，所以它是**行为变更**：连同它的爆炸半径（`--sp --lopt-engine bfgs` 0 → 1）登记为 §10 **C 类 C8**（C 7 → 8，总计数 17 → 18）。`[实测]` 仓库内双 runtype 组合 0 命中，**0 条既有测试变红** |
 
 ### 17.2 必填参数报错点名 flag（§8.2）
 
@@ -2810,12 +2859,12 @@ grep -rn "两个逻辑标志" docs/_simplify-recon/11-cli-redesign.md docs/_simp
 | 测试 | **必须同步改**两条既有断言（它们断的是旧文本）：`test/unit/CMakeLists.txt:658-663`（`xtb/landscape-scan-nstep-missing`，`PATTERN=at least one step is required`）与 `:664-669`（`xtb/landscape-scan-atom-range`，`PATTERN=outside 1..3`） |
 | 反向突变 | 把新文本换回旧文本 ⇒ 两条既有测试绿、新断言红 |
 
-### 17.3 危险默认回显（§8.3，清单 D1/D2/D3/D4/D7）
+### 17.3 危险默认回显（§8.3，清单 D1/D2/D3/D7；**D4 无代码变更**）
 
 | 项 | 内容 |
 |---|---|
 | 改动点 | 套件任务的启动打印处（`tasks/opt.f90`、`tasks/scan.f90`、`tasks/vib.f90` 的 `printlevel > 0` 块，例如 `vib.f90:118-136` 已是范本；`--lts-escape-step` 与 `--lirc-method=hpc` 各自的 banner 处） |
-| 内容 | 四类：`--lscan-fc` 默认 0.5 vs 上游 0.05（`settings.f90:545`）；`--lirc-method` 默认 `hpc`；`--lopt-engine` 默认 `lbfgs`（在 C 之后与 `--opt` 旧默认不同）；`--lts-escape-step` 会移动输入几何 |
+| 内容 | 四类：`--lscan-fc` 默认 0.5 vs 上游 0.05（`settings.f90:545`）；`--lirc-method` 默认 `hpc`；`--lopt-engine` 默认 `lbfgs`（在 C 之后与 `--opt` 旧默认不同）；`--lts-escape-step` 会移动输入几何。**D4（`--lscan` 默认双向）不在本节**：R38 裁定它无代码变更，理由与覆盖方式见 §8.3 的 R38 注（D1 的 `--lscan-fc` 回显 + M2 的滞回文档） |
 | 验收 | 每个默认的 banner 行可 `grep`（统一前缀 `[NOTICE]` 或 `landscape:`）；显式给值时**不再**打（或用 `differ from` 变体） |
 | 测试 | `xtb/landscape-fc-echo`、`-lirc-default-echo`、`-lts-escape-echo`；反向突变：删掉打印 |
 
@@ -2828,6 +2877,7 @@ grep -rn "两个逻辑标志" docs/_simplify-recon/11-cli-redesign.md docs/_simp
 | 验收 | 输出含 `S: 0 differences`、`N(implemented, undocumented) = 30`、`N(documented, unimplemented) = 4`（或 34/5，取决于规则） |
 | 反向突变 | 在 `main.F90` 加一个不写 help 的 `--lzzzz` case ⇒ 集合 S 差集非空 ⇒ 红 |
 | 注意 | `test/unit/CMakeLists.txt` 的 **测试名必须唯一**（AGENTS §4：同名 `add_test` 会被静默丢掉） |
+| **R37 实测（p1b 实施轮，`18-stage1-impl-b.md` §4）** | 脚本已落地为两个**写死**的口径：**口径 A**（审计规则，§2.1）实测 **30/4**（与 §8.6 的登记清单逐条相同）；**口径 B**（同一分词，但 `--[no]x` 保持字面量而不展开）实测 **34/6**。§8.4 声称的 **「34/5」不可复现**——34 那半边来自 `[no]` 不展开时多出的 `--copy/--nocopy/--restart/--norestart` 四条，但同一规则的 help-only 是 **6** 而不是 5（多出的两条是字面量 `--[no]copy`/`--[no]restart`）。集合 S 在两种口径下都是 **124/124，差集 0**。 |
 
 ### 17.5 `--strict` 提前 + 套件枚举转小写（§8.5）
 
@@ -2839,7 +2889,7 @@ grep -rn "两个逻辑标志" docs/_simplify-recon/11-cli-redesign.md docs/_simp
 | 5b 改动点 | 四个套件名字解析函数：`settings.f90:1112`（最小化器）、`:1229`（IRC）、`:1295`（TS）、`:1497`（档位）；以及 `scan_coord_from_name`（`:1425`） |
 | 5b 方案 | 入口统一 `name = lowercase(trim(name))`（已有 `xtb_mctc_strings` 的 `lowercase` 可用；`set_module.f90` 的 CLI 侧已用同名子程序） |
 | 5b 验收/测试 | `--lopt-engine BFGS` 与 `bfgs` **输出逐位同**；新增 `xtb/landscape-enum-case`；反向突变：去掉 `lowercase` ⇒ 大写变 error ⇒ 红（这是**有意**的行为变更，入册为 §10 F 类同族） |
-| 5b 风险 | `xhelp.f90` 与 `man/` 需同步说明大小写不敏感（§7.5） |
+| 5b 风险 | `xhelp.f90` 与 `man/` 需同步说明大小写不敏感（§7.5）。**R36 实测**：`man/` 没有套件旗标（`man/xtb.1.adoc` 里 `landscape`/`--lopt`/`--lscan`/`--lirc`/`--lvib` 的 `grep -c` 全为 0）⇒ 只有 `xhelp.f90` 需要改；另外该清单**不完整**：`--lscan-mode`、`--lts-init-mode`、`--lts-ninit`、`--l*-hessian` 四个谓词与 5 个**存储点**（`lsset%mode`、`ltset%init_mode`、`ltset%n_init`、`l*-hessian_source`）也必须归一，否则同一条命令里"大写被接受但走另一条路径"，见 R36 |
 
 ### 17.6 阶段 1 的共同验收
 
@@ -2848,4 +2898,12 @@ grep -rn "两个逻辑标志" docs/_simplify-recon/11-cli-redesign.md docs/_simp
 3. §5.1 的 **#20/#21/#23/#25 逐条变红并确认**（它们就是本条设计的标的）；
 4. §8.4 的集合 S 差集 = 0（**门槛**），集合 N 的计数打印但不作门槛；
 5. 报告里贴出：`git diff --stat -- src test man`、四条测试的**改动前（红）/改动后（绿）**输出、集合 S/N 的计数。
+
+### 17.7 【R38 新增】两处阶段 1 收口（与 17.1..17.5 并列，均已实施）
+
+| 项 | 内容 |
+|---|---|
+| 库入口字面比较的归一化（5 处） | `tasks/scan.f90`（banner 门）、`tasks/ts.f90`（曲率带重算门，已抽为公开谓词 `landscape_ts_can_tighten`）、`tasks/vib.f90`（`file` 缺文件名门）、`saddle/prfo.f90`（`init_mode=force` 门）、`saddle/dimer.f90`（`n_init` 选择）——全部改用 `landscape_lowercase`，**小写输入行为不变**；每一处配一条单元测试（上层用大写构造 settings，断言与全小写结果相同） |
+| IRC 生效 Hessian source 的回显 | `tasks/irc.f90` 的启动 banner 新增 `Hessian source:`（与 scan/opt/ts/vib 同一行式）；它是**生效值**而非 §17.3 的“危险默认”，所以**默认打、显式也给**（与 §17.3 的抑制规则不同，这是有意的）。它同时把 `--lirc-hessian` 的存储点归一从“不可观测”变成可观测：`xtb/landscape-enum-case` 的 `lirchessian` 组与 `xtb/landscape-lirc-default-echo` 的 `hessian` 路线分别钉住存储值与打印值 |
+| 报告 | `docs/_simplify-recon/22-stage1-final-report.md`（含更新后的零覆盖清单与 BC-4 结论） |
 

@@ -55,7 +55,8 @@ module xtb_landscape_scan1d
    use xtb_landscape_settings, only : landscape_scan_settings, &
       & landscape_scan_coord_settings, &
       & p_landscape_scan_coord_angle, p_landscape_scan_coord_dihedral, &
-      & p_landscape_scan_coord_distance, landscape_missing_value
+      & p_landscape_scan_coord_distance, landscape_missing_value, &
+      & landscape_lowercase
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_coords, only : geometry_unpack
    use xtb_landscape_scan_relax, only : landscape_scan_point, &
@@ -167,7 +168,7 @@ subroutine landscape_scan_solve_point(env, base, at, settings, coords, targets, 
 
    type(landscape_result) :: result
 
-   if (trim(settings%mode) == 'rigid') then
+   if (landscape_lowercase(settings%mode) == 'rigid') then
       call landscape_scan_rigid_point(env, base, coords, targets, ncoord, at, &
          & x0, xout, point, fail)
    else

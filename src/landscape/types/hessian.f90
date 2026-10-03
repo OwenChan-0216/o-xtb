@@ -71,6 +71,7 @@ module xtb_landscape_hessian
    use xtb_lin, only : lin
    use xtb_setparam, only : get_namespace
    use xtb_landscape_settings, only : landscape_log_failed, landscape_value_present
+   use xtb_landscape_settings, only : landscape_lowercase
    implicit none(type, external)
    private
 
@@ -191,14 +192,15 @@ module xtb_landscape_hessian
 
 contains
 
-!> True if `source` names a known Hessian provider.
+!> True if `source` names a known Hessian provider.  The name is matched case
+!> insensitively.
 pure function landscape_hessian_source_known(source) result(known)
    !> Value of the `hessian_source` setting
    character(len=*), intent(in) :: source
    !> True if the name can be resolved by `new_landscape_hessian_provider`
    logical :: known
 
-   select case (trim(source))
+   select case (landscape_lowercase(source))
    case ('numerical', 'model', 'file')
       known = .true.
    case default
@@ -212,7 +214,8 @@ end function landscape_hessian_source_known
 !> On return `provider` is allocated if and only if the name is known;
 !> an unknown name is reported with `env%error` and the caller must abort
 !> (there is no default provider on this path, a silent fallback would make
-!> the configured `hessian_source` a lie).
+!> the configured `hessian_source` a lie).  The name is matched case
+!> insensitively, like `landscape_hessian_source_known`.
 subroutine new_landscape_hessian_provider(env, source, provider, sccacc, filename)
    character(len=*), parameter :: source_name = 'new_landscape_hessian_provider'
    !> Computational environment
@@ -231,7 +234,7 @@ subroutine new_landscape_hessian_provider(env, source, provider, sccacc, filenam
    scc_accuracy = 0.3_wp
    if (present(sccacc)) scc_accuracy = sccacc
 
-   select case (trim(source))
+   select case (landscape_lowercase(source))
    case ('numerical')
       allocate(landscape_numerical_hessian_provider :: provider)
       select type (hp => provider)

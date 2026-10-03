@@ -45,18 +45,22 @@ module test_landscape_saddle
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_io, only : stdout
    use xtb_type_environment
+   use xtb_type_molecule
+   use xtb_type_restart, only : TRestart
    use xtb_landscape_settings, only : landscape_ts_settings, &
       & p_landscape_ts_prfo, p_landscape_ts_bprfo, p_landscape_ts_dimer, &
       & landscape_ts_method_name, landscape_ts_method_from_name, &
       & landscape_ts_method_known, landscape_ts_init_mode_known
    use xtb_landscape_results, only : landscape_result
-   use xtb_landscape_engine, only : landscape_energy_model
+   use xtb_landscape_engine, only : landscape_energy_model, landscape_engine, &
+      & new_landscape_engine
    use xtb_landscape_saddle_eigenfollow, only : landscape_transition_mode, &
       & landscape_spectrum, landscape_select_transition_mode, &
       & landscape_follow_transition_mode, landscape_rigid_modes, &
       & landscape_project_rigid
    use xtb_landscape_tasks_ts, only : landscape_ts_curvature_band_hit, &
-      & landscape_ts_curvature_band_cm1
+      & landscape_ts_curvature_band_cm1, landscape_ts_can_tighten, &
+      & confirm_saddle
    use xtb_landscape_saddle_prfo, only : landscape_prfo_step, &
       & landscape_saddle_optimize
    use xtb_landscape_saddle_bprfo, only : landscape_bprfo_step
@@ -111,8 +115,34 @@ module test_landscape_saddle
       procedure :: hessian => drift_hessian
    end type rigid_drift_model
 
+   !> Synthetic Hessian with an internal mode inside the curvature band.
+   !>
+   !> `confirm_saddle` tightens its confirmation Hessian only when the spectrum
+   !> holds a mode inside `0 +/- 3 cm^-1`, and the `hessian_source` spelling
+   !> decides whether that re-decision may happen.  A real GFN2 surface whose
+   !> confirmation Hessian has an internal mode inside the band is not
+   !> constructible (`docs/_landscape-recon/30-m4-fix-report.md`), so the wiring
+   !> is driven with the isotropic constant Hessian `H = curvature * I`: after
+   !> the mass weighting the projected internal modes of water sit at
+   !> `curvature = 1e-10` hartree/bohr^2 at `0.0484`, `0.0491` and
+   !> `0.0512 cm^-1` (measured), all inside the band, while the six projected
+   !> rigid modes are exactly zero.  The matrix does not depend on the finite
+   !> difference step, so the default and the tightened resolutions return the
+   !> same curvature.
+   type, extends(landscape_energy_model) :: band_hessian_model
+      !> Isotropic curvature (hartree/bohr^2)
+      real(wp) :: curvature = 1.0e-10_wp
+   contains
+      !> Energy and gradient (the confirmation never asks for them)
+      procedure :: evaluate => band_evaluate
+      !> Constant isotropic Hessian
+      procedure :: hessian => band_hessian
+   end type band_hessian_model
+
    !> Water geometry in bohr (a nonlinear three atom molecule)
    integer, parameter :: nat_water = 3
+   !> Element symbols of the water fixture
+   character(len=*), parameter :: sym_water(nat_water) = ["O", "H", "H"]
    real(wp), parameter :: xyz_water(3, nat_water) = reshape([ &
       &  0.0_wp,  0.0_wp,  0.0_wp, &
       &  0.0_wp,  1.8_wp,  0.0_wp, &
@@ -154,6 +184,7 @@ subroutine collect_landscape_saddle(testsuite)
       new_unittest("prfo-hlow-lift", test_prfo_hlow_lift), &
       new_unittest("prfo-noise-negative", test_prfo_noise_negative), &
       new_unittest("prfo-negative-downhill", test_prfo_negative_downhill), &
+      new_unittest("prfo-init-mode-case", test_prfo_init_mode_case), &
       new_unittest("prfo-invalid", test_prfo_invalid), &
       new_unittest("prfo-rigid-projection", test_prfo_rigid), &
       new_unittest("bprfo-radius-split", test_bprfo_radius_split), &
@@ -161,6 +192,8 @@ subroutine collect_landscape_saddle(testsuite)
       new_unittest("mb-bprfo-saddle", test_mb_bprfo), &
       new_unittest("mb-methods-agree", test_mb_agree), &
       new_unittest("ts-curvature-band", test_ts_curvature_band), &
+      new_unittest("ts-can-tighten-case", test_ts_can_tighten_case), &
+      new_unittest("ts-confirm-tighten-case", test_ts_confirm_tighten_case), &
       new_unittest("driver-rigid-projection", test_driver_rigid_projection), &
       new_unittest("dimer-curvature", test_dimer_curvature), &
       new_unittest("dimer-translation-force", test_dimer_translation_force), &
@@ -170,6 +203,7 @@ subroutine collect_landscape_saddle(testsuite)
       new_unittest("dimer-velocity-update", test_dimer_velocity), &
       new_unittest("dimer-mobility", test_dimer_mobility), &
       new_unittest("dimer-initial-axis", test_dimer_initial_axis), &
+      new_unittest("dimer-axis-case", test_dimer_axis_case), &
       new_unittest("dimer-invalid", test_dimer_invalid), &
       new_unittest("dimer-mb-saddle", test_dimer_mb), &
       new_unittest("dimer-no-hessian", test_dimer_no_hessian), &
@@ -978,6 +1012,270 @@ subroutine test_ts_curvature_band(error)
    call check(error, abs(landscape_ts_curvature_band_cm1 - 3.0_wp) < 1.0e-12_wp)
 
 end subroutine test_ts_curvature_band
+
+!> The curvature band re-decision accepts every spelling of `numerical`.
+!>
+!> `landscape_ts_can_tighten` is the gate of the tightened recomputation of
+!> `confirm_saddle`: only the numerical provider has the `step`/`sccacc`
+!> parameters the re-decision sets.  The validator
+!> (`landscape_hessian_source_known`) and the provider factory both match the
+!> source name case insensitively, so the gate has to as well - a literal
+!> comparison accepted `--lts-hessian NUMERICAL` and then reported the
+!> resolution limited curvature sign instead of tightening (library entry
+!> point R2 of `docs/_simplify-recon/21-stage1-fix-report.md`).
+subroutine test_ts_can_tighten_case(error)
+   type(error_type), allocatable, intent(out) :: error
+
+   call check(error, landscape_ts_can_tighten('numerical'))
+   if (allocated(error)) return
+   call check(error, landscape_ts_can_tighten('NUMERICAL'), &
+      & "the upper case numerical source cannot tighten")
+   if (allocated(error)) return
+   call check(error, landscape_ts_can_tighten('NuMeRiCaL'), &
+      & "the mixed case numerical source cannot tighten")
+   if (allocated(error)) return
+   call check(error, .not. landscape_ts_can_tighten('model'), &
+      & "the model Hessian claims to support tighter differences")
+   if (allocated(error)) return
+   call check(error, .not. landscape_ts_can_tighten('MODEL'), &
+      & "the upper case model Hessian claims to support tighter differences")
+   if (allocated(error)) return
+   call check(error, .not. landscape_ts_can_tighten('file'))
+   if (allocated(error)) return
+   call check(error, .not. landscape_ts_can_tighten('nonsense'))
+
+end subroutine test_ts_can_tighten_case
+
+!> The curvature-band tightening is wired to `landscape_ts_can_tighten`.
+!>
+!> `confirm_saddle` decides through the public predicate whether a near-zero
+!> curvature may be re-decided with tighter finite differences.  The CLI lower
+!> cases `--lts-hessian` before it stores it (`main.F90:2966`), so no command
+!> line run can tell the normalising predicate from a literal comparison; the
+!> gate is therefore driven here through the production subroutine, with a
+!> synthetic Hessian that puts a genuine internal mode inside the band.  The
+!> two spellings `'NUMERICAL'` and `'numerical'` have to produce the same
+!> observable - the `recomputing the Hessian` notice and the `tightened
+!> re-decision` line - whereas a call site that compares literally would skip
+!> the tightening for the upper case spelling and report the resolution
+!> limited curvature (`cannot be re-decided`) instead.  Nothing else about the
+!> run depends on the spelling, so the two confirmations are byte identical.
+subroutine test_ts_confirm_tighten_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(TMolecule) :: mol
+   type(TRestart) :: chk
+   type(landscape_engine) :: engine
+   type(landscape_ts_settings) :: set
+   type(landscape_result) :: result
+   type(band_hessian_model) :: model
+   integer :: unit_lower, unit_upper, nlog_lower, nlog_upper
+   character(len=:), allocatable :: lower, upper
+
+   call init(env)
+   call init(mol, sym_water, xyz_water)
+
+   set = landscape_ts_settings()
+   set%printlevel = 1
+
+   ! lower case spelling: the gate has to tighten
+   call new_landscape_engine(engine)
+   call engine%set_model(model)
+   set%hessian_source = 'numerical'
+   open(newunit=unit_lower, status='scratch')
+   env%unit = unit_lower
+   nlog_lower = env%nLog
+   call confirm_saddle(env, mol, chk, engine, set, result)
+   nlog_lower = env%nLog - nlog_lower
+   lower = read_unit_text(unit_lower)
+   close(unit_lower)
+
+   ! upper case spelling: the same gate
+   call new_landscape_engine(engine)
+   call engine%set_model(model)
+   set%hessian_source = 'NUMERICAL'
+   open(newunit=unit_upper, status='scratch')
+   env%unit = unit_upper
+   nlog_upper = env%nLog
+   call confirm_saddle(env, mol, chk, engine, set, result)
+   nlog_upper = env%nLog - nlog_upper
+   upper = read_unit_text(unit_upper)
+   close(unit_upper)
+   env%unit = stdout
+
+   ! the synthetic Hessian really reaches the curvature band ...
+   call check(error, index(lower, 'near-zero curvature:') > 0, &
+      & "the synthetic Hessian did not trigger the curvature band")
+   if (allocated(error)) return
+   ! ... and the numerical source really takes the tightening branch
+   call check(error, index(lower, 'tightened re-decision:') > 0, &
+      & "the lower case numerical source did not tighten")
+   if (allocated(error)) return
+   call check(error, index(upper, 'tightened re-decision:') > 0, &
+      & "the upper case numerical source did not tighten")
+   if (allocated(error)) return
+   ! a literal comparison logs the `cannot be re-decided` warning instead, so
+   ! the two spellings must not only print the same text but also log the same
+   ! number of messages
+   call check(error, upper == lower, &
+      & "the two spellings of numerical gave different confirmations")
+   if (allocated(error)) return
+   call check(error, nlog_upper == nlog_lower, &
+      & "the two spellings of numerical logged a different number of messages")
+
+end subroutine test_ts_confirm_tighten_case
+
+!> Energy and gradient of the band-Hessian model (never evaluated).
+subroutine band_evaluate(self, x, energy, gradient, fail)
+   !> Model
+   class(band_hessian_model), intent(inout) :: self
+   !> Coordinates (bohr)
+   real(wp), intent(in) :: x(:)
+   !> Energy (hartree)
+   real(wp), intent(out) :: energy
+   !> Gradient (hartree/bohr)
+   real(wp), intent(out) :: gradient(:)
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   fail = .false.
+   energy = 0.0_wp
+   gradient = 0.0_wp
+
+end subroutine band_evaluate
+
+!> Constant isotropic Hessian of the band-Hessian model.
+subroutine band_hessian(self, x, hess, fail)
+   !> Model
+   class(band_hessian_model), intent(inout) :: self
+   !> Coordinates (bohr)
+   real(wp), intent(in) :: x(:)
+   !> Hessian (hartree/bohr^2)
+   real(wp), intent(out) :: hess(:, :)
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   integer :: i
+
+   fail = .false.
+   hess = 0.0_wp
+   do i = 1, size(hess, 1)
+      hess(i, i) = self%curvature
+   end do
+
+end subroutine band_hessian
+
+!> The forced initial transition vector follows the spelling of `init_mode`.
+!>
+!> `landscape_ts_init_mode_known` accepts `FORCE`, so the gate that turns the
+!> accepted name into the initial vector of P-RFO has to accept it too.  The
+!> observable is the report of the selection: only the forced branch prints
+!> `transition vector from the largest gradient component`, while the `h0`
+!> branch reports the eigenvector it selected.  Two runs of the analytic
+!> Mueller-Brown surface with the two spellings therefore have to print the
+!> same selection and take the same number of steps (library entry point R2 of
+!> `docs/_simplify-recon/21-stage1-fix-report.md`).
+subroutine test_prfo_init_mode_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(landscape_muller_brown_model) :: model
+   type(landscape_ts_settings) :: set
+   type(landscape_result) :: result
+   integer :: unit, n_steps
+   character(len=:), allocatable :: lower, upper
+   character(len=*), parameter :: marker = &
+      & "transition vector from the largest gradient component:"
+
+   call init(env)
+   call new_muller_brown_model(model)
+
+   set = landscape_ts_settings()
+   set%method = p_landscape_ts_prfo
+   set%printlevel = 1
+   set%write_files = .false.
+   set%verify_ts = .false.
+   set%max_steps = 6
+   ! the surface is dimensionless and its curvatures are of order 1 kcal/mol;
+   ! the GFN2 oriented hlow would lift every downhill mode
+   set%hlow = 1.0e-6_wp
+
+   open(newunit=unit, status='scratch')
+   env%unit = unit
+
+   set%init_mode = 'force'
+   call landscape_saddle_optimize(env, model, set, [-0.6_wp, 0.4_wp], result)
+   n_steps = result%n_steps
+   lower = read_unit_text(unit)
+
+   rewind(unit)
+   set%init_mode = 'FORCE'
+   call landscape_saddle_optimize(env, model, set, [-0.6_wp, 0.4_wp], result)
+   upper = read_unit_text(unit)
+
+   close(unit)
+   env%unit = stdout
+
+   call check(error, index(lower, marker) > 0, &
+      & "the lower case init_mode did not force the transition vector")
+   if (allocated(error)) return
+   call check(error, index(upper, marker) > 0, &
+      & "the upper case init_mode did not force the transition vector")
+   if (allocated(error)) return
+   call check(error, result%n_steps, n_steps, &
+      & "the upper case init_mode changed the search")
+
+end subroutine test_prfo_init_mode_case
+
+!> The dimer initial axis follows the spelling of `n_init`.
+!>
+!> `landscape_ts_ninit_known` accepts `FORCE`/`RANDOM`, so
+!> `landscape_dimer_initial_axis` has to accept them as well: a literal
+!> comparison sent the accepted name into the `case default` branch and
+!> rejected the run with an error (library entry point R2 of
+!> `docs/_simplify-recon/21-stage1-fix-report.md`).  Both spellings must give
+!> the same axis - bitwise for the deterministic `force` source and for the
+!> seeded `random` one - and the rejection still echoes the name as given.
+subroutine test_dimer_axis_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   real(wp) :: gradient(4), forced(4), upper_forced(4)
+   real(wp) :: random(4), upper_random(4)
+   logical :: fail
+
+   call init(env)
+   gradient = [0.1_wp, -0.9_wp, 0.2_wp, 0.05_wp]
+
+   call landscape_dimer_initial_axis(env, gradient, 'force', 42, forced, fail)
+   call check(error, .not. fail)
+   if (allocated(error)) return
+   call landscape_dimer_initial_axis(env, gradient, 'FORCE', 42, &
+      & upper_forced, fail)
+   call check(error, .not. fail, &
+      & "the upper case force axis was rejected")
+   if (allocated(error)) return
+   call check(error, maxval(abs(upper_forced - forced)), 0.0_wp, thr=0.0_wp, &
+      & message="the upper case force axis differs from the lower case one")
+   if (allocated(error)) return
+
+   call landscape_dimer_initial_axis(env, gradient, 'random', 42, random, fail)
+   call check(error, .not. fail)
+   if (allocated(error)) return
+   call landscape_dimer_initial_axis(env, gradient, 'RANDOM', 42, &
+      & upper_random, fail)
+   call check(error, .not. fail, &
+      & "the upper case random axis was rejected")
+   if (allocated(error)) return
+   call check(error, maxval(abs(upper_random - random)), 0.0_wp, thr=0.0_wp, &
+      & message="the upper case random axis differs from the lower case one")
+   if (allocated(error)) return
+
+   call landscape_dimer_initial_axis(env, gradient, 'BOGUS', 42, forced, fail)
+   call check(error, fail, "an unknown upper case initial axis was accepted")
+   if (allocated(error)) return
+   call check(error, index(env%log(env%nLog)%message, 'BOGUS') > 0, &
+      & "the rejected axis name is not echoed as it was given")
+
+end subroutine test_dimer_axis_case
 
 !> The driver removes the rigid body components from the spectrum and the step.
 !>
@@ -1940,5 +2238,31 @@ pure function internal_distance_change(xref, x) result(change)
    end do
 
 end function internal_distance_change
+
+!> Every record written to a scratch unit, separated by newlines.
+!>
+!> The startup banner of a task is a property of the printed output, so the
+!> only way to assert it from a unit test is to point `env%unit` at a scratch
+!> file and read it back.  The unit is rewound first, so the helper also works
+!> after a previous read reached the endfile record (a rewrite then needs the
+!> rewind anyway).
+function read_unit_text(unit) result(text)
+   !> Scratch unit written by the task under test
+   integer, intent(in) :: unit
+   !> Records of the unit, joined by newlines
+   character(len=:), allocatable :: text
+
+   character(len=256) :: line
+   integer :: stat
+
+   text = ''
+   rewind(unit)
+   do
+      read(unit, '(a)', iostat=stat) line
+      if (stat /= 0) exit
+      text = text//trim(line)//new_line('a')
+   end do
+
+end function read_unit_text
 
 end module test_landscape_saddle

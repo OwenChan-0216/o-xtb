@@ -44,7 +44,8 @@ module xtb_landscape_tasks_scan
    use xtb_setparam, only : get_namespace
    use xtb_landscape_settings, only : landscape_scan_settings, &
       & landscape_restart_name, landscape_scan_coord_name, &
-      & landscape_missing_value, landscape_value_present
+      & landscape_missing_value, landscape_value_present, &
+      & landscape_lowercase
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack
    use xtb_landscape_engine, only : landscape_engine, new_landscape_engine, &
@@ -129,6 +130,25 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
          & landscape_restart_name(settings%engine%restart_mode)
       write(env%unit, '(1x,a,a)') "Hessian source:           ", &
          & trim(settings%hessian_source)
+      ! D1 of the CLI redesign section 8.3: the suite force constant 0.5
+      ! hartree/bohr^2 is ten times the xtb scan value 0.05 (`fcconstr`).  The
+      ! notice prints the value **read from the settings object** and is
+      ! suppressed when `--lscan-fc` named it; a rigid scan constructs the
+      ! geometry and never touches the bias potential, so it stays quiet too.
+      ! The mode is compared through `landscape_lowercase` because the
+      ! predicate that accepts it (`landscape_scan_mode_known`) and
+      ! `landscape_scan_check` both match case insensitively: a literal
+      ! comparison would let `--lscan-mode RELAXED` run a relaxed scan that
+      ! never echoed its force constant.
+      if (landscape_lowercase(settings%mode) == 'relaxed' .and. &
+            & .not. settings%constraint_fc_was_set) then
+         write(env%unit, '(a,f4.2,a)') "[NOTICE] --lscan-fc default ", &
+            & settings%constraint_fc, " hartree/bohr^2 differs from the "//&
+            & "xtb scan force constant 0.05"
+         write(env%unit, '(a)') &
+            & "         pass --lscan-fc 0.05 for the legacy xtbscan.log "//&
+            & "behaviour"
+      end if
    end if
 
    ! All preconditions are checked before a single SCF is run, so an invalid

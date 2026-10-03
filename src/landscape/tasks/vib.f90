@@ -55,7 +55,7 @@ module xtb_landscape_tasks_vib
    use xtb_setparam, only : get_namespace
    use xtb_io_writer_turbomole, only : writeNormalModesTurbomole
    use xtb_landscape_settings, only : landscape_vib_settings, landscape_restart_name, &
-      & landscape_log_failed
+      & landscape_log_failed, landscape_lowercase
    use xtb_landscape_results, only : landscape_result, landscape_vib_result
    use xtb_landscape_coords, only : vec_norm, geometry_pack
    use xtb_landscape_hessian, only : landscape_write_hessian_file
@@ -140,8 +140,11 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
 
    ! A file based Hessian without a file name is a configuration error; it is
    ! reported here with the flag that is missing from the command line (the
-   ! provider factory refuses it too, with a more generic message).
-   if (trim(settings%hessian_source) == 'file') then
+   ! provider factory refuses it too, with a more generic message).  The source
+   ! is compared case insensitively, so any spelling that the validator accepts
+   ! reaches this guard (a literal comparison turned `--lvib-hessian FILE` into
+   ! the generic factory message).
+   if (landscape_lowercase(settings%hessian_source) == 'file') then
       if (.not. allocated(settings%hessian_file)) then
          result%message = "no Hessian file given"
          call env%error("the Hessian source 'file' needs --lvib-hessian-file", source)

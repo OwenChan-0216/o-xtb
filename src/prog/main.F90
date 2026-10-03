@@ -114,7 +114,8 @@ module xtb_prog_main
       & landscape_scan_coord_natoms, landscape_scan_mode_known, &
       & p_landscape_scan_coord_distance, p_landscape_restart_off, &
       & p_landscape_restart_pin, p_landscape_restart_warm, p_landscape_ts_cineb, &
-      & p_landscape_ts_autoneb, p_landscape_ts_string, p_landscape_ts_gsm
+      & p_landscape_ts_autoneb, p_landscape_ts_string, p_landscape_ts_gsm, &
+      & landscape_lowercase
    use xtb_landscape_hessian, only: landscape_hessian_source_known
    use xtb_landscape_results, only: landscape_result
 
@@ -1558,10 +1559,21 @@ contains
       real(wp) :: scan_step_user(2)
       logical :: scan_step_given(2)
 
+      !> First run type requested on the command line and the flag that
+      !> requested it; both are filled by `select_runtyp`, which reports a
+      !> second, different run type as an error (CLI redesign section 17.1).
+      character(len=:), allocatable :: selected_runtyp, selected_runtyp_flag
+
+      !> Unknown flags, blank separated; they are reported after the parsing
+      !> loop, where the effect of `--strict` is known (section 17.5 5a)
+      character(len=:), allocatable :: unknown_flags, message
+      integer :: unknown_count
+
       set%gfn_method = 2
       dipro%diprocalc = .false.
       coffee = .false.
       strict = .false.
+      unknown_count = 0
       restart = .true.
       copycontrol = .false.
       lgrad = .false.
@@ -1580,7 +1592,15 @@ contains
          end if
          select case (flag)
          case default
-            call env%warning("Unknown option '"//flag//"' provided", source)
+            ! Reported after the loop: `--strict` may stand after this flag,
+            ! so whether an unknown option is a warning or an error cannot be
+            ! decided here (CLI redesign section 17.5 5a).
+            unknown_count = unknown_count + 1
+            if (allocated(unknown_flags)) then
+               unknown_flags = trim(unknown_flags)//' '//trim(flag)
+            else
+               unknown_flags = trim(flag)
+            end if
 
          case ('-h', '--help')
             call help(env%unit)
@@ -1694,7 +1714,7 @@ contains
          case('--ceh')
             if (get_xtb_feature('tblite')) then
                allocate(tblite%ceh)
-               call set_runtyp('prescc')
+               call select_runtyp(env, 'prescc', '--ceh', selected_runtyp, selected_runtyp_flag)
                ! check if numerical gradients should be calculated !
                call args%nextArg(sec)
                if (allocated(sec)) then
@@ -1821,7 +1841,7 @@ contains
          case ('--dipro')
             if (get_xtb_feature('tblite')) then
                dipro%diprocalc = .true.
-               call set_runtyp('scc')
+               call select_runtyp(env, 'scc', '--dipro', selected_runtyp, selected_runtyp_flag)
                call args%nextArg(sec)
                if (allocated(sec)) then
                   read (sec, '(f10.3)') dipro%othr
@@ -1870,11 +1890,11 @@ contains
             end if
 
          case ('--esp')
-            call set_runtyp('scc')
+            call select_runtyp(env, 'scc', '--esp', selected_runtyp, selected_runtyp_flag)
             call set_write(env, 'esp', 'true')
 
          case ('--stm')
-            call set_runtyp('scc')
+            call select_runtyp(env, 'scc', '--stm', selected_runtyp, selected_runtyp_flag)
             call set_write(env, 'stm', 'true')
 
          case ('--cma')
@@ -2110,31 +2130,37 @@ contains
             end if
 
          case ('--scc', '--sp')
-            call set_runtyp('scc')
+            call select_runtyp(env, 'scc', '--scc', selected_runtyp, selected_runtyp_flag)
 
          case ('--vip')
             call set_gfn(env, 'method', '1')
-            call set_runtyp('vip')
+            call select_runtyp(env, 'vip', '--vip', selected_runtyp, selected_runtyp_flag)
 
          case ('--vea')
             call set_gfn(env, 'method', '1')
-            call set_runtyp('vea')
+            call select_runtyp(env, 'vea', '--vea', selected_runtyp, selected_runtyp_flag)
 
          case ('--vipea')
             call set_gfn(env, 'method', '1')
-            call set_runtyp('vipea')
+            call select_runtyp(env, 'vipea', '--vipea', selected_runtyp, selected_runtyp_flag)
 
          case ('--vomega')
             call set_gfn(env, 'method', '1')
-            call set_runtyp('vomega')
+            call select_runtyp(env, 'vomega', '--vomega', selected_runtyp, selected_runtyp_flag)
 
          case ('--vfukui')
-            call set_runtyp('vfukui')
+            call select_runtyp(env, 'vfukui', '--vfukui', selected_runtyp, selected_runtyp_flag)
 
          case ('--alpha')
             call set_elprop('alpha')
 
          case ('--raman')
+            ! `--raman` is a run type selection too (`set_elprop` runs the
+            ! `hess` path), but the selection happens inside `set_elprop`, so
+            ! the wrapper only records it (review finding M1 of
+            ! `20-stage1-review.md`).
+            call select_runtyp(env, 'hess', '--raman', selected_runtyp, &
+               & selected_runtyp_flag, apply=.false.)
             call set_elprop('raman')
             call args%nextArg(sec)
             if (allocated(sec)) then
@@ -2147,31 +2173,31 @@ contains
 
 
          case ('--grad')
-            call set_runtyp('grad')
+            call select_runtyp(env, 'grad', '--grad', selected_runtyp, selected_runtyp_flag)
             lgrad = .true.
 
          case ('-o', '--opt')
-            call set_runtyp('opt')
+            call select_runtyp(env, 'opt', '--opt', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
             end if
 
          case ('--hess')
-            call set_runtyp('hess')
+            call select_runtyp(env, 'hess', '--hess', selected_runtyp, selected_runtyp_flag)
 
          case ('--md')
-            call set_runtyp('md')
+            call select_runtyp(env, 'md', '--md', selected_runtyp, selected_runtyp_flag)
 
          case ('--ohess')
-            call set_runtyp('ohess')
+            call select_runtyp(env, 'ohess', '--ohess', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
             end if
 
          case ('--bhess')
-            call set_runtyp('bhess')
+            call select_runtyp(env, 'bhess', '--bhess', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
@@ -2197,36 +2223,36 @@ contains
             end if
 
          case ('--omd')
-            call set_runtyp('omd')
+            call select_runtyp(env, 'omd', '--omd', selected_runtyp, selected_runtyp_flag)
             call set_opt(env, 'optlevel', '-1')
 
          case ('--siman')
-            call set_runtyp('siman')
+            call select_runtyp(env, 'siman', '--siman', selected_runtyp, selected_runtyp_flag)
             call set_md(env, 'nvt', 'true')
 
          case ('--path')
-            call set_runtyp('path')
+            call select_runtyp(env, 'path', '--path', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_path(env, 'product', sec)
             end if
 
          case ('--screen')
-            call set_runtyp('screen')
+            call select_runtyp(env, 'screen', '--screen', selected_runtyp, selected_runtyp_flag)
 
          case ('--gmd')
-            call set_runtyp('gmd')
+            call select_runtyp(env, 'gmd', '--gmd', selected_runtyp, selected_runtyp_flag)
             call env%error("This feature has been deprecated, I'm sorry.", source)
 
          case ('--modef')
-            call set_runtyp('modef')
+            call select_runtyp(env, 'modef', '--modef', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_modef(env, 'mode', sec)
             end if
 
          case ('--mdopt')
-            call set_runtyp('mdopt')
+            call select_runtyp(env, 'mdopt', '--mdopt', selected_runtyp, selected_runtyp_flag)
 
          case ('--ljson')
             ! Structured result of the landscape suite: every task writes
@@ -2246,11 +2272,11 @@ contains
             ! `src/landscape/optimize` (see PLAN section 12).  The flag takes
             ! no positional argument; engine and convergence level are set by
             ! the dedicated flags below.
-            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call select_runtyp(env, 'lopt', '--lopt', selected_runtyp, selected_runtyp_flag)
 
          case ('--lopt-engine')
             ! Minimisation algorithm of the landscape suite
-            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call select_runtyp(env, 'lopt', '--lopt-engine', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                landscape_algorithm = landscape_opt_algorithm_from_name(sec)
@@ -2258,6 +2284,7 @@ contains
                   call env%error("Unknown landscape minimisation algorithm '"//sec//"'", source)
                else
                   lset%algorithm = landscape_algorithm
+                  lset%algorithm_was_set = .true.
                end if
             else
                call env%error("The --lopt-engine flag requires an algorithm name", source)
@@ -2265,7 +2292,7 @@ contains
 
          case ('--lopt-level')
             ! Convergence level of the landscape suite (ORCA naming)
-            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call select_runtyp(env, 'lopt', '--lopt-level', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_conv_level_known(sec)) then
@@ -2281,11 +2308,11 @@ contains
             ! Hessian backend of the landscape suite.  `numerical` is the
             ! self-built central-difference Hessian, `model` the cheap
             ! Lindh-D2 model Hessian (`src/landscape/types/hessian.f90`).
-            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call select_runtyp(env, 'lopt', '--lopt-hessian', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_hessian_source_known(sec)) then
-                  lset%hessian_source = sec
+                  lset%hessian_source = landscape_lowercase(sec)
                else
                   call env%error("Unknown landscape Hessian source '"//sec//"'", source)
                end if
@@ -2297,15 +2324,15 @@ contains
             ! Landscape suite: relaxed or rigid scan (PLAN section 12).  The
             ! flag takes no positional argument; the scanned coordinates and
             ! the grid are set by the dedicated `--lscan-*` flags below.
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan', selected_runtyp, selected_runtyp_flag)
 
          case ('--lscan-mode')
             ! Scan mode: relaxed or rigid
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-mode', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_scan_mode_known(sec)) then
-                  lsset%mode = sec
+                  lsset%mode = landscape_lowercase(sec)
                else
                   call env%error("Unknown landscape scan mode '"//sec//"'", source)
                end if
@@ -2315,7 +2342,7 @@ contains
 
          case ('--lscan-method')
             ! Inner minimiser of a relaxed scan
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-method', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_opt_algorithm_from_name(sec) == 0) then
@@ -2329,7 +2356,7 @@ contains
 
          case ('--lscan-level')
             ! Convergence level of the inflated minimisation (ORCA naming)
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-level', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_conv_level_known(sec)) then
@@ -2343,10 +2370,10 @@ contains
 
          case ('--lscan-restart')
             ! Wavefunction restart policy of the scan point evaluations
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-restart', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
-               select case (sec)
+               select case (landscape_lowercase(sec))
                case ('off')
                   lsset%engine%restart_mode = p_landscape_restart_off
                case ('pin')
@@ -2362,7 +2389,7 @@ contains
 
          case ('--lscan-ndim')
             ! Number of scanned coordinates (1 or 2)
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-ndim', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2377,22 +2404,23 @@ contains
 
          case ('--lscan-oneway')
             ! Scan only the forward branch (no hysteresis report)
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-oneway', selected_runtyp, selected_runtyp_flag)
             lsset%bidirectional = .false.
 
          case ('--lscan-cold-start')
             ! Start every scan point from the input geometry
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-cold-start', selected_runtyp, selected_runtyp_flag)
             lsset%warm_start = .false.
 
          case ('--lscan-fc')
             ! Force constant of the constraint bias (hartree/bohr^2)
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-fc', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
                   lsset%constraint_fc = ddum
+                  lsset%constraint_fc_was_set = .true.
                else
                   call env%error("The --lscan-fc flag requires a number", source)
                end if
@@ -2402,7 +2430,7 @@ contains
 
          case ('--lscan-expo')
             ! Exponent of the constraint bias potential
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-expo', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2417,7 +2445,7 @@ contains
 
          case ('--lscan-coord')
             ! Coordinate type of the first scanned coordinate
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-coord', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                iscan = landscape_scan_coord_from_name(sec)
@@ -2432,7 +2460,7 @@ contains
 
          case ('--lscan-atoms')
             ! 1-based atom indices of the first scanned coordinate
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-atoms', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                call read_scan_atoms(env, sec, lsset%coord(1)%atoms, source)
@@ -2442,7 +2470,7 @@ contains
 
          case ('--lscan-step')
             ! Step of the first coordinate in angstrom (distance) or degree
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-step', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2458,7 +2486,7 @@ contains
 
          case ('--lscan-nstep')
             ! Number of steps of the first coordinate
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-nstep', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2473,7 +2501,7 @@ contains
 
          case ('--lscan-coord2')
             ! Coordinate type of the second scanned coordinate (sets ndim=2)
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-coord2', selected_runtyp, selected_runtyp_flag)
             lsset%ndim = 2
             call args%nextArg(sec)
             if (allocated(sec)) then
@@ -2489,7 +2517,7 @@ contains
 
          case ('--lscan-atoms2')
             ! 1-based atom indices of the second scanned coordinate
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-atoms2', selected_runtyp, selected_runtyp_flag)
             lsset%ndim = 2
             call args%nextArg(sec)
             if (allocated(sec)) then
@@ -2500,7 +2528,7 @@ contains
 
          case ('--lscan-step2')
             ! Step of the second coordinate in angstrom (distance) or degree
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-step2', selected_runtyp, selected_runtyp_flag)
             lsset%ndim = 2
             call args%nextArg(sec)
             if (allocated(sec)) then
@@ -2517,7 +2545,7 @@ contains
 
          case ('--lscan-nstep2')
             ! Number of steps of the second coordinate
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-nstep2', selected_runtyp, selected_runtyp_flag)
             lsset%ndim = 2
             call args%nextArg(sec)
             if (allocated(sec)) then
@@ -2533,7 +2561,7 @@ contains
 
          case ('--lscan-max-steps')
             ! Step budget of the inner relaxation of every scan point
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-max-steps', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2550,11 +2578,11 @@ contains
             ! Hessian backend of the scan points (`numerical`, `model` or
             ! `file`); needed for `--lscan-method rfo` and an inner BFGS
             ! start Hessian
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-hessian', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_hessian_source_known(sec)) then
-                  lsset%hessian_source = sec
+                  lsset%hessian_source = landscape_lowercase(sec)
                else
                   call env%error("Unknown landscape Hessian source '"//sec//"'", source)
                end if
@@ -2564,7 +2592,7 @@ contains
 
          case ('--lscan-hessian-file')
             ! File read by `--lscan-hessian file`
-            if (set%runtyp /= p_run_lscan) call set_runtyp('lscan')
+            call select_runtyp(env, 'lscan', '--lscan-hessian-file', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                lsset%hessian_file = sec
@@ -2576,11 +2604,11 @@ contains
             ! Landscape suite: transition state search (src/landscape/saddle);
             ! the method, trust radius and Hessian backend are set by the
             ! dedicated `--lts-*` flags below.
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts', selected_runtyp, selected_runtyp_flag)
 
          case ('--lts-method')
             ! Transition state search method
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-method', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_ts_method_known(sec)) then
@@ -2603,7 +2631,7 @@ contains
 
          case ('--lts-trust')
             ! Initial trust radius of the P-RFO step (bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-trust', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2618,7 +2646,7 @@ contains
 
          case ('--lts-trust-max')
             ! Upper bound of the trust radius (bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-trust-max', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2633,7 +2661,7 @@ contains
 
          case ('--lts-hlow')
             ! Curvature floor of the downhill modes (hartree/bohr^2)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-hlow', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2648,7 +2676,7 @@ contains
 
          case ('--lts-max-steps')
             ! Maximum number of macro iterations
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-max-steps', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2663,7 +2691,7 @@ contains
 
          case ('--lts-level')
             ! Convergence thresholds of the search
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-level', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_conv_level_known(sec)) then
@@ -2677,7 +2705,7 @@ contains
 
          case ('--lts-mode-overlap-min')
             ! Mode following guard threshold
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-mode-overlap-min', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2692,7 +2720,7 @@ contains
 
          case ('--lts-alpha')
             ! Uphill/downhill trust radius fraction of the B-P-RFO
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-alpha', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2707,7 +2735,7 @@ contains
 
          case ('--lts-micro-cycles')
             ! Maximum number of restricted-step micro iterations
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-micro-cycles', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2722,7 +2750,7 @@ contains
 
          case ('--lts-target-mode')
             ! Which negative mode is followed (1-based)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-target-mode', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2737,11 +2765,11 @@ contains
 
          case ('--lts-init-mode')
             ! Source of the initial transition vector
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-init-mode', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_ts_init_mode_known(sec)) then
-                  ltset%init_mode = sec
+                  ltset%init_mode = landscape_lowercase(sec)
                else
                   call env%error("Unknown landscape initial mode '"//sec//"'", source)
                end if
@@ -2752,7 +2780,7 @@ contains
          case ('--lts-delta')
             ! Dimer separation, the distance of each image from the midpoint
             ! (bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-delta', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2767,7 +2795,7 @@ contains
 
          case ('--lts-dr')
             ! Finite difference step of the dimer translation probe (bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-dr', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2782,7 +2810,7 @@ contains
 
          case ('--lts-rot-max-iter')
             ! Maximum number of dimer rotations per macro iteration
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-rot-max-iter', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2797,7 +2825,7 @@ contains
 
          case ('--lts-rot-alpha')
             ! Damping factor of the dimer rotation angle (Eq. 13)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-rot-alpha', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2813,7 +2841,7 @@ contains
          case ('--lts-rot-frms')
             ! RMS torque below which the dimer rotation is converged
             ! (hartree/bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-rot-frms', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2828,11 +2856,11 @@ contains
 
          case ('--lts-ninit')
             ! Source of the initial dimer axis
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-ninit', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_ts_ninit_known(sec)) then
-                  ltset%n_init = sec
+                  ltset%n_init = landscape_lowercase(sec)
                else
                   call env%error("Unknown landscape dimer initial axis '"//sec//"'", source)
                end if
@@ -2842,7 +2870,7 @@ contains
 
          case ('--lts-seed')
             ! Seed of the random initial dimer axis (PLAN N10)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-seed', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2857,7 +2885,7 @@ contains
 
          case ('--lts-step-max')
             ! Hard bound of the dimer translation displacement (bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-step-max', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2873,7 +2901,7 @@ contains
          case ('--lts-translate-max-iter')
             ! Maximum number of quick-min displacement updates per dimer
             ! translation
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-translate-max-iter', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2888,7 +2916,7 @@ contains
 
          case ('--lts-recalc')
             ! Exact Hessian every N macro steps (0 disables)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-recalc', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -2903,19 +2931,19 @@ contains
 
          case ('--lts-no-verify')
             ! Skip the frequency confirmation of the stationary point
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-no-verify', selected_runtyp, selected_runtyp_flag)
             ltset%verify_ts = .false.
          case ('--lts-no-rigid')
             ! Keep the rigid body components in the Cartesian step
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-no-rigid', selected_runtyp, selected_runtyp_flag)
             ltset%remove_rigid = .false.
 
          case ('--lts-restart')
             ! Wavefunction restart policy of the engine
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-restart', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
-               select case(sec)
+               select case (landscape_lowercase(sec))
                case('off')
                   ltset%engine%restart_mode = p_landscape_restart_off
                case('pin')
@@ -2931,11 +2959,11 @@ contains
 
          case ('--lts-hessian')
             ! Hessian backend of the search
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-hessian', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_hessian_source_known(sec)) then
-                  ltset%hessian_source = sec
+                  ltset%hessian_source = landscape_lowercase(sec)
                else
                   call env%error("Unknown landscape Hessian source '"//sec//"'", source)
                end if
@@ -2945,7 +2973,7 @@ contains
 
          case ('--lts-hessian-file')
             ! File read by `--lts-hessian file`
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-hessian-file', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                ltset%hessian_file = sec
@@ -2956,7 +2984,7 @@ contains
          case ('--lts-step')
             ! Finite difference step of the confirmation Hessian (bohr); the
             ! client side of M4 hard constraint 2 (H1).
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-step', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2972,7 +3000,7 @@ contains
          case ('--lts-sccacc')
             ! SCC accuracy of the displaced single points of the confirmation
             ! Hessian (H1)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-sccacc', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -2987,7 +3015,7 @@ contains
 
          case ('--lts-step0')
             ! Upper bound of the first dimer translation (bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-step0', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3004,12 +3032,13 @@ contains
             ! Displacement along the lowest internal mode when the start
             ! geometry is a minimum (MEDIUM-1 of the review round 2); 0
             ! disables the escape.
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-escape-step', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
                   ltset%escape_step = ddum
+                  ltset%escape_step_was_set = .true.
                else
                   call env%error("The --lts-escape-step flag requires a number", source)
                end if
@@ -3020,7 +3049,7 @@ contains
          case ('--lts-product')
             ! Product endpoint of a band search (`--lts-method neb|cineb`):
             ! a single frame xyz with the same atoms in the same order.
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-product', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                ltset%path%product_file = sec
@@ -3030,7 +3059,7 @@ contains
 
          case ('--lts-images')
             ! Number of band images, the two fixed endpoints included
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-images', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3045,7 +3074,7 @@ contains
 
          case ('--lts-kmin')
             ! Lower spring constant of the dynamic springs (hartree/bohr^2)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-kmin', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3060,7 +3089,7 @@ contains
 
          case ('--lts-kmax')
             ! Upper spring constant (hartree/bohr^2)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-kmax', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3075,7 +3104,7 @@ contains
 
          case ('--lts-kdecay')
             ! Decay factor of the dynamic springs (dimensionless)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-kdecay', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3090,18 +3119,18 @@ contains
 
          case ('--lts-no-dynamic-k')
             ! Use a single spring constant k_max for every image
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-no-dynamic-k', selected_runtyp, selected_runtyp_flag)
             ltset%path%use_dynamic_k = .false.
 
          case ('--lts-climb')
             ! Switch on the climbing image refinement (CI-NEB)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-climb', selected_runtyp, selected_runtyp_flag)
             ltset%path%climb = .true.
 
          case ('--lts-climb-switch')
             ! Band force below which the climbing image is ignited
             ! (hartree/bohr); the default is the standard 0.5 eV/angstrom
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-climb-switch', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3116,22 +3145,22 @@ contains
 
          case ('--lts-no-idpp')
             ! Straight linear interpolation instead of the IDPP initial path
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-no-idpp', selected_runtyp, selected_runtyp_flag)
             ltset%path%ifidpp = .false.
 
          case ('--lts-no-align')
             ! Do not Kabsch align the images before every evaluation
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-no-align', selected_runtyp, selected_runtyp_flag)
             ltset%path%align = .false.
 
          case ('--lts-relax-ends')
             ! Relax the two endpoints before the band is built
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-relax-ends', selected_runtyp, selected_runtyp_flag)
             ltset%path%relax_ends = .true.
 
          case ('--lts-max-displ')
             ! Upper bound of one displacement component of a band step (bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-max-displ', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3146,7 +3175,7 @@ contains
 
          case ('--lts-frms-avg')
             ! Convergence threshold of the average band force RMS
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-frms-avg', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3161,7 +3190,7 @@ contains
 
          case ('--lts-frms-max')
             ! Convergence threshold of the largest per-image band force RMS
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-frms-max', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3176,7 +3205,7 @@ contains
 
          case ('--lts-autoneb-nstart')
             ! Number of images of the coarse AutoNEB start path
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-autoneb-nstart', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3191,7 +3220,7 @@ contains
 
          case ('--lts-autoneb-max-paths')
             ! Hard upper bound of the number of images of an AutoNEB path
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-autoneb-max-paths', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3206,7 +3235,7 @@ contains
 
          case ('--lts-autoneb-max-depth')
             ! Hard upper bound of the number of AutoNEB insertion stages
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-autoneb-max-depth', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3222,7 +3251,7 @@ contains
          case ('--lts-autoneb-restart')
             ! Multi-frame path of an earlier AutoNEB run (`path_autoneb.xyz`),
             ! adopted as the initial path so completed stages are not repeated
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-autoneb-restart', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                ltset%path%autoneb_restart_file = sec
@@ -3232,7 +3261,7 @@ contains
 
          case ('--lts-string-nnodes')
             ! Target number of nodes of the growing string
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-string-nnodes', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3247,7 +3276,7 @@ contains
 
          case ('--lts-string-grow-tol')
             ! Norm threshold of the growth indicator of Eq. 7 (hartree/bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-string-grow-tol', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3262,7 +3291,7 @@ contains
 
          case ('--lts-string-ds')
             ! Arc length increment of one growth step (Eq. 9, bohr)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-string-ds', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3277,7 +3306,7 @@ contains
 
          case ('--lts-string-nu2')
             ! Curvature floor of the node spacing condition (hartree/bohr^2)
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-string-nu2', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3292,7 +3321,7 @@ contains
 
          case ('--lts-string-grow-steps')
             ! Maximum perpendicular relaxation iterations of one frontier node
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-string-grow-steps', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3307,12 +3336,12 @@ contains
 
          case ('--lts-no-string-spline')
             ! Central difference tangents instead of the cubic spline tangent
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-no-string-spline', selected_runtyp, selected_runtyp_flag)
             ltset%path%string_spline = .false.
 
          case ('--lts-string-history')
             ! Print the growth history of the string
-            if (set%runtyp /= p_run_lts) call set_runtyp('lts')
+            call select_runtyp(env, 'lts', '--lts-string-history', selected_runtyp, selected_runtyp_flag)
             ltset%path%string_history = .true.
 
          case ('--lirc')
@@ -3320,17 +3349,18 @@ contains
             ! (src/landscape/irc); the method and the integrator parameters are
             ! set by the dedicated `--lirc-*` flags below.  The input geometry
             ! is the transition state.
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc', selected_runtyp, selected_runtyp_flag)
 
          case ('--lirc-method')
             ! IRC integration method (hpc default | lqa | eulerpc | gs); the default
             ! is `hpc` since the M6 validation round measured it both more accurate
             ! and 8.5x cheaper than `gs` (PLAN section 12.15, behaviour change)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-method', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_irc_method_known(sec)) then
                   lircset%method = landscape_irc_method_from_name(sec)
+                  lircset%method_was_set = .true.
                else
                   call env%error("Unknown landscape IRC method '"//sec//"'", source)
                end if
@@ -3341,7 +3371,7 @@ contains
          case ('--lirc-step')
             ! Step length of the IRC integration (bohr*amu^1/2, mass weighted
             ! arc length)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-step', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3356,7 +3386,7 @@ contains
 
          case ('--lirc-max-steps')
             ! Maximum number of macro steps of one direction
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-max-steps', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3373,7 +3403,7 @@ contains
             ! Convergence thresholds of the inner endpoint relaxation (the four
             ! minimisation criteria; the path criteria are --lirc-grad-tol and
             ! --lirc-e-rise, and the relaxation step budget is --lirc-max-steps)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-level', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_conv_level_known(sec)) then
@@ -3387,17 +3417,17 @@ contains
 
          case ('--lirc-swap')
             ! Exchange the forward and backward directions
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-swap', selected_runtyp, selected_runtyp_flag)
             lircset%swap = .true.
 
          case ('--lirc-oneway')
             ! Integrate the forward direction only
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-oneway', selected_runtyp, selected_runtyp_flag)
             lircset%both_directions = .false.
 
          case ('--lirc-target-mode')
             ! Which negative mode defines the initial direction (1-based)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-target-mode', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3412,7 +3442,7 @@ contains
 
          case ('--lirc-micro-cycles')
             ! Maximum number of GS micro cycles per macro step
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-micro-cycles', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3427,7 +3457,7 @@ contains
 
          case ('--lirc-micro-thresh')
             ! Convergence threshold of the sphere relaxation (bohr*amu^1/2)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-micro-thresh', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3442,7 +3472,7 @@ contains
 
          case ('--lirc-euler-n')
             ! Number of Euler substeps of the analytic LQA propagation
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-euler-n', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3458,7 +3488,7 @@ contains
          case ('--lirc-loose-cycles')
             ! EulerPC coarse phase: the first N macro steps use the plain
             ! Euler prediction (no corrector), 0 disables the coarse phase
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-loose-cycles', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3474,7 +3504,7 @@ contains
          case ('--lirc-mbs-tol')
             ! Acceptance threshold of the mBS corrector (bohr*amu^1/2); 1e-5 is
             ! the MAPLE default, 1e-6 the stricter HPC paper value
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-mbs-tol', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3489,7 +3519,7 @@ contains
 
          case ('--lirc-mbs-max-k')
             ! Maximum extrapolation level of the mBS corrector
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-mbs-max-k', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3504,7 +3534,7 @@ contains
 
          case ('--lirc-mbs-points')
             ! Base number of Euler substeps of the mBS corrector
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-mbs-points', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3521,7 +3551,7 @@ contains
             ! Capacity of the DWI surface fit; the interpolant is two point by
             ! construction, so every value >= 2 is behaviourally equivalent
             ! (`check_irc_settings` rejects values below 2)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-dwi-n', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3536,7 +3566,7 @@ contains
 
          case ('--lirc-e-rise', '--lirc-erise-steps')
             ! Termination signal (c): number of consecutive rising energies
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-e-rise', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3551,7 +3581,7 @@ contains
 
          case ('--lirc-grad-tol')
             ! Termination signal (b): gradient norm threshold (hartree/bohr)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-grad-tol', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3566,7 +3596,7 @@ contains
 
          case ('--lirc-recalc')
             ! Rebuild the exact Hessian every N macro steps (-1 disables)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-recalc', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
@@ -3581,20 +3611,20 @@ contains
 
          case ('--lirc-no-endpoint-relax')
             ! Skip the M1 relaxation of the two endpoints
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-no-endpoint-relax', selected_runtyp, selected_runtyp_flag)
             lircset%endpoint_relax = .false.
 
          case ('--lirc-endpoint-relax')
             ! Perform the M1 relaxation of the two endpoints (default; the
             ! explicit flag restores it after a --lirc-no-endpoint-relax)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-endpoint-relax', selected_runtyp, selected_runtyp_flag)
             lircset%endpoint_relax = .true.
 
          case ('--lirc-rmsd-end')
             ! Threshold of the endpoint attribution: the Kabsch aligned RMSD
             ! between the endpoint and its relaxed minimum has to be below this
             ! value (`endpoint_reached`, PLAN section 6.5)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-rmsd-end', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3609,11 +3639,11 @@ contains
 
          case ('--lirc-hessian')
             ! Hessian backend of the IRC (initial Hessian and recalculations)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-hessian', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_hessian_source_known(sec)) then
-                  lircset%hessian_source = sec
+                  lircset%hessian_source = landscape_lowercase(sec)
                else
                   call env%error("Unknown landscape Hessian source '"//sec//"'", source)
                end if
@@ -3623,7 +3653,7 @@ contains
 
          case ('--lirc-hessian-file')
             ! File read by `--lirc-hessian file`
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-hessian-file', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                lircset%hessian_file = sec
@@ -3633,7 +3663,7 @@ contains
 
          case ('--lirc-step-hess')
             ! Finite difference step of the numerical Hessian (bohr)
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-step-hess', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3648,7 +3678,7 @@ contains
 
          case ('--lirc-sccacc')
             ! SCC accuracy of the displaced single points of the Hessian
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-sccacc', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3663,10 +3693,10 @@ contains
 
          case ('--lirc-restart')
             ! Wavefunction restart policy of the engine
-            if (set%runtyp /= p_run_lirc) call set_runtyp('lirc')
+            call select_runtyp(env, 'lirc', '--lirc-restart', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
-               select case(sec)
+               select case (landscape_lowercase(sec))
                case('off')
                   lircset%engine%restart_mode = p_landscape_restart_off
                case('pin')
@@ -3684,15 +3714,15 @@ contains
             ! Landscape suite: harmonic frequencies and thermochemistry
             ! (src/landscape/vib); the Hessian backend and the thermochemical
             ! parameters are set by the dedicated `--lvib-*` flags below.
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib', selected_runtyp, selected_runtyp_flag)
 
          case ('--lvib-hessian')
             ! Hessian backend of the frequency task
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-hessian', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (landscape_hessian_source_known(sec)) then
-                  lvset%hessian_source = sec
+                  lvset%hessian_source = landscape_lowercase(sec)
                else
                   call env%error("Unknown landscape Hessian source '"//sec//"'", source)
                end if
@@ -3703,7 +3733,7 @@ contains
          case ('--lvib-hessian-file')
             ! File read by `--lvib-hessian file` (TURBOMOLE layout, the
             ! `hessian` file of a preceding run)
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-hessian-file', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                lvset%hessian_file = sec
@@ -3713,7 +3743,7 @@ contains
 
          case ('--lvib-step')
             ! Finite difference step of the numerical Hessian (bohr)
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-step', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3728,7 +3758,7 @@ contains
 
          case ('--lvib-sccacc')
             ! SCC accuracy of the displaced single points of the Hessian
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-sccacc', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3745,17 +3775,17 @@ contains
             ! Request the ODLR approximation; no provider implements it, so
             ! the task reports the unsupported request instead of silently
             ! returning a full dense Hessian
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-odlr', selected_runtyp, selected_runtyp_flag)
             lvset%engine%odlr = .true.
 
          case ('--lvib-no-project')
             ! Keep the translations and rotations in the Hessian
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-no-project', selected_runtyp, selected_runtyp_flag)
             lvset%project_tr = .false.
 
          case ('--lvib-temp')
             ! Temperature of the thermodynamic table (kelvin)
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-temp', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3773,7 +3803,7 @@ contains
 
          case ('--lvib-rotor-cutoff')
             ! Rotor cutoff of the quasi-RRHO entropy treatment (cm^-1)
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-rotor-cutoff', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3790,7 +3820,7 @@ contains
          case ('--lvib-imag-cutoff')
             ! Imaginary frequency cutoff (cm^-1); needs the minus sign, so the
             ! parser has to be told that the value belongs to the flag
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-imag-cutoff', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3806,7 +3836,7 @@ contains
 
          case ('--lvib-freq-scal')
             ! Frequency scaling factor of the thermochemistry
-            if (set%runtyp /= p_run_lvib) call set_runtyp('lvib')
+            call select_runtyp(env, 'lvib', '--lvib-freq-scal', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
@@ -3822,7 +3852,7 @@ contains
 
          case ('--lopt-hessian-file')
             ! File read by `--lopt-hessian file`
-            if (set%runtyp /= p_run_lopt) call set_runtyp('lopt')
+            call select_runtyp(env, 'lopt', '--lopt-hessian-file', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                lset%hessian_file = sec
@@ -3831,7 +3861,7 @@ contains
             end if
 
          case ('--metadyn')
-            call set_runtyp('md')
+            call select_runtyp(env, 'md', '--metadyn', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_metadyn(env, 'save', sec)
@@ -3839,7 +3869,7 @@ contains
             call set_metadyn(env, 'static', 'false')
 
          case ('--metaopt')
-            call set_runtyp('metaopt')
+            call select_runtyp(env, 'metaopt', '--metaopt', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
@@ -3875,6 +3905,25 @@ contains
          call args%nextFlag(flag)
       end do
 
+      ! Unknown flags.  They stay a warning, or become an error when `--strict`
+      ! was given - the option used to be accepted silently, because the
+      ! message is an `env%warning` and `env%strict` is only set after the
+      ! parsing loop (`xtbMain`).  The report happens here and not inside the
+      ! loop so that the decision does not depend on the position of `--strict`
+      ! on the command line (CLI redesign section 17.5 5a).
+      if (unknown_count > 0) then
+         if (unknown_count == 1) then
+            message = "Unknown option '"//unknown_flags//"' provided"
+         else
+            message = "Unknown options '"//unknown_flags//"' provided"
+         end if
+         if (strict) then
+            call env%error(message, source)
+         else
+            call env%warning(message, source)
+         end if
+      end if
+
       ! The step sizes are given on the command line in angstrom (distance) or
       ! degree (angle/dihedral) and converted once, after every flag has been
       ! parsed: this removes the dependency on the order of `--lscan-coord`
@@ -3889,6 +3938,69 @@ contains
       end do
 
    end subroutine parseArguments
+
+!> Select a run type from one command line flag.
+!>
+!> `set_runtyp` ("src/set_module.f90") accepts a run type only once and reports
+!> a second call into the never printed `persistentEnv`, so conflicting run
+!> types used to be dropped without any message ("--lopt --lscan" ran the
+!> first one, "--lts --lopt-engine bfgs" ignored the sub-option).  This wrapper
+!> keeps `selected_typ` (the run type of the first request, empty before the
+!> first one) and `selected_flag` (the flag that asked for it) as parser state
+!> and turns a request for a *different* run type into an error that names both
+!> flags.  A repeated request of the same run type is a no-op because the task
+!> sub-options (`--lopt-engine`, `--lscan-method`, ...) select their own run
+!> type.
+!>
+!> `apply = .false.` only records the choice.  `--raman` selects `hess` through
+!> `set_elprop` (`src/set_module.f90`), which calls `set_runtyp` itself; a
+!> second call from here would hit the run type lock and report it.  The
+!> `--raman` path therefore calls `set_runtyp` exactly once, as it always did,
+!> while the conflict detection sees the choice (review finding M1 of
+!> `docs/_simplify-recon/20-stage1-review.md`).
+!>
+!> The state is passed in and out explicitly instead of living in a `save`
+!> variable: a hidden lock is exactly the defect this wrapper works around, and
+!> it would survive the next call of the parser in the same process.
+subroutine select_runtyp(env, typ, flag, selected_typ, selected_flag, apply)
+
+   !> Name of error producer
+   character(len=*), parameter :: source = 'prog_main_select_runtyp'
+
+   !> Calculation environment for the conflict report
+   type(TEnvironment), intent(inout) :: env
+
+   !> Internal run type name as understood by `set_runtyp`
+   character(len=*), intent(in) :: typ
+
+   !> Command line flag that requests this run type
+   character(len=*), intent(in) :: flag
+
+   !> Run type of the first request, empty until the first request
+   character(len=:), allocatable, intent(inout) :: selected_typ
+
+   !> Flag of the first request
+   character(len=:), allocatable, intent(inout) :: selected_flag
+
+   !> Apply the run type through `set_runtyp`; `.false.` only records it
+   logical, intent(in), optional :: apply
+
+   logical :: do_apply
+
+   do_apply = .true.
+   if (present(apply)) do_apply = apply
+
+   if (.not. allocated(selected_typ)) then
+      if (do_apply) call set_runtyp(typ)
+      selected_typ = typ
+      selected_flag = flag
+   else if (selected_typ /= typ) then
+      call env%error("run type conflict: "//selected_flag//" already selected the '"// &
+         & selected_typ//"' run type, "//flag//" would select '"//typ// &
+         & "'; only one run type can run (use --ohess, or run two jobs)", source)
+   end if
+
+end subroutine select_runtyp
 
 !> Read up to four 1-based atom indices from a comma or blank separated list.
 !>

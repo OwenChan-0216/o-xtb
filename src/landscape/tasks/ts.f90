@@ -80,9 +80,10 @@ module xtb_landscape_tasks_ts
    use xtb_type_calculator, only : TCalculator
    use xtb_landscape_settings, only : landscape_ts_settings, landscape_vib_settings, &
       & landscape_opt_settings, landscape_engine_control, landscape_restart_name, &
-      & landscape_ts_method_name, p_landscape_ts_dimer, p_landscape_ts_neb, &
+      & landscape_ts_method_name, p_landscape_ts_prfo, p_landscape_ts_bprfo, &
+      & p_landscape_ts_dimer, p_landscape_ts_neb, &
       & p_landscape_ts_cineb, p_landscape_ts_autoneb, landscape_ts_method_is_band, &
-      & landscape_ts_method_is_string, landscape_log_failed
+      & landscape_ts_method_is_string, landscape_log_failed, landscape_lowercase
    use xtb_landscape_results, only : landscape_result, landscape_vib_result
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack, angstrom_to_bohr
    use xtb_landscape_engine, only : landscape_engine, new_landscape_engine, &
@@ -111,6 +112,8 @@ module xtb_landscape_tasks_ts
    public :: landscape_ts
    public :: landscape_ts_curvature_band_hit
    public :: landscape_ts_curvature_band_cm1
+   public :: landscape_ts_can_tighten
+   public :: confirm_saddle   ! exposed for the curvature-band wiring test
    public :: landscape_ts_count_frames
    public :: landscape_ts_read_path
 
@@ -178,6 +181,21 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
          ! reported with the run so the displacement is visible in the log.
          write(env%unit, '(1x,a,f12.6,a)') "escape from a minimum:      ", &
             & settings%escape_step, " bohr along the lowest internal mode"
+      end if
+      ! D7 of the CLI redesign section 8.3: the escape walk moves the **input
+      ! geometry** before the search, so the active default is echoed.  The
+      ! notice is suppressed when `--lts-escape-step` named the length and is
+      ! only printed for the two methods that use the escape walk
+      ! (`xtb_landscape_saddle_prfo::escape_from_minimum` returns for every
+      ! other method).
+      if ((settings%method == p_landscape_ts_prfo .or. &
+            & settings%method == p_landscape_ts_bprfo) .and. &
+            & .not. settings%escape_step_was_set) then
+         write(env%unit, '(a,f4.2,a)') "[NOTICE] --lts-escape-step default ", &
+            & settings%escape_step, " bohr moves the input geometry off a "//&
+            & "minimum"
+         write(env%unit, '(a)') &
+            & "         pass --lts-escape-step 0 to disable the escape walk"
       end if
       if (settings%method == p_landscape_ts_dimer) then
          write(env%unit, '(1x,a,es13.6,a)') "dimer separation:         ", &
@@ -430,7 +448,7 @@ subroutine confirm_saddle(env, mol, chk, engine, settings, result)
    ! the finite differences once and re-decide the sign.
    band_hit = landscape_ts_curvature_band_hit(vib%freq, vib%n_zero, &
       & landscape_ts_curvature_band_cm1)
-   can_tighten = trim(settings%hessian_source) == 'numerical'
+   can_tighten = landscape_ts_can_tighten(settings%hessian_source)
    step_used = engine%ctrl%hess_step
    acc_used = engine%ctrl%hess_acc
    tightened = .false.
@@ -596,6 +614,31 @@ pure function landscape_ts_curvature_band_hit(freq, n_zero, band) result(hit)
    end do
 
 end function landscape_ts_curvature_band_hit
+
+!> True if a Hessian source can be recomputed with tighter finite differences.
+!>
+!> The curvature band re-decision of `confirm_saddle` rebuilds the Hessian with
+!> `step = 2e-3` bohr and `sccacc = 0.1`.  Those two parameters belong to the
+!> numerical provider alone: the model Hessian (Lindh-D2) has no displacement
+!> grid and the `file` provider returns one fixed matrix, so their curvature
+!> sign stays resolution limited and the caller reports that instead of
+!> pretending to re-decide.  The name is matched through
+!> `landscape_lowercase`, like every other `hessian_source` consumer: the CLI
+!> stores one spelling but a library caller may pass any (`--lts-hessian
+!> NUMERICAL` used to be accepted by the validator and then silently skip the
+!> tightening).
+!>
+!> The predicate is public because it is the gate of that behaviour and is
+!> pinned by a unit test, exactly like `landscape_ts_curvature_band_hit`.
+pure function landscape_ts_can_tighten(hessian_source) result(can_tighten)
+   !> Value of the `hessian_source` setting
+   character(len=*), intent(in) :: hessian_source
+   !> True if the source supports a tighter recomputation
+   logical :: can_tighten
+
+   can_tighten = landscape_lowercase(hessian_source) == 'numerical'
+
+end function landscape_ts_can_tighten
 
 !> Write `xtbts.xyz` and `xtbts.log`.
 !>

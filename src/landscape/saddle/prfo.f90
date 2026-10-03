@@ -61,7 +61,8 @@ module xtb_landscape_saddle_prfo
    use xtb_type_environment, only : TEnvironment
    use xtb_landscape_settings, only : landscape_ts_settings, &
       & p_landscape_ts_prfo, p_landscape_ts_bprfo, &
-      & p_landscape_hess_update_none, landscape_convergence_measures
+      & p_landscape_hess_update_none, landscape_convergence_measures, &
+      & landscape_lowercase
    use xtb_landscape_results, only : landscape_result, landscape_step, &
       & landscape_result_add_step, landscape_result_trim, landscape_report_add, &
       & landscape_print_step
@@ -952,7 +953,9 @@ contains
       integer :: imax
 
       fail_ = .false.
-      if (trim(settings_%init_mode) == 'force') then
+      ! `landscape_ts_init_mode_known` accepts any spelling, so the gate that
+      ! turns the accepted name into a transition vector has to as well.
+      if (landscape_lowercase(settings_%init_mode) == 'force') then
          imax = maxloc(abs(g_), dim=1)
          direction = 0.0_wp
          direction(imax) = 1.0_wp

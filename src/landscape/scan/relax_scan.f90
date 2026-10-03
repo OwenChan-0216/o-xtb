@@ -64,7 +64,7 @@ module xtb_landscape_scan_relax
       & p_landscape_scan_coord_dihedral, landscape_scan_coord_known, &
       & landscape_scan_coord_natoms, landscape_scan_coord_name, &
       & landscape_scan_mode_known, landscape_opt_algorithm_from_name, &
-      & landscape_missing_value, landscape_value_present
+      & landscape_lowercase, landscape_missing_value, landscape_value_present
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack
    use xtb_landscape_optimize, only : landscape_optimize_model
@@ -474,7 +474,8 @@ function landscape_scan_check(env, settings, nat) result(ok)
 
    integer :: i, j, natoms, iatom
    character(len=32) :: buffer
-   character(len=:), allocatable :: cname
+   character(len=8) :: step_unit
+   character(len=:), allocatable :: cname, flag_suffix, atom_list
 
    ok = .true.
 
@@ -496,7 +497,7 @@ function landscape_scan_check(env, settings, nat) result(ok)
       ok = .false.
       return
    end if
-   if (trim(settings%mode) == 'relaxed') then
+   if (landscape_lowercase(settings%mode) == 'relaxed') then
       if (landscape_opt_algorithm_from_name(settings%method) == 0) then
          call env%error("unknown inner minimiser '"//trim(settings%method)//&
             & "' for a relaxed scan", source)
@@ -525,12 +526,30 @@ function landscape_scan_check(env, settings, nat) result(ok)
       end if
       cname = landscape_scan_coord_name(settings%coord(i)%ctype)
       natoms = landscape_scan_coord_natoms(settings%coord(i)%ctype)
+      ! The messages point at the flag the user really has to pass (CLI
+      ! redesign section 8.2).  The second coordinate carries the `2` suffixed
+      ! flags (`--lscan-atoms2`, `--lscan-step2`, `--lscan-nstep2`), and the
+      ! unit of the step is angstrom for a distance but degree for an angle or
+      ! a dihedral (the command line converts both to atomic units).
+      flag_suffix = ""
+      if (i == 2) flag_suffix = "2"
+      atom_list = "1"
+      do j = 2, natoms
+         atom_list = atom_list//","//nat_to_string(j)
+      end do
+      if (settings%coord(i)%ctype == p_landscape_scan_coord_distance) then
+         step_unit = "angstrom"
+      else
+         step_unit = "degree"
+      end if
       do j = 1, natoms
          iatom = settings%coord(i)%atoms(j)
          if (iatom < 1 .or. iatom > nat) then
             write(buffer, '(i0)') iatom
-            call env%error("atom index "//trim(buffer)//" of the "//cname//&
-               & " coordinate is outside 1.."//nat_to_string(nat), source)
+            call env%error("the "//cname//" coordinate needs --lscan-atoms"//&
+               & flag_suffix//" "//atom_list//" (atom indices are 1-based, "//&
+               & "1.."//nat_to_string(nat)//"); index "//trim(buffer)//&
+               & " is invalid", source)
             ok = .false.
             return
          end if
@@ -548,13 +567,14 @@ function landscape_scan_check(env, settings, nat) result(ok)
       if (settings%coord(i)%nstep < 1) then
          call env%error("coordinate "//one_digit(i)//" has nstep = "//&
             & nat_to_string(settings%coord(i)%nstep)//&
-            & ", at least one step is required", source)
+            & "; set it with --lscan-nstep"//flag_suffix//" <n>", source)
          ok = .false.
          return
       end if
       if (settings%coord(i)%step == 0.0_wp) then
-         call env%error("coordinate "//one_digit(i)//" has a zero step size", &
-            & source)
+         call env%error("coordinate "//one_digit(i)//" has a zero step "//&
+            & "size; set it with --lscan-step"//flag_suffix//" <value> ("//&
+            & trim(step_unit)//")", source)
          ok = .false.
          return
       end if

@@ -129,7 +129,8 @@ module xtb_landscape_saddle_dimer
    use xtb_mctc_accuracy, only : wp
    use xtb_type_environment, only : TEnvironment
    use xtb_landscape_settings, only : landscape_ts_settings, &
-      & landscape_convergence_measures, landscape_value_present
+      & landscape_convergence_measures, landscape_value_present, &
+      & landscape_lowercase
    use xtb_landscape_results, only : landscape_result, landscape_step, &
       & landscape_result_add_step, landscape_result_trim, landscape_report_add, &
       & landscape_print_step, p_landscape_bound_step_max
@@ -422,7 +423,9 @@ subroutine landscape_dimer_initial_axis(env, gradient, n_init, seed, axis, fail)
       return
    end if
 
-   select case (trim(n_init))
+   ! `landscape_ts_ninit_known` accepts any spelling, so the selection has to
+   ! as well; the rejection message below echoes the name as it was given.
+   select case (landscape_lowercase(n_init))
    case ('force')
       imax = maxloc(abs(gradient), dim=1)
       axis(imax) = 1.0_wp

@@ -67,6 +67,7 @@ subroutine collect_landscape_optimize_xtb(testsuite)
       new_unittest("water-gfn2-determinism", test_water_determinism), &
       new_unittest("gfn2-singlepoint-determinism", test_gfn2_determinism), &
       new_unittest("model-initial-hessian", test_model_initial_hessian), &
+      new_unittest("model-source-case", test_model_source_case), &
       new_unittest("hessian-cost-accounting", test_hessian_cost_accounting), &
       new_unittest("scf-non-convergence", test_scf_non_convergence), &
       new_unittest("missing-geometry", test_missing_geometry) &
@@ -324,6 +325,49 @@ subroutine test_model_initial_hessian(error)
 
 end subroutine test_model_initial_hessian
 
+!> The model Hessian seed is selected for any spelling of the source name.
+!>
+!> `landscape_hessian_source_known` and the provider factory accept `MODEL`
+!> since the CLI redesign section 17.5 5b, so the initial guess of the BFGS
+!> driver has to accept it too.  The literal comparison against `model` seeded
+!> the identity matrix instead (review finding M2 of
+!> `docs/_simplify-recon/20-stage1-review.md`).
+!>
+!> The stretched fixture is what makes the seed visible: on the module fixture
+!> both seeds converge in 6 steps with 7 single points, so the branch cannot be
+!> observed there (measured).
+subroutine test_model_source_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   integer :: steps_lower, steps_upper, cost_lower, cost_upper
+   logical :: ok_lower, ok_upper
+   real(wp), parameter :: stretched(3, nat) = reshape([ &
+      &  0.0_wp,  0.0_wp,  0.0_wp, &
+      &  0.0_wp,  3.6_wp,  0.0_wp, &
+      &  0.0_wp, -2.0_wp,  3.2_wp], [3, nat])
+
+   call minimize_water(p_landscape_opt_bfgs, 'model', steps_lower, ok_lower, &
+      & cost_lower, stretched)
+   call minimize_water(p_landscape_opt_bfgs, 'MODEL', steps_upper, ok_upper, &
+      & cost_upper, stretched)
+
+   write(stdout, '(1x,a,i0,a,i0)') "landscape model source: bfgs model seed ", &
+      & steps_lower, " steps / ", cost_lower, " single points"
+   write(stdout, '(1x,a,i0,a,i0)') "landscape model source: bfgs MODEL seed ", &
+      & steps_upper, " steps / ", cost_upper, " single points"
+
+   call check(error, ok_lower, "bfgs with a model seed did not converge")
+   if (allocated(error)) return
+   call check(error, ok_upper, &
+      & "bfgs with an upper case model source did not converge")
+   if (allocated(error)) return
+   call check(error, steps_upper, steps_lower, &
+      & message="the upper case model source took a different path")
+   if (allocated(error)) return
+   call check(error, cost_upper, cost_lower, &
+      & message="the upper case model source used the identity seed")
+
+end subroutine test_model_source_case
+
 !> An unconverged SCC must never be handed back as a usable energy/gradient:
 !> the engine refuses the result (and the task escalates it to an error).
 !>
@@ -405,7 +449,7 @@ subroutine test_missing_geometry(error)
 end subroutine test_missing_geometry
 
 !> Minimise the distorted water with one algorithm and Hessian source.
-subroutine minimize_water(algorithm, hessian_source, nsteps, converged, ncost)
+subroutine minimize_water(algorithm, hessian_source, nsteps, converged, ncost, start)
    !> Minimisation algorithm
    integer, intent(in) :: algorithm
    !> Value of `hessian_source`
@@ -416,6 +460,8 @@ subroutine minimize_water(algorithm, hessian_source, nsteps, converged, ncost)
    logical, intent(out) :: converged
    !> Number of engine single points (including the Hessian single points)
    integer, intent(out), optional :: ncost
+   !> Starting geometry (bohr), the module fixture by default
+   real(wp), intent(in), optional :: start(3, nat)
 
    type(TEnvironment) :: env
    type(TMolecule) :: mol
@@ -424,7 +470,11 @@ subroutine minimize_water(algorithm, hessian_source, nsteps, converged, ncost)
    type(landscape_opt_settings) :: set
    type(landscape_result) :: result
 
-   call setup(env, mol, chk, calc)
+   if (present(start)) then
+      call setup(env, mol, chk, calc, start)
+   else
+      call setup(env, mol, chk, calc)
+   end if
    set = landscape_opt_settings()
    set%algorithm = algorithm
    set%hessian_source = hessian_source
@@ -494,14 +544,20 @@ subroutine test_hessian_cost_accounting(error)
 end subroutine test_hessian_cost_accounting
 
 !> Create a fresh environment, molecule, wavefunction and GFN2 calculator.
-subroutine setup(env, mol, chk, calc)
+subroutine setup(env, mol, chk, calc, start)
    type(TEnvironment), intent(out) :: env
    type(TMolecule), intent(out) :: mol
    type(TRestart), intent(out) :: chk
    type(TxTBCalculator), intent(out) :: calc
+   !> Starting geometry (bohr), the distorted water of this module by default
+   real(wp), intent(in), optional :: start(3, nat)
 
    call init(env)
-   call init(mol, sym, xyz)
+   if (present(start)) then
+      call init(mol, sym, start)
+   else
+      call init(mol, sym, xyz)
+   end if
    call newXTBCalculator(env, mol, calc, method=2)
    call newWavefunction(env, mol, calc, chk)
 

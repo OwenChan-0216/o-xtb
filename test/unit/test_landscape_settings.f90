@@ -42,6 +42,7 @@ subroutine collect_landscape_settings(testsuite)
       new_unittest("identifier-names", test_identifier_names), &
       new_unittest("algorithm-lookup", test_algorithm_lookup), &
       new_unittest("level-lookup", test_level_lookup), &
+      new_unittest("enum-case", test_enum_case), &
       new_unittest("restart-names", test_restart_names) &
       ]
 
@@ -351,7 +352,9 @@ subroutine test_algorithm_lookup(error)
    end do
    call check(error, landscape_opt_algorithm_from_name("unknown"), 0)
    if (allocated(error)) return
-   call check(error, landscape_opt_algorithm_from_name("LBFGS"), 0)
+   ! names are matched case insensitively, see `enum-case`
+   call check(error, landscape_opt_algorithm_from_name("LBFGS"), &
+      & p_landscape_opt_lbfgs)
 
 end subroutine test_algorithm_lookup
 
@@ -374,6 +377,49 @@ subroutine test_level_lookup(error)
    call check(error, .not. landscape_conv_level_known(""))
 
 end subroutine test_level_lookup
+
+!> Every enumeration name is matched case insensitively (CLI redesign
+!> section 7.5).  The suffix `-lookup` cases above cover the lower case
+!> spelling; this case pins the upper case one for every entry point the
+!> command line reaches, including the two that *store* a name rather than an
+!> identifier.
+subroutine test_enum_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(landscape_opt_settings) :: upper
+   type(landscape_opt_settings) :: lower
+
+   call check(error, landscape_opt_algorithm_from_name("BFGS"), &
+      & p_landscape_opt_bfgs)
+   if (allocated(error)) return
+   call check(error, landscape_irc_method_from_name("LQA"), p_landscape_irc_lqa)
+   if (allocated(error)) return
+   call check(error, landscape_ts_method_from_name("PRFO"), p_landscape_ts_prfo)
+   if (allocated(error)) return
+   call check(error, landscape_scan_coord_from_name("DIHEDRAL"), &
+      & p_landscape_scan_coord_dihedral)
+   if (allocated(error)) return
+   call check(error, landscape_conv_level_known("Vtight"))
+   if (allocated(error)) return
+   call check(error, landscape_scan_mode_known("RIGID"))
+   if (allocated(error)) return
+   call check(error, landscape_ts_init_mode_known("FORCE"))
+   if (allocated(error)) return
+   call check(error, landscape_ts_ninit_known("Random"))
+   if (allocated(error)) return
+   ! the level setter has to normalise the name as well, otherwise a name that
+   ! passed `landscape_conv_level_known` would silently leave the thresholds
+   ! at their default
+   call upper%set_conv_level("TIGHT")
+   call lower%set_conv_level("tight")
+   call check(error, upper%g_max, lower%g_max)
+   if (allocated(error)) return
+   call check(error, upper%g_rms, lower%g_rms)
+   if (allocated(error)) return
+   call check(error, upper%d_max, lower%d_max)
+   if (allocated(error)) return
+   call check(error, upper%d_rms, lower%d_rms)
+
+end subroutine test_enum_case
 
 !> Human readable names of the engine restart policies
 subroutine test_restart_names(error)

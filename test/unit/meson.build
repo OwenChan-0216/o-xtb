@@ -366,15 +366,90 @@ test('landscape scan coord unknown', python, env: xtbenv, args: [
   landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
   'Unknown landscape scan coordinate', '--gfn', '2', '--lscan', '--lscan-coord', 'bogus',
 ])
+# the mandatory scan options are named by the flag the caller has to pass
+# (CLI redesign sections 8.2 and 17.2): the patterns are the flag names, not the
+# old value messages, and the second coordinate is covered by its `2` suffixed
+# spelling
+# (mirrors `xtb/landscape-scan-nstep-missing` and `xtb/landscape-scan-atom-range`)
 test('landscape scan nstep missing', python, env: xtbenv, args: [
   landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
-  'at least one step is required', '--gfn', '2', '--lscan', '--lscan-coord', 'distance',
+  'set it with --lscan-nstep', '--gfn', '2', '--lscan', '--lscan-coord', 'distance',
   '--lscan-atoms', '1,2', '--lscan-step', '0.1', '--lscan-nstep', '0',
 ])
 test('landscape scan atom range', python, env: xtbenv, args: [
   landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
-  'outside 1..3', '--gfn', '2', '--lscan', '--lscan-coord', 'distance',
+  'needs --lscan-atoms', '--gfn', '2', '--lscan', '--lscan-coord', 'distance',
   '--lscan-atoms', '1,9', '--lscan-step', '0.1', '--lscan-nstep', '2',
+])
+# mirrors `xtb/landscape-scan-step-zero` and `xtb/landscape-scan-coord2-flag`
+test('landscape scan step zero', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  '--lscan-step <value> [(]degree[)]', '--gfn', '2', '--lscan', '--lscan-coord', 'angle',
+  '--lscan-atoms', '1,2,3', '--lscan-step', '0', '--lscan-nstep', '2',
+])
+test('landscape scan coord2 flag', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-error',
+  'set it with --lscan-nstep2', '--gfn', '2', '--lscan', '--lscan-ndim', '2', '--lscan-coord', 'distance',
+  '--lscan-atoms', '1,2', '--lscan-step', '0.1', '--lscan-nstep', '2', '--lscan-coord2', 'distance',
+  '--lscan-atoms2', '2,3', '--lscan-step2', '0.1', '--lscan-nstep2', '0',
+])
+
+# Conflicting run types are an error instead of a silent "the first flag wins"
+# (mirrors `xtb/landscape-runtype-conflict` and its four siblings; the pattern
+# is the rejected flag, so the check fails when the conflict detection or the
+# flag names regress).
+test('landscape runtype conflict', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-conflict',
+  '--lscan would select',
+  '--gfn', '2', '--lopt', '--lscan',
+])
+test('landscape runtype suboption conflict', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-conflict',
+  '--lopt-engine would select',
+  '--gfn', '2', '--lts', '--lopt-engine', 'bfgs',
+])
+test('landscape runtype conflict reversed', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-conflict',
+  '--lopt would select',
+  '--gfn', '2', '--lscan', '--lopt',
+])
+test('landscape runtype lts lirc', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-conflict',
+  '--lirc would select',
+  '--gfn', '2', '--lts', '--lirc',
+])
+test('landscape opt hess conflict', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-conflict',
+  '--hess would select',
+  '--gfn', '2', '--opt', '--hess',
+])
+test('landscape vib temp conflict', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-conflict',
+  '--lvib-temp would select',
+  '--gfn', '2', '--hess', '--lvib-temp', '400',
+])
+# `--raman` selects the `hess` run type inside `set_elprop`, so it used to
+# bypass the conflict detection (mirrors `xtb/landscape-raman-conflict`,
+# review finding M1 of `20-stage1-review.md`)
+test('landscape raman conflict', python, env: xtbenv, args: [
+  landscape_cli_check, 'error', xtb_exe, h2o_xyz, landscape_cli_dir / 'landscape-cli-conflict',
+  '--lopt would select',
+  '--gfn', '2', '--raman', '0.5', '1000', '--lopt',
+])
+
+# `--strict` covers the parser itself and an unknown flag stays a warning
+# without it (mirrors `xtb/landscape-strict-unknown`)
+test('landscape strict unknown', python, env: xtbenv, args: [
+  landscape_cli_check, 'strictunknown', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-strict',
+])
+
+# The suite enumeration names are matched case insensitively (mirrors
+# `xtb/landscape-enum-case`); the byte comparison of the result files needs a
+# fixed thread count (AGENTS.md section 6.1)
+test('landscape enum case', python, env: landscape_env, args: [
+  landscape_cli_check, 'enumcase', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-enum-case', hcn_xyz,
 ])
 
 # CLI level smoke test of the `--lts` run type.  The input is a bent HCN, a
@@ -392,6 +467,40 @@ run_command(
 test('landscape ts prfo', python, env: landscape_env, args: [
   landscape_cli_check, 'ts', xtb_exe, hcn_xyz,
   landscape_cli_dir / 'landscape-cli-ts',
+])
+# The dangerous builtin defaults are echoed as a `[NOTICE]` line and the
+# explicit flag silences the notice (CLI redesign sections 8.3 and 17.3);
+# mirrors `xtb/landscape-fc-echo`, `xtb/landscape-lirc-default-echo` and
+# `xtb/landscape-lts-escape-echo`.  The thread count is fixed because the scan
+# case runs the engine (AGENTS.md section 6.8).
+test('landscape fc echo', python, env: landscape_env, args: [
+  landscape_cli_check, 'echo', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-fc-echo', 'fc',
+])
+test('landscape lirc default echo', python, env: landscape_env, args: [
+  landscape_cli_check, 'echo', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-lirc-echo', 'lirc',
+])
+test('landscape lts escape echo', python, env: landscape_env, args: [
+  landscape_cli_check, 'echo', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-lts-echo', 'lts',
+])
+# D3 of section 8.3: `--lopt` defaults to `lbfgs`, the native `--opt` runs
+# ANCopt, so the active engine is echoed; naming `--lopt-engine` suppresses
+# the notice (mirrors `xtb/landscape-lopt-engine-echo`, review finding H1).
+test('landscape lopt engine echo', python, env: landscape_env, args: [
+  landscape_cli_check, 'echo', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-lopt-echo', 'lopt',
+])
+# `--help` and the parser must agree in both directions (mirrors
+# `xtb/landscape-help-coverage`); the script reads the sources, so it needs no
+# environment and no engine.
+landscape_help_check = files('landscape_help_check.py')
+test('landscape help coverage', python, args: [
+  landscape_help_check,
+  meson.project_source_root() / 'src' / 'prog' / 'main.F90',
+  meson.project_source_root() / 'src' / 'xhelp.f90',
+  landscape_cli_dir / 'landscape-help-coverage',
 ])
 # the CLI `--etemp` must reach the transition state engine (the `main.F90`
 # sync guard of M4 hard constraint 1; mirrors `xtb/landscape-ts-etemp`)

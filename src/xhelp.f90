@@ -287,11 +287,11 @@ subroutine help(iunit)
    "",&
    "--lopt-engine NAME",&
    "    minimisation algorithm of the landscape suite, one of sd, cg, lbfgs,", &
-   "    bfgs, diis or rfo (default lbfgs)",&
+   "    bfgs, diis or rfo (default lbfgs).  The name is not case-sensitive", &
    "",&
    "--lopt-level LEVEL",&
    "    convergence level of the landscape suite, one of superloose, loose,", &
-   "    normal (default), tight or vtight",&
+   "    normal (default), tight or vtight.  The level name is not case-sensitive", &
    "",&
    "--lopt-hessian SOURCE",&
    "    Hessian backend of the landscape suite (minimisation and Hessian", &
@@ -308,6 +308,7 @@ subroutine help(iunit)
    "",&
    "--lscan-coord TYPE",&
    "    type of the first scanned coordinate, one of distance, angle or dihedral",&
+   "    (the type name is not case-sensitive)", &
    "",&
    "--lscan-atoms LIST",&
    "    1-based atom indices of the first coordinate, comma or blank separated", &
@@ -325,11 +326,11 @@ subroutine help(iunit)
    "    scan to a two-dimensional Cartesian product grid",&
    "",&
    "--lscan-mode MODE",&
-   "    scan mode, relaxed (default) or rigid",&
+   "    scan mode, relaxed (default) or rigid (not case-sensitive)", &
    "",&
    "--lscan-method NAME",&
    "    inner minimiser of a relaxed scan, one of sd, cg, lbfgs (default), bfgs,", &
-   "    diis or rfo",&
+   "    diis or rfo.  The name is not case-sensitive", &
    "",&
    "--lscan-level LEVEL",&
    "    convergence level of the inner minimisation, one of superloose, loose,", &
@@ -373,7 +374,8 @@ subroutine help(iunit)
    "--lts-method NAME",&
    "    search method, one of prfo (default), bprfo (restricted step), dimer", &
    "    (first derivatives only, no Hessian), neb, cineb (climbing image NEB),", &
-   "    autoneb (incremental path building) or string / gsm (growing string)", &
+   "    autoneb (incremental path building) or string / gsm (growing string).", &
+   "    The method name is not case-sensitive", &
    "",&
    "--lts-trust VALUE",&
    "    initial trust radius of the step in bohr (default 0.37795)", &
@@ -558,7 +560,8 @@ subroutine help(iunit)
    "    most accurate and 1.98 E/g per point), lqa (Page-McIver analytic quadratic", &
    "    propagation, cheapest at 1.00 E/g), eulerpc (Euler predictor-corrector, use a", &
    "    step of 0.20 or less) or gs (Gonzalez-Schlegel sphere relaxation, compatible", &
-   "    reference; 16.9-20.3 E/g per point and the largest path deviation)", &
+   "    reference; 16.9-20.3 E/g per point and the largest path deviation).", &
+   "    The method name is not case-sensitive", &
    "",&
    "--lirc-step VALUE",&
    "    step length in bohr*amu^1/2 (mass weighted arc length, default 0.10; use 0.05", &

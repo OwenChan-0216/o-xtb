@@ -74,6 +74,7 @@ module xtb_landscape_settings
    public :: p_landscape_irc_eulerpc
    public :: landscape_irc_method_name, landscape_irc_method_from_name
    public :: landscape_irc_method_known
+   public :: landscape_lowercase
 
    !> Minimisation algorithm identifiers (`landscape_opt_settings%algorithm`)
    integer, parameter :: p_landscape_opt_sd = 1
@@ -425,6 +426,14 @@ module xtb_landscape_settings
    type, extends(landscape_settings) :: landscape_opt_settings
       !> Algorithm selector, one of `p_landscape_opt_*`
       integer :: algorithm = p_landscape_opt_lbfgs
+      !> True when `--lopt-engine` was given.
+      !>
+      !> The task echoes the builtin default `lbfgs` as a `[NOTICE]` line (CLI
+      !> redesign section 8.3, item D3): the native `--opt` runs ANCopt, so the
+      !> default engine of this task is not obvious to a user who knows the
+      !> native flag.  The notice is suppressed when the algorithm was named on
+      !> the command line, which is what this flag records.
+      logical :: algorithm_was_set = .false.
       !> Maximum displacement of a single macro step (bohr).  The RFO trust
       !> radius is additionally bounded by this value (`min(trust_max,
       !> max_displ)`), so a single step never exceeds it for any algorithm.
@@ -543,6 +552,13 @@ module xtb_landscape_settings
       real(wp) :: spring_expo = 2.0_wp
       !> Force constant of the constraint bias potential (hartree/bohr^2)
       real(wp) :: constraint_fc = 0.5_wp
+      !> True when `--lscan-fc` was given.
+      !>
+      !> The builtin default 0.5 is ten times the xtb scan force constant
+      !> `xtb_scanparam::fcconstr = 0.05`, so the task echoes it as a
+      !> `[NOTICE]` line (CLI redesign section 8.3, item D1); naming the flag on
+      !> the command line suppresses the notice (recorded here).
+      logical :: constraint_fc_was_set = .false.
       !> Write the scan log and the profile to disk
       logical :: write_files = .true.
       !> File name prefix of the secondary output files
@@ -720,6 +736,13 @@ module xtb_landscape_settings
       !> attempted when there is no significantly negative curvature at all;
       !> `0` disables it.
       real(wp) :: escape_step = 2.0e-1_wp
+      !> True when `--lts-escape-step` was given.
+      !>
+      !> The escape walk displaces the **input geometry** of a minimisation
+      !> start, so the task echoes the active default as a `[NOTICE]` line (CLI
+      !> redesign section 8.3, item D7); naming the flag on the command line
+      !> suppresses the notice (recorded here).
+      logical :: escape_step_was_set = .false.
       !> Half separation of the two dimer images (bohr), i.e. the distance of
       !> each image from the common midpoint.  This is the pysisyphus
       !> convention of PLAN section 5.3.6 (`1.8897e-2` bohr = 1e-2 Angstrom),
@@ -835,6 +858,14 @@ module xtb_landscape_settings
       !> M6 validation round measured it more accurate *and* 8.5x cheaper than
       !> `gs` (report 44 section 3.3), see the type comment above
       integer :: method = p_landscape_irc_hpc
+      !> True when `--lirc-method` was given.
+      !>
+      !> The default method is `hpc`, not the `gs` of the older documentation
+      !> (behaviour change of the M6 validation round), so the task echoes the
+      !> active default as a `[NOTICE]` line (CLI redesign section 8.3, item
+      !> D2); naming the flag on the command line suppresses the notice
+      !> (recorded here).
+      logical :: method_was_set = .false.
       !> Which negative mode defines the initial direction (1-based,
       !> 1 = most negative), the `target_mode` of the MAPLE reference
       integer :: target_mode = 1
@@ -1042,14 +1073,16 @@ end function landscape_settings_is_converged
 !> `extraloose`, `extratight`) are deliberately not accepted: PLAN section
 !> 5.3.1 rejects them because a one-to-one mapping to the ORCA levels would be
 !> misleading.  Unknown names leave the settings untouched, the caller is
-!> responsible for reporting the error.
+!> responsible for reporting the error.  The name is matched case insensitively,
+!> so that every name accepted by `landscape_conv_level_known` also sets the
+!> thresholds.
 subroutine landscape_settings_set_conv_level(self, level)
    !> Convergence thresholds to overwrite
    class(landscape_settings), intent(inout) :: self
    !> Level name
    character(len=*), intent(in) :: level
 
-   select case (level)
+   select case (landscape_lowercase(level))
    case ('superloose')
       self%g_max = 4.6e-3_wp
       self%g_rms = 3.0e-3_wp
@@ -1105,17 +1138,45 @@ pure function landscape_opt_algorithm_name(algorithm) result(name)
 
 end function landscape_opt_algorithm_name
 
+!> Lower case copy of an enumeration name, without the trailing blanks.
+!>
+!> Every name that reaches an enumeration is matched case insensitively (CLI
+!> redesign `docs/_simplify-recon/11-cli-redesign.md` section 7.5: `BFGS` has
+!> to mean the same as `bfgs`), so the reverse lookups below normalise their
+!> argument first.  Callers that *store* a name (`hessian_source`, `mode`,
+!> `init_mode`, `n_init`) normalise it with this function as well, so that the
+!> stored value and every comparison against it agree on one spelling.  The
+!> helper is `pure` because `landscape_scan_coord_from_name` is and
+!> `xtb_mctc_strings:lowercase` is not.
+pure function landscape_lowercase(name) result(lower)
+   !> Name as written by the user
+   character(len=*), intent(in) :: name
+   !> Lower case copy of `name`, trailing blanks removed
+   character(len=len_trim(name)) :: lower
+   integer :: i, code
+
+   lower = name(1:len_trim(name))
+   do i = 1, len(lower)
+      code = iachar(lower(i:i))
+      if (code >= iachar('A') .and. code <= iachar('Z')) then
+         lower(i:i) = achar(code + iachar('a') - iachar('A'))
+      end if
+   end do
+
+end function landscape_lowercase
+
 !> Reverse lookup of a minimisation algorithm identifier from its name.
 !>
 !> Returns 0 if the name is not known, which is not a valid algorithm
-!> identifier; the caller is responsible for reporting the error.
+!> identifier; the caller is responsible for reporting the error.  The name is
+!> matched case insensitively.
 function landscape_opt_algorithm_from_name(name) result(algorithm)
    !> Lower case algorithm name
    character(len=*), intent(in) :: name
    !> Algorithm identifier, 0 for an unknown name
    integer :: algorithm
 
-   select case (trim(name))
+   select case (landscape_lowercase(name))
    case ('sd')
       algorithm = p_landscape_opt_sd
    case ('cg')
@@ -1225,14 +1286,15 @@ end function landscape_irc_method_name
 !> Reverse lookup of an IRC integration method from its name.
 !>
 !> Returns 0 for an unknown name, which is not a valid method identifier; the
-!> caller is responsible for reporting the error.
+!> caller is responsible for reporting the error.  The name is matched case
+!> insensitively.
 function landscape_irc_method_from_name(name) result(method)
    !> Lower case method name
    character(len=*), intent(in) :: name
    !> Method identifier, 0 for an unknown name
    integer :: method
 
-   select case (trim(name))
+   select case (landscape_lowercase(name))
    case ('gs')
       method = p_landscape_irc_gs
    case ('hpc')
@@ -1291,14 +1353,15 @@ end function landscape_ts_method_name
 !> Reverse lookup of a transition state search method from its name.
 !>
 !> Returns 0 for an unknown name, which is not a valid method identifier; the
-!> caller is responsible for reporting the error.
+!> caller is responsible for reporting the error.  The name is matched case
+!> insensitively.
 function landscape_ts_method_from_name(name) result(method)
    !> Lower case method name
    character(len=*), intent(in) :: name
    !> Method identifier, 0 for an unknown name
    integer :: method
 
-   select case (trim(name))
+   select case (landscape_lowercase(name))
    case ('prfo')
       method = p_landscape_ts_prfo
    case ('bprfo')
@@ -1366,14 +1429,15 @@ pure function landscape_ts_method_is_string(method) result(is_string)
 
 end function landscape_ts_method_is_string
 
-!> True if `name` names a supported initial transition vector source.
+!> True if `name` names a supported initial transition vector source.  The
+!> name is matched case insensitively.
 function landscape_ts_init_mode_known(name) result(known)
    !> Init mode name
    character(len=*), intent(in) :: name
    !> True if the name is supported
    logical :: known
 
-   select case (trim(name))
+   select case (landscape_lowercase(name))
    case ('h0', 'force')
       known = .true.
    case default
@@ -1382,14 +1446,15 @@ function landscape_ts_init_mode_known(name) result(known)
 
 end function landscape_ts_init_mode_known
 
-!> True if `name` names a supported dimer initial axis source.
+!> True if `name` names a supported dimer initial axis source.  The name is
+!> matched case insensitively.
 function landscape_ts_ninit_known(name) result(known)
    !> Initial axis name
    character(len=*), intent(in) :: name
    !> True if the name is supported
    logical :: known
 
-   select case (trim(name))
+   select case (landscape_lowercase(name))
    case ('random', 'force')
       known = .true.
    case default
@@ -1421,14 +1486,15 @@ end function landscape_scan_coord_name
 !> Internal coordinate type identifier from its name.
 !>
 !> Returns 0 for an unknown name, which is not a valid coordinate type; the
-!> caller is responsible for reporting the error.
+!> caller is responsible for reporting the error.  The name is matched case
+!> insensitively.
 pure function landscape_scan_coord_from_name(name) result(ctype)
    !> Lower case coordinate name
    character(len=*), intent(in) :: name
    !> Coordinate type identifier, 0 for an unknown name
    integer :: ctype
 
-   select case (trim(name))
+   select case (landscape_lowercase(name))
    case ('distance')
       ctype = p_landscape_scan_coord_distance
    case ('angle')
@@ -1476,14 +1542,15 @@ end function landscape_scan_coord_known
 !>
 !> The check is duplicated in `xtb_landscape_scan_relax::landscape_scan_check`
 !> for the library entry point; keeping the predicate here makes it usable
-!> from the command line parser without pulling in the scan kernel.
+!> from the command line parser without pulling in the scan kernel.  The name
+!> is matched case insensitively.
 pure function landscape_scan_mode_known(mode) result(known)
    !> Scan mode name
    character(len=*), intent(in) :: mode
    !> True if the mode is supported
    logical :: known
 
-   select case (trim(mode))
+   select case (landscape_lowercase(mode))
    case ('relaxed', 'rigid')
       known = .true.
    case default
@@ -1493,14 +1560,14 @@ pure function landscape_scan_mode_known(mode) result(known)
 end function landscape_scan_mode_known
 
 !> True if `level` names one of the convergence levels understood by
-!> `landscape_settings_set_conv_level`.
+!> `landscape_settings_set_conv_level`.  The name is matched case insensitively.
 function landscape_conv_level_known(level) result(known)
    !> Level name
    character(len=*), intent(in) :: level
    !> True if the name sets at least one threshold
    logical :: known
 
-   select case (trim(level))
+   select case (landscape_lowercase(level))
    case ('superloose', 'loose', 'normal', 'tight', 'vtight')
       known = .true.
    case default

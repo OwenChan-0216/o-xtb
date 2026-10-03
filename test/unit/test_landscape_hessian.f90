@@ -148,7 +148,9 @@ subroutine test_source_known(error)
    if (allocated(error)) return
    call check(error, .not. landscape_hessian_source_known(""))
    if (allocated(error)) return
-   call check(error, .not. landscape_hessian_source_known("Numerical"))
+   ! the source name is matched case insensitively, like the other suite
+   ! enumeration names (CLI redesign section 7.5)
+   call check(error, landscape_hessian_source_known("Numerical"))
 
 end subroutine test_source_known
 

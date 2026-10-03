@@ -164,6 +164,16 @@ file(WRITE "${LANDSCAPE-H2O}"
   "3\nwater\nO  0.0000000  0.0000000  0.0000000\n"
   "H  0.0000000  0.0000000  0.9600000\n"
   "H  0.9300000  0.0000000 -0.2400000\n")
+# The bent HCN fixture of the `--lts`/`--lirc` tests.  It is created here,
+# before the `--lirc` cases of the enumeration test that need a transition
+# state as their input (the water minimum aborts the reaction path before it
+# writes `irc.log`).
+set(LANDSCAPE-HCN "${CMAKE_CURRENT_BINARY_DIR}/landscape_hcn.xyz")
+file(WRITE "${LANDSCAPE-HCN}"
+  "3\nbent HCN (transition state guess)\n"
+  "H  0.0000000  1.0500000  0.0000000\n"
+  "C  0.0000000  0.0000000  0.0000000\n"
+  "N  1.1560000  0.0000000  0.0000000\n")
 set(LANDSCAPE-RUNDIR "${CMAKE_CURRENT_BINARY_DIR}/landscape-cli")
 file(MAKE_DIRECTORY "${LANDSCAPE-RUNDIR}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_check.cmake" [=[
@@ -547,6 +557,271 @@ add_test("xtb/landscape-level-unknown"
   -DRUNDIR=${LANDSCAPE-ERROR-DIR}
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
 
+# Landscape suite: conflicting run types are an error instead of a silent
+# "the first flag wins" (CLI redesign sections 8.1/8.7 and 17.1).
+#
+# `set_runtyp` accepts a run type only once and its "already set and locked"
+# message goes into a log that is never printed (src/set_module.f90:1031-1038),
+# so `--lopt --lscan` used to run only the minimisation and
+# `--lts --lopt-engine bfgs` used to drop the sub-option without a word.  Every
+# case below requires a non-zero exit, both flag names in the message, and that
+# no landscape task was started at all (`energy evaluations` is part of the
+# task header, so its absence proves the abort happened in the parser).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+separate_arguments(arg_list UNIX_COMMAND "${ARGS}")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --norestart ${arg_list}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(status EQUAL 0)
+  message(FATAL_ERROR "the run type conflict '${ARGS}' did not fail\n${output}")
+endif()
+if(NOT output MATCHES "${FIRST} already selected the")
+  message(FATAL_ERROR "'${ARGS}' does not name its first flag\n${output}")
+endif()
+if(NOT output MATCHES "${SECOND} would select")
+  message(FATAL_ERROR "'${ARGS}' does not name the rejected flag\n${output}")
+endif()
+if(NOT output MATCHES "run type conflict")
+  message(FATAL_ERROR "'${ARGS}' did not report a run type conflict\n${output}")
+endif()
+if(output MATCHES "landscape engine: energy evaluations")
+  message(FATAL_ERROR "'${ARGS}' started a landscape task anyway\n${output}")
+endif()
+]=])
+# 5.1 #20: `--lopt --lscan`
+add_test("xtb/landscape-runtype-conflict"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--lopt --lscan" "-DFIRST=--lopt" "-DSECOND=--lscan"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake")
+# 5.1 #23: the sub-option of another task was dropped, the run then searched a
+# transition state with the default method for 4883 energy evaluations
+add_test("xtb/landscape-runtype-suboption-conflict"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--lts --lopt-engine bfgs" "-DFIRST=--lts" "-DSECOND=--lopt-engine"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake")
+# the flag order must not decide which run type is reported as the first one
+add_test("xtb/landscape-runtype-conflict-reversed"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--lscan --lopt" "-DFIRST=--lscan" "-DSECOND=--lopt"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake")
+# section 17.1 acceptance: `--lts --lirc`
+add_test("xtb/landscape-runtype-lts-lirc"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--lts --lirc" "-DFIRST=--lts" "-DSECOND=--lirc"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake")
+# 5.1 #21: two different run types, one of them native
+add_test("xtb/landscape-opt-hess-conflict"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--opt --hess" "-DFIRST=--opt" "-DSECOND=--hess"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake")
+# 5.1 #25: a suite sub-option next to a native run type
+add_test("xtb/landscape-runtype-vib-temp-conflict"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--hess --lvib-temp 400" "-DFIRST=--hess" "-DSECOND=--lvib-temp"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake")
+# M1 of `docs/_simplify-recon/20-stage1-review.md`: `--raman` selects the
+# `hess` run type inside `set_elprop` (`src/set_module.f90`), so it bypassed
+# the conflict detection of `select_runtyp`; `--raman 0.5 1000 --lopt` used to
+# run the Raman path and drop `--lopt` without a message.  The wrapper now
+# records the choice without a second `set_runtyp` call (which would hit the
+# run type lock).
+add_test("xtb/landscape-raman-conflict"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--raman 0.5 1000 --lopt" "-DFIRST=--raman" "-DSECOND=--lopt"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake")
+# Three mutually exclusive run types: the first conflict is reported, the
+# second one as well, and the task still does not start (the validation round
+# `19-stage1-validation.md` section 12 registered this combination as untested).
+add_test("xtb/landscape-runtype-conflict-triple"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--lopt --lscan --lts" "-DFIRST=--lopt" "-DSECOND=--lscan"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_conflict.cmake")
+
+# Landscape suite: `--strict` has to cover the parser itself (CLI redesign
+# section 17.5 5a).  The unknown-flag message of the `case default` branch is
+# an `env%warning`, which is only fatal while `env%strict` is set; that used to
+# happen after the parsing loop (src/prog/main.F90), so `--strict --zzzz`
+# exited 0.  The second half of the check pins the other direction: without
+# `--strict` an unknown flag stays a warning and the run succeeds (BC-1).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_strict.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+separate_arguments(strict_args UNIX_COMMAND "--strict --zzzz --gfn 2 --sp")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --norestart ${strict_args}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(status EQUAL 0)
+  message(FATAL_ERROR "--strict --zzzz was accepted\n${output}")
+endif()
+if(NOT output MATCHES "Unknown option .--zzzz. provided")
+  message(FATAL_ERROR "the unknown flag was not reported\n${output}")
+endif()
+# The fatal decision is taken after the parsing loop, so the position of
+# `--strict` must not matter (review finding M5 of `20-stage1-review.md`).
+separate_arguments(reversed_args UNIX_COMMAND "--zzzz --strict --gfn 2 --sp")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --norestart ${reversed_args}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE reversed_status
+  OUTPUT_VARIABLE reversed_output
+  ERROR_VARIABLE reversed_output
+)
+if(reversed_status EQUAL 0)
+  message(FATAL_ERROR "--zzzz --strict was accepted\n${reversed_output}")
+endif()
+if(NOT reversed_output MATCHES "Unknown option .--zzzz. provided")
+  message(FATAL_ERROR "the unknown flag before --strict was not reported\n${reversed_output}")
+endif()
+separate_arguments(lax_args UNIX_COMMAND "--zzzz --gfn 2 --sp")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --norestart ${lax_args}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "an unknown flag without --strict failed the run\n${output}")
+endif()
+if(NOT output MATCHES "Unknown option .--zzzz. provided")
+  message(FATAL_ERROR "the unknown flag warning disappeared\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-strict-unknown"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-strict
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_strict.cmake")
+
+# Landscape suite: the enumeration names are matched case insensitively (CLI
+# redesign sections 7.5 and 17.5 5b).  Every case runs the same task twice,
+# once with upper case enumeration values and once with lower case ones, and
+# requires the same exit status, an identical result file and the effect of
+# the value in the output.  The byte comparison of the result file is what
+# makes a missing normalisation visible: `--lopt-hessian MODEL` without the
+# lower case store would pass the name check and then silently run the
+# numerical Hessian (`src/landscape/optimize/driver.f90:200` compares the
+# stored string with 'model'), `--lscan-mode RIGID` would fall back to the
+# relaxed scan and `--lts-init-mode FORCE` would fall back to the `h0` start.
+#
+# OMP_NUM_THREADS=1 is part of the test environment, so the two runs are
+# bitwise comparable (AGENTS.md section 6.1).
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_enum_case.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+function(compare_enum_case label input result pattern upper lower)
+  foreach(kind upper lower)
+    set(kinddir "${RUNDIR}/${kind}-${label}")
+    file(REMOVE_RECURSE "${kinddir}")
+    file(MAKE_DIRECTORY "${kinddir}")
+    separate_arguments(arg_list UNIX_COMMAND "${${kind}}")
+    execute_process(
+      COMMAND "${EXE}" "${input}" --gfn 2 --norestart ${arg_list}
+      WORKING_DIRECTORY "${kinddir}"
+      RESULT_VARIABLE status
+      OUTPUT_VARIABLE output
+      ERROR_VARIABLE output
+    )
+    set(${kind}_status "${status}")
+    set(${kind}_output "${output}")
+  endforeach()
+  if(NOT upper_status EQUAL lower_status)
+    message(FATAL_ERROR
+      "${label}: the upper case run exits ${upper_status}, the lower case run ${lower_status}\n${upper_output}")
+  endif()
+  if(upper_output MATCHES "Unknown landscape")
+    message(FATAL_ERROR "${label}: the upper case value was rejected\n${upper_output}")
+  endif()
+  if(NOT upper_output MATCHES "${pattern}")
+    message(FATAL_ERROR "${label}: the value did not reach the task\n${upper_output}")
+  endif()
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E compare_files
+            "${RUNDIR}/upper-${label}/${result}" "${RUNDIR}/lower-${label}/${result}"
+    RESULT_VARIABLE different
+  )
+  if(NOT different EQUAL 0)
+    message(FATAL_ERROR
+      "${label}: '${result}' of the upper case run differs from the lower case run")
+  endif()
+endfunction()
+compare_enum_case(lopt ${INPUT} xtbopt.xyz "Hessian source: +model"
+  "--lopt --lopt-engine BFGS --lopt-level TIGHT --lopt-hessian MODEL"
+  "--lopt --lopt-engine bfgs --lopt-level tight --lopt-hessian model")
+compare_enum_case(lscan ${INPUT} xtbscan.log "landscape: rigid scan"
+  "--lscan-coord DISTANCE --lscan-atoms 1,2 --lscan-step 0.05 --lscan-nstep 1 --lscan-oneway --lscan-mode RIGID --lscan-method CG --lscan-restart WARM"
+  "--lscan-coord distance --lscan-atoms 1,2 --lscan-step 0.05 --lscan-nstep 1 --lscan-oneway --lscan-mode rigid --lscan-method cg --lscan-restart warm")
+compare_enum_case(lts ${INPUT} xtbts.xyz "dimer initial axis: +force"
+  "--lts --lts-method dimer --lts-ninit FORCE --lts-max-steps 1"
+  "--lts --lts-method dimer --lts-ninit force --lts-max-steps 1")
+compare_enum_case(prfo ${INPUT} xtbts.xyz "prfo"
+  "--lts --lts-method PRFO --lts-init-mode FORCE --lts-hessian MODEL --lts-escape-step 0 --lts-max-steps 1"
+  "--lts --lts-method prfo --lts-init-mode force --lts-hessian model --lts-escape-step 0 --lts-max-steps 1")
+# The remaining `landscape_lowercase` stores of `main.F90` (review finding
+# M3 of `20-stage1-review.md`, zero coverage entries Z4-Z8): the five Hessian
+# sources are observed through the `Hessian source:` line printed from the
+# settings object (the provider factory lower cases internally, so the stored
+# spelling is only visible there), the two restart policies fail loudly when
+# the `select case` is not normalised.
+compare_enum_case(lscanhess ${INPUT} xtbscan.log "Hessian source: +model"
+  "--lscan-coord distance --lscan-atoms 1,2 --lscan-step 0.05 --lscan-nstep 1 --lscan-oneway --lscan-mode rigid --lscan-hessian MODEL"
+  "--lscan-coord distance --lscan-atoms 1,2 --lscan-step 0.05 --lscan-nstep 1 --lscan-oneway --lscan-mode rigid --lscan-hessian model")
+compare_enum_case(lvibhess ${INPUT} vibspectrum "Hessian source: +model"
+  "--lvib --lvib-hessian MODEL"
+  "--lvib --lvib-hessian model")
+compare_enum_case(ltshess ${INPUT} xtbts.xyz "Hessian source: +model"
+  "--lts --lts-method dimer --lts-ninit force --lts-hessian MODEL --lts-max-steps 1"
+  "--lts --lts-method dimer --lts-ninit force --lts-hessian model --lts-max-steps 1")
+compare_enum_case(ltsrestart ${INPUT} xtbts.xyz "restart policy: +warm"
+  "--lts --lts-method prfo --lts-init-mode force --lts-hessian model --lts-escape-step 0 --lts-max-steps 1 --lts-restart WARM"
+  "--lts --lts-method prfo --lts-init-mode force --lts-hessian model --lts-escape-step 0 --lts-max-steps 1 --lts-restart warm")
+# The reaction path needs a transition state as its input (water is a minimum
+# and the task aborts before writing `irc.log`), so this case uses the HCN
+# fixture of the other `--lirc` tests.
+compare_enum_case(lircrestart ${INPUT2} irc.log "restart policy: +warm"
+  "--lirc --lirc-method gs --lirc-max-steps 1 --lirc-restart WARM"
+  "--lirc --lirc-method gs --lirc-max-steps 1 --lirc-restart warm")
+# The stored `lircset%hessian_source` used to have no observation point at all
+# (zero coverage entry R1 of `21-stage1-fix-report.md`): the provider factory
+# lower cases internally and the task did not print the source, so a missing
+# normalisation of the CLI store was invisible.  The task now prints the
+# effective source in its startup banner, which makes the stored spelling
+# observable here.  The value is `numerical` (the default) because the model
+# Hessian of this transition state guess has no imaginary mode and the run
+# aborts before writing `irc.log` (measured; the `WARM` restart is needed for
+# the same reason as in `lircrestart` above).
+compare_enum_case(lirchessian ${INPUT2} irc.log "Hessian source: +numerical"
+  "--lirc --lirc-method gs --lirc-max-steps 1 --lirc-hessian NUMERICAL --lirc-restart WARM"
+  "--lirc --lirc-method gs --lirc-max-steps 1 --lirc-hessian numerical --lirc-restart warm")
+]=])
+add_test("xtb/landscape-enum-case"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DINPUT2=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-enum-case
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_enum_case.cmake")
+set_tests_properties(
+  "xtb/landscape-enum-case"
+  PROPERTIES ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
 # Landscape suite: CLI level smoke test of the `--lscan` run type.
 #
 # The scan must terminate with status 0, write `xtbscan.log` with one frame
@@ -649,6 +924,13 @@ add_test("xtb/landscape-scan-failed-point"
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scan_fail.cmake")
 
 # Landscape suite: `--lscan` error branches.
+#
+# Every mandatory scan option is named by the flag the caller has to pass
+# instead of describing the rejected value (CLI redesign section 8.2 / 17.2),
+# so the three patterns below are the flag names, not the old value messages.
+# The second coordinate is covered separately: its flags carry the `2` suffix
+# (`--lscan-atoms2`, `--lscan-step2`, `--lscan-nstep2`) and the message has to
+# name that spelling.
 add_test("xtb/landscape-scan-coord-unknown"
   ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
   "-DARGS=--gfn 2 --lscan --lscan-coord bogus"
@@ -658,13 +940,25 @@ add_test("xtb/landscape-scan-coord-unknown"
 add_test("xtb/landscape-scan-nstep-missing"
   ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
   "-DARGS=--gfn 2 --lscan --lscan-coord distance --lscan-atoms 1,2 --lscan-step 0.1 --lscan-nstep 0"
-  "-DPATTERN=at least one step is required"
+  "-DPATTERN=set it with --lscan-nstep"
   -DRUNDIR=${LANDSCAPE-ERROR-DIR}
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
 add_test("xtb/landscape-scan-atom-range"
   ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
   "-DARGS=--gfn 2 --lscan --lscan-coord distance --lscan-atoms 1,9 --lscan-step 0.1 --lscan-nstep 2"
-  "-DPATTERN=outside 1..3"
+  "-DPATTERN=needs --lscan-atoms"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-scan-step-zero"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lscan --lscan-coord angle --lscan-atoms 1,2,3 --lscan-step 0 --lscan-nstep 2"
+  "-DPATTERN=--lscan-step <value> [(]degree[)]"
+  -DRUNDIR=${LANDSCAPE-ERROR-DIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
+add_test("xtb/landscape-scan-coord2-flag"
+  ${CMAKE_COMMAND} -DEXE=${XTB-EXE} -DINPUT=${LANDSCAPE-H2O}
+  "-DARGS=--gfn 2 --lscan --lscan-ndim 2 --lscan-coord distance --lscan-atoms 1,2 --lscan-step 0.1 --lscan-nstep 2 --lscan-coord2 distance --lscan-atoms2 2,3 --lscan-step2 0.1 --lscan-nstep2 0"
+  "-DPATTERN=set it with --lscan-nstep2"
   -DRUNDIR=${LANDSCAPE-ERROR-DIR}
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
 
@@ -1054,12 +1348,6 @@ add_test("xtb/landscape-scan-hessian"
 # equilibrium geometry is already a minimum and would converge immediately with
 # zero imaginary modes).  The search must converge to a stationary point with
 # exactly one imaginary mode and write `xtbts.xyz` and `xtbts.log`.
-set(LANDSCAPE-HCN "${CMAKE_CURRENT_BINARY_DIR}/landscape_hcn.xyz")
-file(WRITE "${LANDSCAPE-HCN}"
-  "3\nbent HCN (transition state guess)\n"
-  "H  0.0000000  1.0500000  0.0000000\n"
-  "C  0.0000000  0.0000000  0.0000000\n"
-  "N  1.1560000  0.0000000  0.0000000\n")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts.cmake" [=[
 file(MAKE_DIRECTORY "${RUNDIR}")
 foreach(name "xtbts.xyz" "xtbts.log")
@@ -3066,6 +3354,66 @@ endif()
 ]=])
 set(LANDSCAPE-CLI-PY "${CMAKE_CURRENT_SOURCE_DIR}/landscape_cli_check.py")
 
+# `--help` and the parser must agree in **both** directions (CLI redesign
+# sections 8.4, 8.6 and 17.4).  `landscape_help_check.py` extracts the two
+# spelling sets from the sources with the rules the script prints itself, and
+# gates on set S (the suite spellings, `--l*` plus `--method`): its difference
+# has to be empty.  The native set N is only printed with both extraction
+# dialects; the audit registered 30 implemented but undocumented and 4
+# documented but unimplemented native spellings (section 8.6) and closing that
+# list is stage 4.
+#
+# The test reads the sources, not the built binary, so it has no environment
+# and no engine dependency.
+add_test("xtb/landscape-help-coverage"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/landscape_help_check.py
+  "-DARGS=${PROJECT_SOURCE_DIR}/src/prog/main.F90;${PROJECT_SOURCE_DIR}/src/xhelp.f90;${CMAKE_CURRENT_BINARY_DIR}/landscape-help-coverage"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-help-coverage
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The dangerous builtin defaults are echoed as a `[NOTICE]` line, and the
+# explicit flag silences the notice (CLI redesign sections 8.3 and 17.3).
+# `landscape_cli_check.py` mode `echo` runs both routes of a case and asserts
+# the milestone line (the task reached its print block) next to the presence or
+# absence of the banner; the scan case also runs with `--ljson` and parses the
+# document, because the notice goes to stdout and the structured result is a
+# file (`read_json` fails on a document that a banner corrupted).
+add_test("xtb/landscape-fc-echo"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=echo;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-fc-echo;fc"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-fc-echo
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+add_test("xtb/landscape-lirc-default-echo"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=echo;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lirc-echo;lirc"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lirc-echo
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+add_test("xtb/landscape-lts-escape-echo"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=echo;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lts-echo;lts"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lts-echo
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+# D3 of section 8.3: `--lopt` defaults to `lbfgs` while the native `--opt` runs
+# ANCopt, so the active engine is echoed.  This is the gate the independent
+# review (`docs/_simplify-recon/20-stage1-review.md`, finding H1) found without
+# any test: the banner condition and the `algorithm_was_set` field that
+# suppresses it had zero references under `test/`.
+add_test("xtb/landscape-lopt-engine-echo"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=echo;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lopt-echo;lopt"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lopt-echo
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # `$fix` must hold the frozen atom for every minimiser; the RFO step is the
 # falsifiable engine, because it is built from the Hessian and not from the
 # gradient.
@@ -3132,7 +3480,12 @@ add_test("xtb/landscape-lirc-fix"
 
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # 340x OpenMP anti-scaling of many small single points out of the picture
-# (AGENTS.md section 6.8).
+# (AGENTS.md section 6.8).  The stage 1 CLI checks of the same family
+# (`fc-echo`, `lopt-engine-echo`, `lirc-default-echo`, `lts-escape-echo`,
+# `strict-unknown`) were measured to pass with `XTBPATH` unset as well - the
+# GFN2 parameters are compiled into the binary - but they are registered here
+# anyway, so the whole family runs under one environment (review finding H2 of
+# `20-stage1-review.md`).
 set_tests_properties(
   "xtb/landscape-ljson-opt"
   "xtb/landscape-ljson-no-runtype"
@@ -3154,6 +3507,11 @@ set_tests_properties(
   "xtb/landscape-vib-thermo-knobs"
   "xtb/landscape-lts-fix"
   "xtb/landscape-lirc-fix"
+  "xtb/landscape-fc-echo"
+  "xtb/landscape-lopt-engine-echo"
+  "xtb/landscape-lirc-default-echo"
+  "xtb/landscape-lts-escape-echo"
+  "xtb/landscape-strict-unknown"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

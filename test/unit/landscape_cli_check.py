@@ -16,6 +16,14 @@ mode mirrors one CMake test one-to-one:
   optnamespace <exe> <input> <rundir> -> xtb/landscape-opt-namespace
   ljsonnorun <exe> <input> <rundir>   -> xtb/landscape-ljson-no-runtype
   vibetemp <exe> <input> <rundir>     -> xtb/landscape-vib-etemp
+  enumcase <exe> <input> <rundir> <second>
+                                     -> xtb/landscape-enum-case
+  strictunknown <exe> <input> <rundir> -> xtb/landscape-strict-unknown
+  echo <exe> <input> <rundir> <case>
+                                     -> xtb/landscape-fc-echo,
+                                         xtb/landscape-lopt-engine-echo,
+                                         xtb/landscape-lirc-default-echo,
+                                         xtb/landscape-lts-escape-echo
   fix    <exe> <input> <rundir>       -> xtb/landscape-fix-rfo
   scanblock <exe> <input> <rundir>    -> xtb/landscape-scan-xcontrol
   saddlefix <exe> <input> <rundir>    -> xtb/landscape-lts-fix
@@ -501,6 +509,198 @@ def check_scanblock(exe, inp, rundir):
         fail("--opt did not run the $scan block", output)
     if not os.path.exists(os.path.join(optdir, "xtbscan.log")):
         fail("--opt did not write xtbscan.log", output)
+
+
+def check_strict_unknown(exe, inp, rundir):
+    """`--strict` covers the parser, and an unknown flag stays a warning.
+
+    Mirrors `xtb/landscape-strict-unknown` (CLI redesign section 17.5 5a).  The
+    unknown-flag message is an `env%warning`; it is only fatal while
+    `env%strict` is set, and that used to happen *after* the parsing loop, so
+    `--strict --zzzz` exited 0.  The second half pins BC-1: without `--strict`
+    the same flag only warns and the single point still runs.  The third run
+    puts the unknown flag **before** `--strict`: the fatal decision is taken
+    after the loop, so the order must not matter (review finding M5 of
+    `20-stage1-review.md`; the position independent scheme is the reason the
+    check moved to the parser tail).
+    """
+    os.makedirs(rundir, exist_ok=True)
+    status, output = run(
+        exe, inp, ["--strict", "--zzzz", "--gfn", "2", "--sp", "--norestart"],
+        rundir,
+    )
+    if status == 0:
+        fail("--strict --zzzz was accepted", output)
+    if "Unknown option '--zzzz' provided" not in output:
+        fail("the unknown flag was not reported", output)
+    status, output = run(
+        exe, inp, ["--zzzz", "--strict", "--gfn", "2", "--sp", "--norestart"],
+        rundir,
+    )
+    if status == 0:
+        fail("--zzzz --strict was accepted", output)
+    if "Unknown option '--zzzz' provided" not in output:
+        fail("the unknown flag before --strict was not reported", output)
+    status, output = run(
+        exe, inp, ["--zzzz", "--gfn", "2", "--sp", "--norestart"], rundir
+    )
+    if status != 0:
+        fail("an unknown flag without --strict failed the run", output)
+    if "Unknown option '--zzzz' provided" not in output:
+        fail("the unknown flag warning disappeared", output)
+
+
+def compare_enum_case(exe, inp, rundir, label, result, pattern, upper, lower):
+    """Run one task with upper and lower case enumeration values.
+
+    Used by `check_enum_case`; mirrors the `compare_enum_case` function of the
+    CMake script of `xtb/landscape-enum-case`.
+    """
+    upperdir = os.path.join(rundir, "upper-" + label)
+    lowerdir = os.path.join(rundir, "lower-" + label)
+    shutil.rmtree(upperdir, ignore_errors=True)
+    shutil.rmtree(lowerdir, ignore_errors=True)
+    upper_status, upper_output = run(exe, inp, upper, upperdir)
+    lower_status, lower_output = run(exe, inp, lower, lowerdir)
+    if upper_status != lower_status:
+        fail("%s: the upper case run exits %d, the lower case run %d"
+             % (label, upper_status, lower_status), upper_output)
+    if "Unknown landscape" in upper_output:
+        fail("%s: the upper case value was rejected" % label, upper_output)
+    if not re.search(pattern, upper_output):
+        fail("%s: the value did not reach the task" % label, upper_output)
+    paths = [os.path.join(directory, result)
+             for directory in (upperdir, lowerdir)]
+    for name in paths:
+        if not os.path.exists(name):
+            fail("%s: %s was not written" % (label, name), upper_output)
+    contents = []
+    for name in paths:
+        with open(name, "rb") as handle:
+            contents.append(handle.read())
+    if contents[0] != contents[1]:
+        fail("%s: '%s' of the upper case run differs from the lower case run"
+             % (label, result), upper_output)
+
+
+def check_enum_case(exe, inp, rundir, second):
+    """The suite enumeration names are matched case insensitively.
+
+    Mirrors `xtb/landscape-enum-case` (CLI redesign sections 7.5 and 17.5 5b).
+    Every case runs the same task with upper and lower case values and
+    requires the same exit status and a byte identical result file; the byte
+    comparison is what makes a missing normalisation of a *stored* value
+    visible (`--lopt-hessian MODEL` would pass the name check and then run the
+    numerical Hessian, `--lscan-mode RIGID` the relaxed scan and
+    `--lts-init-mode FORCE` the `h0` start).  `second` is the HCN fixture: the
+    reaction path needs a transition state as its input, so its cases cannot
+    use the water minimum.
+    """
+    os.makedirs(rundir, exist_ok=True)
+    common = ["--gfn", "2", "--norestart"]
+    compare_enum_case(
+        exe, inp, rundir, "lopt", "xtbopt.xyz", r"Hessian source: +model",
+        common + ["--lopt", "--lopt-engine", "BFGS", "--lopt-level", "TIGHT",
+                  "--lopt-hessian", "MODEL"],
+        common + ["--lopt", "--lopt-engine", "bfgs", "--lopt-level", "tight",
+                  "--lopt-hessian", "model"],
+    )
+    compare_enum_case(
+        exe, inp, rundir, "lscan", "xtbscan.log", "landscape: rigid scan",
+        common + ["--lscan-coord", "DISTANCE", "--lscan-atoms", "1,2",
+                  "--lscan-step", "0.05", "--lscan-nstep", "1",
+                  "--lscan-oneway", "--lscan-mode", "RIGID",
+                  "--lscan-method", "CG", "--lscan-restart", "WARM"],
+        common + ["--lscan-coord", "distance", "--lscan-atoms", "1,2",
+                  "--lscan-step", "0.05", "--lscan-nstep", "1",
+                  "--lscan-oneway", "--lscan-mode", "rigid",
+                  "--lscan-method", "cg", "--lscan-restart", "warm"],
+    )
+    compare_enum_case(
+        exe, inp, rundir, "lts", "xtbts.xyz", "dimer initial axis: +force",
+        common + ["--lts", "--lts-method", "dimer", "--lts-ninit", "FORCE",
+                  "--lts-max-steps", "1"],
+        common + ["--lts", "--lts-method", "dimer", "--lts-ninit", "force",
+                  "--lts-max-steps", "1"],
+    )
+    compare_enum_case(
+        exe, inp, rundir, "prfo", "xtbts.xyz", "prfo",
+        common + ["--lts", "--lts-method", "PRFO", "--lts-init-mode", "FORCE",
+                  "--lts-hessian", "MODEL", "--lts-escape-step", "0",
+                  "--lts-max-steps", "1"],
+        common + ["--lts", "--lts-method", "prfo", "--lts-init-mode", "force",
+                  "--lts-hessian", "model", "--lts-escape-step", "0",
+                  "--lts-max-steps", "1"],
+    )
+    # The remaining `landscape_lowercase` stores of `main.F90` (review
+    # finding M3 of `20-stage1-review.md`, zero coverage entries Z4-Z8).  The
+    # five Hessian sources are observed through the `Hessian source:` line the
+    # task prints from the settings object (the provider factory lower cases
+    # internally, so the stored spelling is only visible there); the two
+    # restart policies fail loudly when the `select case` is not normalised
+    # (`case default` reports `requires off, pin or warm`), so the status
+    # comparison already catches the mutation.
+    compare_enum_case(
+        exe, inp, rundir, "lscanhess", "xtbscan.log",
+        r"Hessian source: +model",
+        common + ["--lscan-coord", "distance", "--lscan-atoms", "1,2",
+                  "--lscan-step", "0.05", "--lscan-nstep", "1",
+                  "--lscan-oneway", "--lscan-mode", "rigid",
+                  "--lscan-hessian", "MODEL"],
+        common + ["--lscan-coord", "distance", "--lscan-atoms", "1,2",
+                  "--lscan-step", "0.05", "--lscan-nstep", "1",
+                  "--lscan-oneway", "--lscan-mode", "rigid",
+                  "--lscan-hessian", "model"],
+    )
+    compare_enum_case(
+        exe, inp, rundir, "lvibhess", "vibspectrum",
+        r"Hessian source: +model",
+        common + ["--lvib", "--lvib-hessian", "MODEL"],
+        common + ["--lvib", "--lvib-hessian", "model"],
+    )
+    compare_enum_case(
+        exe, inp, rundir, "ltshess", "xtbts.xyz",
+        r"Hessian source: +model",
+        common + ["--lts", "--lts-method", "dimer", "--lts-ninit", "force",
+                  "--lts-hessian", "MODEL", "--lts-max-steps", "1"],
+        common + ["--lts", "--lts-method", "dimer", "--lts-ninit", "force",
+                  "--lts-hessian", "model", "--lts-max-steps", "1"],
+    )
+    compare_enum_case(
+        exe, inp, rundir, "ltsrestart", "xtbts.xyz",
+        r"restart policy: +warm",
+        common + ["--lts", "--lts-method", "prfo", "--lts-init-mode", "force",
+                  "--lts-hessian", "model", "--lts-escape-step", "0",
+                  "--lts-max-steps", "1", "--lts-restart", "WARM"],
+        common + ["--lts", "--lts-method", "prfo", "--lts-init-mode", "force",
+                  "--lts-hessian", "model", "--lts-escape-step", "0",
+                  "--lts-max-steps", "1", "--lts-restart", "warm"],
+    )
+    compare_enum_case(
+        exe, second, rundir, "lircrestart", "irc.log",
+        r"restart policy: +warm",
+        common + ["--lirc", "--lirc-method", "gs", "--lirc-max-steps", "1",
+                  "--lirc-restart", "WARM"],
+        common + ["--lirc", "--lirc-method", "gs", "--lirc-max-steps", "1",
+                  "--lirc-restart", "warm"],
+    )
+    # The stored `lircset%hessian_source` used to have no observation point
+    # (zero coverage entry R1 of `21-stage1-fix-report.md`): the provider
+    # factory lower cases internally and the task did not print the source.
+    # The startup banner of `--lirc` prints the effective source now, which
+    # makes the stored spelling observable here.  The value is `numerical`
+    # (the default) because the model Hessian of this transition state guess
+    # has no imaginary mode and the run aborts before writing `irc.log`
+    # (measured; the `WARM` restart is needed for the same reason as in
+    # `lircrestart` above).
+    compare_enum_case(
+        exe, second, rundir, "lirchessian", "irc.log",
+        r"Hessian source: +numerical",
+        common + ["--lirc", "--lirc-method", "gs", "--lirc-max-steps", "1",
+                  "--lirc-hessian", "NUMERICAL", "--lirc-restart", "WARM"],
+        common + ["--lirc", "--lirc-method", "gs", "--lirc-max-steps", "1",
+                  "--lirc-hessian", "numerical", "--lirc-restart", "warm"],
+    )
 
 
 def read_thermo(text):
@@ -1747,6 +1947,178 @@ def check_error(exe, inp, rundir, pattern, args):
         fail("missing %r in the output of '%s'" % (pattern, " ".join(args)), output)
 
 
+#: The dangerous builtin defaults that a suite task echoes as a `[NOTICE]`
+#: line (CLI redesign sections 8.3 and 17.3).  Every run names the milestone
+#: line that proves the task reached its print block, whether the banner has
+#: to be there, and optionally the `--ljson` document that still has to parse.
+#:
+#: `banner` carries the **value** the task prints next to the flag name, not
+#: only the flag prefix: the notice is documented as "the value read from the
+#: settings object", so a hard coded literal (or a wrong enum name) has to
+#: make the default route fail.  `absent` is the value free prefix and is used
+#: for the suppression direction - a value carrying pattern would miss a
+#: notice that prints the *explicit* value (the bug that check has to catch).
+#: The milestone line is asserted in every route, so a task that aborted
+#: before its print block cannot look like a correctly suppressed notice.
+ECHO_CASES = {
+    "fc": {
+        "banner": "[NOTICE] --lscan-fc default 0.50 hartree/bohr^2",
+        "absent": "[NOTICE] --lscan-fc default",
+        "runs": [
+            {
+                "label": "default",
+                "milestone": "landscape: relaxed scan",
+                "banner": True,
+                "json": "landscape_scan.json",
+                "args": ["--gfn", "2", "--lscan", "--lscan-coord",
+                         "distance", "--lscan-atoms", "1,2",
+                         "--lscan-step", "0.1", "--lscan-nstep", "2",
+                         "--norestart", "--ljson"],
+            },
+            {
+                "label": "explicit",
+                "milestone": "landscape: relaxed scan",
+                "banner": False,
+                "json": "landscape_scan.json",
+                "args": ["--gfn", "2", "--lscan", "--lscan-coord",
+                         "distance", "--lscan-atoms", "1,2",
+                         "--lscan-step", "0.1", "--lscan-nstep", "2",
+                         "--lscan-fc", "0.05", "--norestart", "--ljson"],
+            },
+            {
+                "label": "rigid",
+                "milestone": "landscape: rigid scan",
+                "banner": False,
+                "args": ["--gfn", "2", "--lscan", "--lscan-mode", "rigid",
+                         "--lscan-coord", "distance", "--lscan-atoms",
+                         "1,2", "--lscan-step", "0.1", "--lscan-nstep",
+                         "2", "--norestart"],
+            },
+        ],
+    },
+    "lopt": {
+        "banner": "[NOTICE] --lopt-engine default lbfgs (",
+        "absent": "[NOTICE] --lopt-engine default",
+        "runs": [
+            {
+                "label": "default",
+                "milestone": "landscape: lbfgs minimisation",
+                "banner": True,
+                "json": "landscape_opt.json",
+                "json_task": "opt",
+                "args": ["--gfn", "2", "--lopt", "--norestart",
+                         "--ljson"],
+            },
+            {
+                "label": "explicit",
+                "milestone": "landscape: cg minimisation",
+                "banner": False,
+                "args": ["--gfn", "2", "--lopt", "--lopt-engine", "cg",
+                         "--norestart"],
+            },
+        ],
+    },
+    "lirc": {
+        "banner": "[NOTICE] --lirc-method default hpc (",
+        "absent": "[NOTICE] --lirc-method default",
+        "runs": [
+            {
+                "label": "default",
+                "milestone": "landscape: intrinsic reaction coordinate (",
+                "banner": True,
+                "require": ["Hessian source:           numerical"],
+                "args": ["--gfn", "2", "--lirc", "--lirc-max-steps", "1",
+                         "--norestart"],
+            },
+            {
+                "label": "explicit",
+                "milestone": "landscape: intrinsic reaction coordinate (",
+                "banner": False,
+                "require": ["Hessian source:           numerical"],
+                "args": ["--gfn", "2", "--lirc", "--lirc-method", "gs",
+                         "--lirc-max-steps", "1", "--norestart"],
+            },
+            {
+                "label": "hessian",
+                "milestone": "landscape: intrinsic reaction coordinate (",
+                "banner": True,
+                "require": ["Hessian source:           model"],
+                "args": ["--gfn", "2", "--lirc", "--lirc-hessian", "model",
+                         "--lirc-max-steps", "1", "--norestart"],
+            },
+        ],
+    },
+    "lts": {
+        "banner": "[NOTICE] --lts-escape-step default 0.20 bohr",
+        "absent": "[NOTICE] --lts-escape-step default",
+        "runs": [
+            {
+                "label": "default",
+                "milestone": "landscape: transition state search (",
+                "banner": True,
+                "args": ["--gfn", "2", "--lts", "--lts-method", "prfo",
+                         "--lts-max-steps", "1", "--norestart"],
+            },
+            {
+                "label": "explicit",
+                "milestone": "landscape: transition state search (",
+                "banner": False,
+                "args": ["--gfn", "2", "--lts", "--lts-method", "prfo",
+                         "--lts-escape-step", "0.3", "--lts-max-steps", "1",
+                         "--norestart"],
+            },
+        ],
+    },
+}
+
+
+def check_echo(exe, inp, rundir, case):
+    """The dangerous builtin defaults are echoed, the explicit values not.
+
+    Mirrors `xtb/landscape-fc-echo`, `xtb/landscape-lirc-default-echo`,
+    `xtb/landscape-lts-escape-echo` and `xtb/landscape-lopt-engine-echo` (CLI
+    redesign sections 8.3 and 17.3).  Every route of the case is run once and
+    the milestone line is asserted in **all** of them, so a task that aborted
+    before its print block cannot look like a correctly suppressed notice.
+    The `--ljson` routes parse the document as well: the notice goes to
+    stdout, the structured result is a file, and the check pins that the two
+    do not interfere.
+
+    A route may add `require`: patterns that have to appear in the output of
+    that route.  The `lirc` case uses it for the effective Hessian source
+    (`--lirc-hessian`), an effective value rather than a dangerous default:
+    it is printed for the builtin default (`numerical`) and for the explicit
+    spelling alike, and a hard coded literal breaks one of the two.
+    """
+    spec = ECHO_CASES.get(case)
+    if spec is None:
+        fail("unknown echo case %r" % case)
+    for route in spec["runs"]:
+        label = route["label"]
+        route_dir = os.path.join(rundir, case + "-" + label)
+        shutil.rmtree(route_dir, ignore_errors=True)
+        status, output = run(exe, inp, route["args"], route_dir)
+        if route["milestone"] not in output:
+            fail("%s (%s): the task did not reach its print block"
+                 % (case, label), output)
+        present = spec["banner"] in output
+        if route["banner"] and not present:
+            fail("%s (%s): the builtin default was not echoed"
+                 % (case, label), output)
+        if not route["banner"] and spec["absent"] in output:
+            fail("%s (%s): the notice was printed although the flag was "
+                 "given" % (case, label), output)
+        for pattern in route.get("require", []):
+            if pattern not in output:
+                fail("%s (%s): %r is missing from the output"
+                     % (case, label, pattern), output)
+        if "json" in route:
+            document = read_json(route_dir, route["json"])
+            if document.get("task") != route.get("json_task", "scan"):
+                fail("%s (%s): the document is not a %s result"
+                     % (case, label, route.get("json_task", "scan")), output)
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -1816,6 +2188,16 @@ def main():
         if len(rest) < 1:
             fail("the autonebdepth mode needs the product geometry")
         check_autoneb_depth_limit(exe, inp, rundir, rest[0])
+    elif mode == "enumcase":
+        if len(rest) < 1:
+            fail("the enumcase mode needs the second (transition state) input")
+        check_enum_case(exe, inp, rundir, rest[0])
+    elif mode == "strictunknown":
+        check_strict_unknown(exe, inp, rundir)
+    elif mode == "echo":
+        if len(rest) < 1:
+            fail("the echo mode needs a case name")
+        check_echo(exe, inp, rundir, rest[0])
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

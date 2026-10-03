@@ -42,7 +42,8 @@ module xtb_landscape_optimize
       & p_landscape_opt_sd, p_landscape_opt_cg, p_landscape_opt_lbfgs, &
       & p_landscape_opt_bfgs, &
       & p_landscape_opt_diis, p_landscape_opt_rfo, &
-      & landscape_opt_algorithm_name, landscape_convergence_measures
+      & landscape_opt_algorithm_name, landscape_convergence_measures, &
+      & landscape_lowercase
    use xtb_landscape_results, only : landscape_result, landscape_step, &
       & landscape_result_add_step, landscape_result_trim, landscape_report_add, &
       & landscape_print_step
@@ -196,8 +197,10 @@ subroutine landscape_optimize_model(env, objective, settings, x0, result, &
       ! The model Hessian (`hessian_source = 'model'`) is a cheap initial guess
       ! and seeds the quasi-Newton approximation (PLAN section 5.2, D3).  The
       ! expensive numerical Hessian is never built just to seed BFGS, so the
-      ! seed is taken from the objective only for a model source.
-      if (trim(settings%hessian_source) == 'model') then
+      ! seed is taken from the objective only for a model source.  The name is
+      ! matched case insensitively, like `landscape_hessian_source_known` and
+      ! the provider factory (review finding M2 of `20-stage1-review.md`).
+      if (landscape_lowercase(settings%hessian_source) == 'model') then
          allocate(hinit(ndim, ndim), source=0.0_wp)
          call objective%hessian(x, hinit, fail)
          if (fail) then

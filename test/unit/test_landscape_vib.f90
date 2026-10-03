@@ -116,6 +116,7 @@ subroutine collect_landscape_vib(testsuite)
       new_unittest("hessian-file-provider", test_hessian_file_provider), &
       new_unittest("hessian-file-failures", test_hessian_file_failures), &
       new_unittest("odlr-unsupported", test_odlr_unsupported), &
+      new_unittest("vib-hessian-case", test_vib_hessian_case), &
       new_unittest("vib-task-water", test_vib_task) &
       ]
 
@@ -1325,6 +1326,50 @@ subroutine test_vib_task(error)
    call delete_text("g98.out")
 
 end subroutine test_vib_task
+
+!> The missing file of the `file` Hessian source follows the source spelling.
+!>
+!> `landscape_hessian_source_known` and the provider factory both accept any
+!> spelling, so the task level guard that names `--lvib-hessian-file` has to
+!> as well: a literal comparison let `--lvib-hessian FILE` fall through to the
+!> factory, whose generic message does not name the flag that provides what is
+!> missing (library entry point R2 of
+!> `docs/_simplify-recon/21-stage1-fix-report.md`).  The task is stopped by the
+!> guard before a single point is evaluated, so the test is cheap.
+subroutine test_vib_hessian_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(TMolecule) :: mol
+   type(TRestart) :: chk
+   type(TxTBCalculator) :: calc
+   type(landscape_vib_settings) :: settings
+   type(landscape_result) :: result
+   integer :: nlog
+
+   call setup_water(env, mol, chk, calc)
+   settings = landscape_vib_settings()
+   settings%printlevel = 0
+   settings%hessian_source = 'file'
+
+   nlog = env%nLog
+   call landscape_vib(env, mol, chk, calc, settings, result)
+   call check(error, landscape_log_failed(env, nlog), &
+      & "the file source without a file was not refused")
+   if (allocated(error)) return
+   call check(error, index(env%log(env%nLog)%message, '--lvib-hessian-file') > 0, &
+      & "the missing file is not reported with the flag that provides it")
+   if (allocated(error)) return
+
+   settings%hessian_source = 'FILE'
+   nlog = env%nLog
+   call landscape_vib(env, mol, chk, calc, settings, result)
+   call check(error, landscape_log_failed(env, nlog), &
+      & "the upper case file source without a file was not refused")
+   if (allocated(error)) return
+   call check(error, index(env%log(env%nLog)%message, '--lvib-hessian-file') > 0, &
+      & "the upper case source does not reach the flag naming guard")
+
+end subroutine test_vib_hessian_case
 
 !> Eigenvalues of a symmetric 2x2 matrix, ascending.
 pure function eigenvalues2x2(a) result(ev)

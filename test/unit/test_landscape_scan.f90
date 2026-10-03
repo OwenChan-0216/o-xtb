@@ -177,6 +177,9 @@ subroutine collect_landscape_scan(testsuite)
       new_unittest("rigid-angle-exact", test_rigid_angle), &
       new_unittest("rigid-dihedral-fragment", test_rigid_dihedral_fragment), &
       new_unittest("rigid-dihedral-scan", test_rigid_dihedral_scan), &
+      new_unittest("rigid-mode-case", test_rigid_mode_case), &
+      new_unittest("relaxed-mode-case", test_relaxed_mode_case), &
+      new_unittest("scan-task-mode-case", test_scan_task_mode_case), &
       new_unittest("rigid-ring-cut-guard", test_rigid_ring_cut_guard), &
       new_unittest("rigid-drift-guard", test_rigid_drift_guard), &
       new_unittest("relaxed-scan-profile", test_relaxed_profile), &
@@ -654,6 +657,169 @@ subroutine test_rigid_dihedral_scan(error)
       & message="the two branches of the rigid scan rebuild different geometries")
 
 end subroutine test_rigid_dihedral_scan
+
+!> The scan mode is matched case insensitively by the driver as well.
+!>
+!> `landscape_scan_mode_known` accepts `RIGID` since the CLI redesign section
+!> 17.5 5b, so a library caller that stores `RIGID` instead of the canonical
+!> `rigid` has to reach the rigid driver.  The literal comparison in
+!> `landscape_scan_solve_point` sent it down the relaxed path instead (review
+!> finding M2 of `docs/_simplify-recon/20-stage1-review.md`).
+subroutine test_rigid_mode_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(landscape_scan_settings) :: set
+   type(scan_bond_model) :: model
+   type(landscape_scan_profile) :: lower, upper
+   real(wp) :: start(3, dce_nat), x0(3*dce_nat), step
+   logical :: fail
+
+   call init(env)
+
+   start = dce_xyz
+   call reference_rotate(start, dce_far, &
+      & dce_xyz(:, dce_torsion(2)), dce_xyz(:, dce_torsion(3)) - &
+      & dce_xyz(:, dce_torsion(2)), 120.0_wp*pi/180.0_wp)
+   x0 = geometry_pack(start)
+
+   set = landscape_scan_settings()
+   set%printlevel = 0
+   set%write_files = .false.
+   set%bidirectional = .true.
+   set%coord(1)%ctype = p_landscape_scan_coord_dihedral
+   set%coord(1)%atoms(1:4) = dce_torsion
+   step = -8.0_wp*pi/180.0_wp
+   set%coord(1)%step = step
+   set%coord(1)%nstep = 4
+   call new_dce_bond_model(model, start)
+
+   set%mode = 'rigid'
+   call landscape_scan1d(env, model, dce_at, set, x0, lower, fail)
+   call check(error, .not. fail, "the lower case rigid scan reported a failure")
+   if (allocated(error)) return
+
+   set%mode = 'RIGID'
+   call landscape_scan1d(env, model, dce_at, set, x0, upper, fail)
+   call check(error, .not. fail, "the upper case rigid scan reported a failure")
+   if (allocated(error)) return
+
+   call check(error, upper%n_points, lower%n_points)
+   if (allocated(error)) return
+   call check(error, maxval(abs(upper%xyz - lower%xyz)), 0.0_wp, thr=0.0_wp, &
+      & message="the upper case mode did not rebuild the rigid geometries")
+   if (allocated(error)) return
+   call check(error, maxval(abs(upper%energy - lower%energy)), 0.0_wp, &
+      & thr=0.0_wp, message="the upper case mode did not reproduce the profile")
+   if (allocated(error)) return
+   call check(error, maxval(abs(upper%reached - lower%reached)), 0.0_wp, &
+      & thr=0.0_wp, message="the upper case mode did not reach the targets")
+
+end subroutine test_rigid_mode_case
+
+!> The relaxed only preconditions are checked for any spelling of the mode.
+!>
+!> `landscape_scan_check` accepts `RELAXED` (the predicate matches case
+!> insensitively), so the gate that runs the relaxed only checks has to accept
+!> it too.  The literal comparison skipped the inner algorithm validation and
+!> returned `ok` for a relaxed scan with an unknown minimiser (review finding
+!> M2 of `docs/_simplify-recon/20-stage1-review.md`).
+subroutine test_relaxed_mode_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(landscape_scan_settings) :: set
+   integer :: nlog
+   logical :: ok
+
+   call init(env)
+
+   set = landscape_scan_settings()
+   set%ndim = 1
+   set%mode = 'RELAXED'
+   set%method = 'not-an-algorithm'
+   set%coord(1)%ctype = p_landscape_scan_coord_distance
+   set%coord(1)%atoms(1:2) = [1, 2]
+   set%coord(1)%step = 0.1_wp
+   set%coord(1)%nstep = 1
+
+   nlog = env%nLog
+   ok = landscape_scan_check(env, set, 3)
+   call check(error, .not. ok, &
+      & message="an unknown inner minimiser was accepted for a relaxed scan")
+   if (allocated(error)) return
+   call check(error, landscape_log_failed(env, nlog), &
+      & message="the unknown inner minimiser was not reported")
+
+end subroutine test_relaxed_mode_case
+
+!> The relaxed-scan force constant notice follows the mode spelling.
+!>
+!> `landscape_scan_mode_known` and `landscape_scan_check` both match the mode
+!> case insensitively, so the task level gate that echoes the builtin
+!> `--lscan-fc` default has to as well: a literal comparison left
+!> `--lscan-mode RELAXED` running a relaxed scan whose force constant was
+!> never echoed (the library entry point R2 of
+!> `docs/_simplify-recon/21-stage1-fix-report.md`).  Both spellings are run
+!> with an out of range atom index, which stops the task right after the
+!> banner, so not a single point is evaluated; the printed notice of the two
+!> runs has to agree.
+subroutine test_scan_task_mode_case(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(TMolecule) :: mol
+   type(TRestart) :: chk
+   type(TxTBCalculator) :: calc
+   type(landscape_scan_settings) :: set
+   type(landscape_result) :: result
+   integer :: unit, nlog
+   logical :: lower_failed, upper_failed
+   character(len=:), allocatable :: lower, upper
+
+   call init(env)
+   call init(mol, sym, xyz)
+   call newXTBCalculator(env, mol, calc, method=2)
+   call newWavefunction(env, mol, calc, chk)
+
+   set = landscape_scan_settings()
+   set%printlevel = 1
+   set%write_files = .false.
+   set%coord(1)%ctype = p_landscape_scan_coord_distance
+   set%coord(1)%atoms(1:2) = [1, 7]
+   set%coord(1)%step = 0.1_wp
+   set%coord(1)%nstep = 1
+   set%constraint_fc_was_set = .false.
+
+   open(newunit=unit, status='scratch')
+   env%unit = unit
+
+   set%mode = 'relaxed'
+   nlog = env%nLog
+   call run_landscape(env, mol, chk, calc, set, result)
+   lower_failed = landscape_log_failed(env, nlog)
+   lower = read_unit_text(unit)
+
+   rewind(unit)
+   set%mode = 'RELAXED'
+   nlog = env%nLog
+   call run_landscape(env, mol, chk, calc, set, result)
+   upper_failed = landscape_log_failed(env, nlog)
+   upper = read_unit_text(unit)
+
+   close(unit)
+   env%unit = stdout
+
+   call check(error, lower_failed, &
+      & "the out of range atom index was not reported")
+   if (allocated(error)) return
+   call check(error, upper_failed, &
+      & "the out of range atom index was not reported for the upper case mode")
+   if (allocated(error)) return
+   call check(error, index(lower, '[NOTICE] --lscan-fc default') > 0, &
+      & "the relaxed scan did not echo the force constant default")
+   if (allocated(error)) return
+   call check(error, index(upper, '[NOTICE] --lscan-fc default') > 0, &
+      & "the upper case mode did not reach the force constant notice")
+
+end subroutine test_scan_task_mode_case
 
 !> A cut that does not separate the molecule is refused by the rigid driver.
 !>
@@ -1346,6 +1512,11 @@ subroutine test_atom_out_of_range(error)
    if (allocated(error)) return
    call check(error, landscape_log_failed(env, nlog))
    if (allocated(error)) return
+   ! CLI redesign section 8.2: the message names the flag the caller has to
+   ! pass instead of only describing the rejected value
+   call check(error, index(env%log(env%nLog)%message, '--lscan-atoms') > 0, &
+      & "the out-of-range index does not name --lscan-atoms")
+   if (allocated(error)) return
 
    ! a repeated atom inside one coordinate is rejected as well
    set%coord(1)%atoms(1:2) = [2, 2]
@@ -1375,6 +1546,10 @@ subroutine test_zero_nstep(error)
    if (allocated(error)) return
    call check(error, landscape_log_failed(env, nlog))
    if (allocated(error)) return
+   ! CLI redesign section 8.2: both messages name their flag
+   call check(error, index(env%log(env%nLog)%message, '--lscan-nstep') > 0, &
+      & "the zero nstep does not name --lscan-nstep")
+   if (allocated(error)) return
 
    set%coord(1)%nstep = 3
    set%coord(1)%step = 0.0_wp
@@ -1382,6 +1557,9 @@ subroutine test_zero_nstep(error)
    call check(error, .not. landscape_scan_check(env, set, nat))
    if (allocated(error)) return
    call check(error, landscape_log_failed(env, nlog))
+   if (allocated(error)) return
+   call check(error, index(env%log(env%nLog)%message, '--lscan-step') > 0, &
+      & "the zero step size does not name --lscan-step")
 
 end subroutine test_zero_nstep
 
@@ -2290,5 +2468,31 @@ function count_frames(fname) result(frames)
    close(unit)
 
 end function count_frames
+
+!> Every record written to a scratch unit, separated by newlines.
+!>
+!> A task banner is a property of the printed output, so the only way to
+!> assert it from a unit test is to point `env%unit` at a scratch file and
+!> read it back.  The unit is rewound first, so the helper also works after a
+!> previous read reached the endfile record (a rewrite then needs the rewind
+!> anyway).
+function read_unit_text(unit) result(text)
+   !> Scratch unit written by the task under test
+   integer, intent(in) :: unit
+   !> Records of the unit, joined by newlines
+   character(len=:), allocatable :: text
+
+   character(len=256) :: line
+   integer :: stat
+
+   text = ''
+   rewind(unit)
+   do
+      read(unit, '(a)', iostat=stat) line
+      if (stat /= 0) exit
+      text = text//trim(line)//new_line('a')
+   end do
+
+end function read_unit_text
 
 end module test_landscape_scan
