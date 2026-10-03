@@ -41,6 +41,7 @@ module xtb_landscape_tasks_opt
       & landscape_energy_model, landscape_hessian_provider, &
       & new_landscape_hessian_provider
    use xtb_landscape_optimize, only : landscape_optimize_model
+   use xtb_landscape_constraints, only : landscape_frozen_mask
    use xtb_landscape_log, only : landscape_write_files
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_result, &
@@ -100,6 +101,7 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
    type(landscape_engine_model) :: model
    class(landscape_hessian_provider), allocatable :: hp
    real(wp), allocatable :: x0(:), xfinal(:), traj(:, :)
+   logical, allocatable :: fix_mask(:)
    integer :: n_scf_fail
 
    if (settings%printlevel > 0) then
@@ -128,7 +130,15 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
    model%chk => chk
 
    x0 = geometry_pack(mol%xyz)
-   call landscape_optimize_model(env, model, settings, x0, result, xfinal, traj)
+   ! `$fix`: every search direction is projected onto the subspace the fixed
+   ! atoms leave free, so a second order step cannot move them.
+   fix_mask = landscape_frozen_mask(mol%n)
+   if (any(fix_mask)) then
+      write(env%unit, '(1x,a,i0,a)') "fixed atoms ($fix):       ", &
+         & count(fix_mask)/3, " (three components each)"
+   end if
+   call landscape_optimize_model(env, model, settings, x0, result, xfinal, traj, &
+      & frozen=fix_mask)
    if (.not. allocated(xfinal)) then
       call env%error("landscape optimisation did not return a geometry", source)
       call engine%destroy()

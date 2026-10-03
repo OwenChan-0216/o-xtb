@@ -58,6 +58,48 @@ elseif(CMAKE_Fortran_COMPILER_ID MATCHES "LLVMFlang")
   set(dialects "-fdefault-real-8 -fdefault-double-8")
 endif()
 
+# This checkout supports -O2, not -O3, for GNU Fortran.
+#
+# gfortran 12.2.0 compiled the Hessian path of a numerically related source
+# state (edcfbbe) **wrongly** at -O3 (frequencies -931.59/3329.78/3345.94 cm^-1
+# instead of 1557.41/3677.84/3684.01), while -O0/-O1/-O2 were correct and
+# bitwise identical to the reference binary; -O3 -fno-tree-vectorize fails as
+# well, so vectorisation is not the mechanism.  The defect does **not**
+# reproduce on this commit, but the mechanism is unknown, so the -O3 risk
+# cannot be bounded.  CMake's `Release` build type is -O3 for GNU: configure
+# with -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG" instead
+# (docs/_simplify-recon/03-build-and-toolchain.md section 4.4, section 7).
+if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+  # Every configuration is inspected, not only the active build type: a
+  # multi-config generator (Ninja Multi-Config, Visual Studio, Xcode) leaves
+  # CMAKE_BUILD_TYPE empty and keeps the optimisation in
+  # CMAKE_Fortran_FLAGS_<CONFIG>.
+  set(xtb_opt_flags "${CMAKE_Fortran_FLAGS}")
+  set(xtb_opt_configs "${CMAKE_BUILD_TYPE}")
+  if(CMAKE_CONFIGURATION_TYPES)
+    list(APPEND xtb_opt_configs ${CMAKE_CONFIGURATION_TYPES})
+  endif()
+  foreach(xtb_opt_config IN LISTS xtb_opt_configs)
+    string(TOUPPER "${xtb_opt_config}" xtb_opt_config)
+    if(DEFINED CMAKE_Fortran_FLAGS_${xtb_opt_config})
+      string(APPEND xtb_opt_flags " ${CMAKE_Fortran_FLAGS_${xtb_opt_config}}")
+    endif()
+  endforeach()
+  # CMake stores flag strings as `;` separated lists, so
+  # -DCMAKE_Fortran_FLAGS="-O3;-funroll-loops" arrives as `;-O3;` and the
+  # blank padded match below only sees it after the separators are normalised.
+  string(REPLACE ";" " " xtb_opt_flags "${xtb_opt_flags}")
+  if(xtb_opt_flags MATCHES "(^| )-O3( |$)")
+    message(WARNING
+      "Fortran optimisation level -O3 is not supported for this checkout: "
+      "gfortran 12.2.0 gave wrong Hessian results at -O3 for a numerically "
+      "related source state (mechanism unknown, "
+      "docs/_simplify-recon/03-build-and-toolchain.md section 4.4). "
+      "Use -DCMAKE_Fortran_FLAGS_RELEASE=\"-O2 -DNDEBUG\" with "
+      "-DCMAKE_BUILD_TYPE=Release.")
+  endif()
+endif()
+
 # Customize compiler flags
 set(CMAKE_Fortran_FLAGS_DEBUG "${CMAKE_Fortran_FLAGS_DEBUG} ${bounds}" PARENT_SCOPE)
 set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${dialects}" PARENT_SCOPE)

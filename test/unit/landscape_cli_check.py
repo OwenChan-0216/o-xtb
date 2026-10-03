@@ -16,6 +16,13 @@ mode mirrors one CMake test one-to-one:
   optnamespace <exe> <input> <rundir> -> xtb/landscape-opt-namespace
   ljsonnorun <exe> <input> <rundir>   -> xtb/landscape-ljson-no-runtype
   vibetemp <exe> <input> <rundir>     -> xtb/landscape-vib-etemp
+  fix    <exe> <input> <rundir>       -> xtb/landscape-fix-rfo
+  scanblock <exe> <input> <rundir>    -> xtb/landscape-scan-xcontrol
+  saddlefix <exe> <input> <rundir>    -> xtb/landscape-lts-fix
+  rejectfix <exe> <input> <rundir>    -> xtb/landscape-lirc-fix
+    thermo <exe> <input> <rundir>       -> xtb/landscape-vib-thermo
+  thermoknobs <exe> <input> <rundir> <saddle>
+                                     -> xtb/landscape-vib-thermo-knobs
   ts     <exe> <input> <rundir>       -> xtb/landscape-ts-prfo
   tsetemp <exe> <input> <rundir>      -> xtb/landscape-ts-etemp
   dimer  <exe> <input> <rundir>       -> xtb/landscape-ts-dimer
@@ -37,6 +44,7 @@ The environment (XTBPATH) is inherited from the meson test environment, exactly
 like in the CMake build.
 """
 
+import json
 import os
 import re
 import shutil
@@ -365,6 +373,586 @@ def check_vib_etemp(exe, inp, rundir):
         fail(
             "the electronic temperature did not change the frequencies (%s)" % cold_freqs
         )
+
+
+def check_fix(exe, inp, rundir):
+    """`$fix` must hold the frozen atoms for every minimiser.
+
+    Mirrors `xtb/landscape-fix-rfo`.  A first order direction is built from
+    the gradient, and the calculator zeroes the gradient of a fixed atom
+    (`src/xtb/calculator.f90:304-306`), so SD/CG/L-BFGS/BFGS/GDIIS keep it in
+    place by construction.  The RFO step is expanded in the eigenvectors of the
+    Hessian, which mix the frozen and the free components, so it moved the
+    frozen oxygen of this fixture by 0.0098/0.0109 angstrom in x/z before the
+    direction was projected (docs/_simplify-recon/04-*.md).  `--lopt-hessian
+    model` seeds BFGS with the Lindh-D2 matrix as well, so that combination is
+    covered here too.  The tolerance is
+    the xyz write/read round trip (the writer prints 14 decimals), not a
+    measured spread: a projected direction leaves the coordinate unchanged.
+    """
+    xcontrol = os.path.join(rundir, "landscape_fix.inp")
+    os.makedirs(rundir, exist_ok=True)
+    rundir = os.path.abspath(rundir)
+    xcontrol = os.path.abspath(xcontrol)
+    with open(xcontrol, "w") as handle:
+        handle.write("$fix\n   atoms: 1\n$end\n")
+    geometry = os.path.join(rundir, "xtbopt.xyz")
+    # The first order engines are only *provably* decoupled when their seed is
+    # decoupled as well: `--lopt-hessian model` seeds BFGS with the Lindh-D2
+    # curvature matrix (`optimize/driver.f90` -> `landscape_bfgs%set_hessian`),
+    # whose frozen and free blocks are coupled, and the BFGS direction is
+    # expanded in the eigenvectors of that matrix exactly like the RFO one
+    # (`optimize/bfgs.f90`, `d = -sum_i (V_i.g)/max(w_i, hlow) V_i`).  The
+    # projection is therefore not a no-op for `bfgs model`/`rfo model` either,
+    # so the two combinations are covered here (finding P2-3 of
+    # `05-w0-independent-review.md`).
+    cases = [("sd", "sd", []), ("cg", "cg", []), ("lbfgs", "lbfgs", []),
+             ("bfgs", "bfgs", []), ("diis", "diis", []), ("rfo", "rfo", []),
+             ("bfgs model", "bfgs", ["--lopt-hessian", "model"]),
+             ("rfo model", "rfo", ["--lopt-hessian", "model"])]
+    for label, engine, extra in cases:
+        if os.path.exists(geometry):
+            os.remove(geometry)
+        status, output = run(
+            exe,
+            inp,
+            ["--gfn", "2", "--lopt", "--lopt-engine", engine,
+             "--input", xcontrol, "--norestart"] + extra,
+            rundir,
+        )
+        if status != 0:
+            fail("xtb --lopt-engine %s terminated with status %d" % (label, status),
+                 output)
+        if "landscape: converged" not in output:
+            fail("the --lopt-engine %s run did not converge" % label, output)
+        if not os.path.exists(geometry):
+            fail("the --lopt-engine %s run wrote no xtbopt.xyz" % label, output)
+        with open(geometry) as handle:
+            lines = handle.read().splitlines()
+        fields = lines[2].split()
+        if fields[0] != "O":
+            fail("the first output atom of %s is not the frozen oxygen" % label,
+                 lines[2])
+        shift = max(abs(float(value)) for value in fields[1:4])
+        if shift > 1.0e-10:
+            fail(
+                "--lopt-engine %s moved the frozen atom by %.5e angstrom (%s)"
+                % (label, shift, " ".join(fields[1:4])),
+                output,
+            )
+        print("fix projection: %-11s frozen atom displacement %.5e angstrom"
+              % (label, shift))
+
+
+def check_scanblock(exe, inp, rundir):
+    """A landscape run type must reject the xcontrol `$scan` block.
+
+    Mirrors `xtb/landscape-scan-xcontrol`.  `$scan` belongs to the ANCopt
+    family - `relaxed_scan` runs it only on the `anyopt` path
+    (`src/prog/main.F90:914-916`) - and no landscape run type executes it.
+    Before the guard, `--lopt --input <file with $scan>` returned status 0 after
+    a plain minimisation and wrote no `xtbscan.log`: the caller asked for a scan
+    and silently got a different task.  The check pins the non-zero status, the
+    actionable message and the absence of the scan log for all five run types,
+    and that `--opt` still runs the block.
+    """
+    os.makedirs(rundir, exist_ok=True)
+    rundir = os.path.abspath(rundir)
+    xcontrol = os.path.join(rundir, "landscape_scan.inp")
+    with open(xcontrol, "w") as handle:
+        handle.write("$constrain\n  distance: 1, 2, auto\n"
+                     "$scan\n  1: 0.9, 1.1, 3\n$end\n")
+    scanlog = os.path.join(rundir, "xtbscan.log")
+    for task in ("lopt", "lscan", "lts", "lirc", "lvib"):
+        if task == "lscan":
+            # a *valid* `--lscan` command line: the `$scan` block is rejected
+            # even though the run type itself is fine
+            extra = ["--lscan-coord", "distance", "--lscan-atoms", "1,2",
+                     "--lscan-step", "0.05", "--lscan-nstep", "2"]
+        else:
+            extra = []
+        if os.path.exists(scanlog):
+            os.remove(scanlog)
+        status, output = run(
+            exe,
+            inp,
+            ["--gfn", "2", "--" + task] + extra
+            + ["--input", xcontrol, "--norestart"],
+            rundir,
+        )
+        if status == 0:
+            fail("xtb --%s accepted the xcontrol $scan block" % task, output)
+        if "does not execute the xcontrol $scan block" not in output:
+            fail("xtb --%s did not explain the rejected $scan block" % task, output)
+        if os.path.exists(scanlog):
+            fail("xtb --%s wrote xtbscan.log although it refused the $scan block"
+                 % task, output)
+        print("scan block: --%s rejected the $scan block with status %d"
+              % (task, status))
+    # the ANCopt path still executes the block
+    optdir = os.path.join(rundir, "opt")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--opt", "--input", xcontrol, "--norestart"],
+        optdir,
+    )
+    if status != 0:
+        fail("xtb --opt with a $scan block terminated with status %d" % status, output)
+    if "RELAXED SCAN" not in output:
+        fail("--opt did not run the $scan block", output)
+    if not os.path.exists(os.path.join(optdir, "xtbscan.log")):
+        fail("--opt did not write xtbscan.log", output)
+
+
+def read_thermo(text):
+    """Enthalpy and free energy (hartree) of a thermochemistry printout."""
+    match = re.search(r"total free energy\s+(-?[\d.]+) Eh", text)
+    if not match:
+        fail("no total free energy in the output", text)
+    gibbs = float(match.group(1))
+    match = re.search(r"TOTAL ENTHALPY\s+(-?[\d.]+) Eh", text)
+    if match:
+        enthalpy = float(match.group(1))
+    else:
+        match = re.search(r"total enthalpy H\(T\):\s+(-?[\d.]+) Eh", text)
+        if not match:
+            fail("no total enthalpy in the output", text)
+        enthalpy = float(match.group(1))
+    return enthalpy, gibbs
+
+
+def read_json(rundir, name):
+    """Load a `--ljson` document of `rundir`."""
+    path = os.path.join(rundir, name)
+    if not os.path.exists(path):
+        fail("no %s in %s" % (name, rundir))
+    with open(path) as handle:
+        return json.load(handle)
+
+
+def check_thermo(exe, inp, rundir):
+    """`--lvib` thermochemistry follows the `$thermo` priority rule.
+
+    Mirrors `xtb/landscape-vib-thermo`.  Priority: explicit command line >
+    xcontrol `$thermo` > builtin default.  Before the fix `--lvib` overwrote
+    all four keys of the block unconditionally, so `$thermo temp=298.15,300,400`
+    collapsed to the single 298.15 K the settings carried and `scale=0.9` was
+    ignored, while `--hess` honoured both: the two routes disagreed by 7.5e-3
+    hartree on one geometry whose validated agreement is 1e-6 (the projector
+    spread, docs/_landscape-recon/49-*.md).  The comparisons below are made at
+    a *tight* minimum, which is where that tolerance is calibrated.
+    """
+    os.makedirs(rundir, exist_ok=True)
+    rundir = os.path.abspath(rundir)
+    inputs = {
+        "list": "$thermo\n   temp=298.15,300.0,400.0\n$end\n",
+        "scale": "$thermo\n   scale=0.9000\n   temp=298.15\n$end\n",
+        "temp298": "$thermo\n   temp=298.15\n$end\n",
+        "temp400": "$thermo\n   temp=400.0\n$end\n",
+    }
+    for name, block in inputs.items():
+        with open(os.path.join(rundir, name + ".inp"), "w") as handle:
+            handle.write(block)
+
+    # the thermochemistry table of `--hess` and `--lvib` has to agree, so the
+    # geometry must be a (tight) minimum
+    status, output = run(exe, inp, ["--gfn", "2", "--lopt", "--lopt-level", "tight",
+                                    "--norestart"], rundir)
+    if status != 0:
+        fail("the thermochemistry optimisation terminated with status %d" % status,
+             output)
+    geometry = os.path.join(rundir, "xtbopt.xyz")
+    if not os.path.exists(geometry):
+        fail("the thermochemistry optimisation wrote no xtbopt.xyz", output)
+
+    def thermo(task, args):
+        status, output = run(exe, geometry, ["--gfn", "2", "--" + task,
+                                             "--norestart"] + args, rundir)
+        if status != 0:
+            fail("xtb --%s %s terminated with status %d"
+                 % (task, " ".join(args), status), output)
+        return read_thermo(output), output
+
+    for name in ("list", "scale"):
+        (vh, vg), vib_out = thermo("lvib", ["-I", name + ".inp"])
+        (hh, hg), hess_out = thermo("hess", ["-I", name + ".inp"])
+        if abs(vg - hg) > 1.0e-6 or abs(vh - hh) > 1.0e-6:
+            fail("the --lvib and --hess thermochemistry disagree on %s by "
+                 "%.3e/%.3e hartree (H/G, tolerance 1e-6)\n--lvib:\n%s\n--hess:\n%s"
+                 % (name, vh - hh, vg - hg, vib_out, hess_out))
+        print("thermo: %-5s --lvib vs --hess  dH %.3e, dG %.3e hartree"
+              % (name, vh - hh, vg - hg))
+
+    # `temp=298.15,300.0,400.0` must produce one table row per temperature; the
+    # summary reports the *last* one, here 400 K (the same value `--hess`
+    # prints)
+    (_, list_g), list_out = thermo("lvib", ["-I", "list.inp"])
+    for temperature in ("298.15", "300.00", "400.00"):
+        if not re.search(r"^ *%s +VIB" % re.escape(temperature), list_out, re.M):
+            fail("the `$thermo temp` list lost the %s K row" % temperature, list_out)
+    (_, temp400_g), _ = thermo("lvib", ["-I", "temp400.inp"])
+    if abs(list_g - temp400_g) > 1.0e-9:
+        fail("`temp=298.15,300.0,400.0` does not report the 400 K value "
+             "(%.12f vs %.12f)" % (list_g, temp400_g))
+
+    (_, default_g), _ = thermo("lvib", [])
+    if abs(default_g - temp400_g) < 1.0e-9:
+        fail("the xcontrol `temp=400` did not override the builtin 298.15 K")
+    # explicit command line beats the xcontrol block
+    (_, cli_g), _ = thermo("lvib", ["-I", "temp298.inp", "--lvib-temp", "400"])
+    if abs(cli_g - temp400_g) > 1.0e-9:
+        fail("--lvib-temp 400 did not override `$thermo temp=298.15` "
+             "(%.12f vs %.12f)" % (cli_g, temp400_g))
+    # ... and the xcontrol block beats the builtin default (same value here)
+    (_, xc_g), _ = thermo("lvib", ["-I", "temp400.inp"])
+    if abs(xc_g - cli_g) > 1.0e-9:
+        fail("`$thermo temp=400` differs from `--lvib-temp 400` "
+             "(%.12f vs %.12f)" % (xc_g, cli_g))
+    print("thermo: CLI `--lvib-temp 400` == xcontrol `temp=400` == %.12f Eh" % cli_g)
+
+    # the same for `scale`: the CLI value and the xcontrol value are the same
+    # 0.9 on the same (builtin) temperature
+    (scaled_h, scaled_g), scaled_out = thermo("lvib", ["-I", "scale.inp"])
+    (cli_h, cli_g2), cli_out = thermo("lvib", ["--lvib-freq-scal", "0.9"])
+    if abs(scaled_g - cli_g2) > 1.0e-9 or abs(scaled_h - cli_h) > 1.0e-9:
+        fail("`$thermo scale=0.9` and `--lvib-freq-scal 0.9` differ "
+             "(%.12f vs %.12f)\n%s\n%s" % (scaled_g, cli_g2, scaled_out, cli_out))
+    if abs(scaled_g - default_g) < 1.0e-9:
+        fail("the xcontrol `scale=0.9` did not change the thermochemistry")
+    print("thermo: xcontrol `scale=0.9` == CLI `--lvib-freq-scal 0.9` == %.12f Eh"
+          % scaled_g)
+
+    # --- `--ljson` records the *effective* temperature, not the settings -----
+    # default (finding MEDIUM-1 of `05-w0-independent-review.md`): before this
+    # round `--lvib --ljson -I temp400.inp` wrote `temperature: 298.15` next to
+    # the 400 K `gibbs` of the same document, because the JSON read the
+    # `settings%` fields while the thermochemistry read the merged `$thermo`
+    # values.  Two runs with the same `gibbs` were computed at the same
+    # temperature, hence they must report the same `temperature` - and that
+    # number has to be the 400 K the block asked for.
+    def thermo_json(args):
+        status, output = run(exe, geometry, ["--gfn", "2", "--lvib", "--ljson",
+                                            "--norestart"] + args, rundir)
+        if status != 0:
+            fail("xtb --lvib --ljson %s terminated with status %d"
+                 % (" ".join(args), status), output)
+        return read_json(rundir, "landscape_vib.json"), read_thermo(output)[1], output
+
+    xc_doc, xc_json_g, xc_json_out = thermo_json(["-I", "temp400.inp"])
+    cli_doc, cli_json_g, cli_json_out = thermo_json(["--lvib-temp", "400"])
+    if abs(xc_json_g - cli_json_g) > 1.0e-9:
+        fail("the JSON runs of `$thermo temp=400` and `--lvib-temp 400` differ "
+             "(%.12f vs %.12f)" % (xc_json_g, cli_json_g), xc_json_out)
+    xc_temp = xc_doc["values"]["temperature"]
+    if abs(xc_temp - 400.0) > 1.0e-9:
+        fail("landscape_vib.json reports temperature %.6f K for a run whose "
+             "gibbs is the 400 K value" % xc_temp, xc_json_out)
+    if abs(xc_temp - cli_doc["values"]["temperature"]) > 1.0e-9:
+        fail("the JSON temperature of the `$thermo temp=400` run (%.6f) and of "
+             "the `--lvib-temp 400` run (%.6f) disagree"
+             % (xc_temp, cli_doc["values"]["temperature"]), cli_json_out)
+    print("thermo json: `$thermo temp=400` and `--lvib-temp 400` both report "
+          "temperature %.3f K for gibbs %.12f Eh" % (xc_temp, xc_json_g))
+
+    sc_doc, _, sc_json_out = thermo_json(["-I", "scale.inp"])
+    cli_sc_doc, _, cli_sc_json_out = thermo_json(["--lvib-freq-scal", "0.9"])
+    if abs(sc_doc["values"]["freq_scal"] - 0.9) > 1.0e-12:
+        fail("landscape_vib.json reports freq_scal %.9f for a `$thermo "
+             "scale=0.9` run" % sc_doc["values"]["freq_scal"], sc_json_out)
+    if abs(sc_doc["values"]["freq_scal"]
+           - cli_sc_doc["values"]["freq_scal"]) > 1.0e-12:
+        fail("the JSON scaling factors of the `$thermo scale=0.9` and the "
+             "`--lvib-freq-scal 0.9` run disagree (%r vs %r)"
+             % (sc_doc["values"]["freq_scal"], cli_sc_doc["values"]["freq_scal"]),
+             cli_sc_json_out)
+    print("thermo json: `$thermo scale=0.9` == `--lvib-freq-scal 0.9` -> "
+          "freq_scal %.3f" % sc_doc["values"]["freq_scal"])
+
+    # --- unusable values of the `$thermo` block are rejected -----------------
+    # The validation runs on the *merged* state, so a bad block value is caught
+    # exactly like a bad `--lvib-*` flag and before the first single point
+    # (finding P2-2 of `05-w0-independent-review.md`).  `set_thermo` checks
+    # nothing, so `$thermo scale=-1` used to be multiplied into every
+    # frequency (measured: it changed G by 1.9e-2 hartree instead of aborting).
+    invalid = {
+        "badscale": ("scale=-1.0", "the frequency scaling factor must be positive"),
+        "badtemp": ("temp=-5.0", "the thermochemical temperature must be positive"),
+        "badimagthr": ("imagthr=20.0",
+                       "the imaginary frequency cutoff must not be positive"),
+        "badsthr": ("sthr=-1.0",
+                    "the rotor cutoff of the quasi-RRHO treatment must not be negative"),
+    }
+    for name, (key, pattern) in invalid.items():
+        with open(os.path.join(rundir, name + ".inp"), "w") as handle:
+            handle.write("$thermo\n   %s\n$end\n" % key)
+        status, output = run(exe, geometry,
+                             ["--gfn", "2", "--lvib", "--norestart",
+                              "-I", name + ".inp"], rundir)
+        if status == 0:
+            fail("the `$thermo %s` block was accepted" % key, output)
+        if pattern not in output:
+            fail("the `$thermo %s` block was rejected without the documented "
+                 "message" % key, output)
+        print("thermo: `$thermo %-12s` rejected with status %d" % (key, status))
+
+
+def check_thermo_knobs(exe, inp, rundir, saddle):
+    """The rotor and imaginary cutoffs of `$thermo` take effect (`--lvib`).
+
+    Mirrors `xtb/landscape-vib-thermo-knobs`.  The `$thermo` block has exactly
+    four keys and the frequency settings carry one `*_was_set` guard per key
+    (`landscape_vib_settings`); `xtb/landscape-vib-thermo` covers `temp` and
+    `scale`, so this check closes `sthr` (`--lvib-rotor-cutoff`) and `imagthr`
+    (`--lvib-imag-cutoff`).  Both are asserted twice: an *effect* (the number
+    changes) and the *merge* (the xcontrol key and the CLI flag give the same
+    result).  Deleting the two guards of `sthr`/`imagthr`
+    (`landscape_vib_set_thermo_settings`) used to leave the whole suite green
+    - the CLI flag had no test at all (`sthr`) or only its error branch
+    (`imagthr`) - which is finding P2-1 of `05-w0-independent-review.md`.
+    """
+    os.makedirs(rundir, exist_ok=True)
+    rundir = os.path.abspath(rundir)
+    saddle_dir = os.path.join(rundir, "saddle")
+    os.makedirs(saddle_dir, exist_ok=True)
+
+    # --- sthr / --lvib-rotor-cutoff, on a tight water minimum ---------------
+    # The quasi-RRHO treatment replaces the harmonic entropy of the modes below
+    # the cutoff by the Grimme free-rotor interpolation, so the cutoff changes
+    # G (measured 1.5e-5 hartree here, H is untouched).
+    status, output = run(exe, inp, ["--gfn", "2", "--lopt", "--lopt-level",
+                                    "tight", "--norestart"], rundir)
+    if status != 0:
+        fail("the rotor cutoff optimisation terminated with status %d" % status,
+             output)
+    geometry = os.path.join(rundir, "xtbopt.xyz")
+    if not os.path.exists(geometry):
+        fail("the rotor cutoff optimisation wrote no xtbopt.xyz", output)
+    with open(os.path.join(rundir, "sthr.inp"), "w") as handle:
+        handle.write("$thermo\n   sthr=2000.0\n$end\n")
+
+    def water_thermo(args):
+        status, output = run(exe, geometry,
+                             ["--gfn", "2", "--lvib", "--norestart"] + args,
+                             rundir)
+        if status != 0:
+            fail("xtb --lvib %s terminated with status %d"
+                 % (" ".join(args), status), output)
+        return read_thermo(output)[1]
+
+    sthr_default = water_thermo([])
+    sthr_cli = water_thermo(["--lvib-rotor-cutoff", "2000"])
+    sthr_xc = water_thermo(["-I", "sthr.inp"])
+    if abs(sthr_cli - sthr_default) < 1.0e-9:
+        fail("--lvib-rotor-cutoff 2000 did not change the free energy "
+             "(%.12f vs %.12f)" % (sthr_cli, sthr_default))
+    if abs(sthr_cli - sthr_xc) > 1.0e-12:
+        fail("`--lvib-rotor-cutoff 2000` and `$thermo sthr=2000` differ "
+             "(%.12f vs %.12f)" % (sthr_cli, sthr_xc))
+    print("thermo knobs: rotor cutoff  --lvib-rotor-cutoff 2000 == "
+          "$thermo sthr=2000 = %.12f Eh (default %.12f, dG %.3e)"
+          % (sthr_cli, sthr_default, sthr_cli - sthr_default))
+
+    # --- imagthr / --lvib-imag-cutoff, on the bent HCN saddle --------------
+    # A mode whose magnitude is below the cutoff is treated as an artifact of
+    # the projected Hessian and `print_thermo` inverts its sign
+    # (`if (vibs(i) < 0 .and. vibs(i) > ithr)`, `src/main/property.F90`).  The
+    # fixture has one imaginary mode of -1077 cm^-1, so a cutoff of -10000 cm^-1
+    # has to turn it into a real mode: the analysis counts `n_imag` 0 instead
+    # of 1 (status `incomplete` -> `ok`) and the mode enters the partition
+    # function (measured dG 2.4e-3 hartree).
+    #
+    # The two routes are compared on the *thermochemistry*, not on `n_imag`:
+    # the suite's own mode analysis (`landscape_vib_analysis`) classifies with
+    # `settings%imag_cutoff`, so an xcontrol `imagthr` reaches the reused model
+    # (`set%thermo_ithr`) but not the analysis counter - the divergence is
+    # visible in the warning of `landscape_vib_thermo_output` ("the
+    # thermochemistry counted a different number of imaginary modes ...") and
+    # is recorded as an open finding in `docs/_simplify-recon/06-*.md`.  What
+    # this check pins is the *effect* of the CLI flag and that the block
+    # reaches the same effective cutoff (same G, same printed cutoff).
+    with open(os.path.join(saddle_dir, "imagthr.inp"), "w") as handle:
+        handle.write("$thermo\n   imagthr=-10000.0\n$end\n")
+
+    def saddle_json(args):
+        status, output = run(exe, saddle,
+                             ["--gfn", "2", "--lvib", "--ljson",
+                              "--norestart"] + args, saddle_dir)
+        if status != 0:
+            fail("xtb --lvib --ljson %s terminated with status %d"
+                 % (" ".join(args), status), output)
+        return read_json(saddle_dir, "landscape_vib.json"), output
+
+    default_doc, default_out = saddle_json([])
+    cli_doc, cli_out = saddle_json(["--lvib-imag-cutoff", "-10000"])
+    xc_doc, xc_out = saddle_json(["-I", "imagthr.inp"])
+    if default_doc["counters"]["n_imag"] != 1:
+        fail("the HCN fixture does not have one imaginary mode (%d)"
+             % default_doc["counters"]["n_imag"], default_out)
+    if cli_doc["counters"]["n_imag"] != 0:
+        fail("--lvib-imag-cutoff -10000 did not invert the imaginary mode "
+             "(n_imag %d)" % cli_doc["counters"]["n_imag"], cli_out)
+    if cli_doc["status"] != 0 or cli_doc["status_name"] != "ok":
+        fail("the run without an imaginary mode is not `ok` (%d/%s)"
+             % (cli_doc["status"], cli_doc["status_name"]), cli_out)
+    if abs(cli_doc["values"]["gibbs"]
+           - default_doc["values"]["gibbs"]) < 1.0e-6:
+        fail("the imaginary cutoff did not change the free energy "
+             "(%.12f vs %.12f)"
+             % (cli_doc["values"]["gibbs"], default_doc["values"]["gibbs"]),
+             default_out)
+    if abs(cli_doc["values"]["gibbs"] - xc_doc["values"]["gibbs"]) > 1.0e-12:
+        fail("`--lvib-imag-cutoff -10000` and `$thermo imagthr=-10000` differ "
+             "in G (%.12f vs %.12f)"
+             % (cli_doc["values"]["gibbs"], xc_doc["values"]["gibbs"]), xc_out)
+    match = re.search(r"imag[.] cutoff\s+(-?[\d.]+) cm", xc_out)
+    if not match or abs(float(match.group(1)) + 10000.0) > 1.0e-9:
+        fail("`$thermo imagthr=-10000` did not reach the thermochemistry",
+             xc_out)
+    if "inverting freq" not in xc_out:
+        fail("`$thermo imagthr=-10000` did not invert the imaginary mode",
+             xc_out)
+    print("thermo knobs: imag cutoff   --lvib-imag-cutoff -10000 == "
+          "$thermo imagthr=-10000 -> analytic n_imag 0, dG %.3e Eh (default "
+          "n_imag %d, status %s)"
+          % (cli_doc["values"]["gibbs"] - default_doc["values"]["gibbs"],
+             default_doc["counters"]["n_imag"], default_doc["status_name"]))
+
+
+def check_saddlefix(exe, inp, rundir):
+    """`$fix` holds the frozen atom for the single ended saddle searches.
+
+    Mirrors `xtb/landscape-lts-fix`; the input is the bent HCN transition state
+    guess whose atom 1 is the terminal H at `(0, 1.05, 0)` angstrom, and
+    `$fix atoms: 1` freezes it.  Before the projection the accepted step of
+    every method moved it (measured: prfo 0.1171, bprfo 0.1475, dimer 0.1482
+    angstrom - docs/_simplify-recon/04-*.md section 5.2).  After the fix the
+    coordinate is bitwise the input value, so the tolerance is the xyz
+    write/read round trip, not a measured spread.
+
+    `prfo` does **not** converge on this constrained fixture (it exhausts the
+    step budget, measured with 120/400/1200 steps - the same happens before the
+    projection, so the fixture is the reason, not the projection).  The check
+    therefore asserts the honest contract of either outcome: a converged run
+    exits 0, a non-converged run exits non-zero and says so.  No convergence is
+    faked and the step budget is not tuned to make the fixture pass.
+    """
+    # rebuilt: the check below asserts the *absence* of `xtbts.xyz` for the
+    # method that does not converge, and a leftover file of an earlier run (a
+    # manual run, or the injected run of the falsifiability experiment) would
+    # satisfy that existence check (the same trap as finding F1 of
+    # `50-m7-independent-review.md`)
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    os.makedirs(rundir, exist_ok=True)
+    xcontrol = os.path.join(rundir, "landscape_fix.inp")
+    with open(xcontrol, "w") as handle:
+        handle.write("$fix\n   atoms: 1\n$end\n")
+    reference = None
+    with open(inp) as handle:
+        for line in handle.read().splitlines()[2:4]:
+            fields = line.split()
+            if fields and fields[0] == "H":
+                reference = [float(value) for value in fields[1:4]]
+    if reference is None:
+        fail("the saddle fixture has no hydrogen at atom 1", inp)
+    for method in ("prfo", "bprfo", "dimer"):
+        geometry = os.path.join(rundir, "xtbts.xyz")
+        if os.path.exists(geometry):
+            os.remove(geometry)
+        status, output = run(
+            exe,
+            inp,
+            ["--gfn", "2", "--lts", "--lts-method", method,
+             "--lts-max-steps", "120", "--input", xcontrol, "--norestart"],
+            rundir,
+        )
+        converged = "landscape: converged" in output
+        if not os.path.exists(geometry):
+            fail("the --lts-method %s run wrote no xtbts.xyz" % method, output)
+        with open(geometry) as handle:
+            lines = handle.read().splitlines()
+        fields = lines[2].split()
+        if fields[0] != "H":
+            fail("the first output atom of %s is not the frozen hydrogen" % method,
+                 lines[2])
+        shift = max(abs(float(value) - ref)
+                    for value, ref in zip(fields[1:4], reference))
+        if shift > 1.0e-10:
+            fail(
+                "--lts-method %s moved the frozen atom by %.5e angstrom (%s)"
+                % (method, shift, " ".join(fields[1:4])),
+                output,
+            )
+        if method == "prfo":
+            # `prfo` does not converge on this constrained fixture (it exhausts
+            # the step budget, measured with 120/400/1200 steps - the same
+            # happens before the projection, so the fixture is the reason, not
+            # the projection).  What the check pins is therefore **not**
+            # "prfo must not converge": it is that the outcome is reported
+            # honestly - a converged run exits 0, a non-converged one exits
+            # non-zero with the message of `landscape_ts` ("transition state
+            # search did not converge: <reason>").  Asserting the surfaced
+            # reason instead ("maximum number of steps reached") would turn a
+            # future improvement of the trust radius into a red test for the
+            # wrong reason (finding P2-4 of `05-w0-independent-review.md`).
+            if converged:
+                if status != 0:
+                    fail("the constrained prfo run reported convergence with "
+                         "status %d" % status, output)
+            else:
+                if status == 0:
+                    fail("the constrained prfo run exited 0 although it did "
+                         "not converge", output)
+                if "transition state search did not converge" not in output:
+                    fail("the constrained prfo run failed without reporting "
+                         "the missing convergence", output)
+        else:
+            if status != 0 or not converged:
+                fail("--lts-method %s did not converge (status %d)"
+                     % (method, status), output)
+        print("saddle fix: %-5s status %d converged %s  frozen atom displacement "
+              "%.5e angstrom" % (method, status, converged, shift))
+
+
+def check_rejectfix(exe, inp, rundir):
+    """The methods without `$fix` support must refuse the run, not move atoms.
+
+    Mirrors `xtb/landscape-lirc-fix`.  The band searches of `--lts` and the
+    reaction path `--lirc` have no defined meaning for a frozen coordinate yet
+    (interpolated images / the mass weighted arc length contract), so they
+    abort with an actionable message instead of running in a geometry that
+    violates the constraint (docs/_simplify-recon/04-*.md sections 5.2/5.3).
+    """
+    # rebuilt: the check asserts the *absence* of the artefacts the refused run
+    # would have written when the guard is injected (finding F1 of
+    # `50-m7-independent-review.md`)
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    os.makedirs(rundir, exist_ok=True)
+    xcontrol = os.path.join(rundir, "landscape_fix.inp")
+    with open(xcontrol, "w") as handle:
+        handle.write("$fix\n   atoms: 1\n$end\n")
+    cases = [
+        ("--lirc", ["--lirc", "--lirc-method", "hpc", "--lirc-max-steps", "4"],
+         "the reaction path (--lirc) does not support $fix"),
+        ("--lts neb", ["--lts", "--lts-method", "neb", "--lts-max-steps", "4"],
+         "the band searches (--lts-method neb|cineb|autoneb|string|gsm) do not "
+         "support $fix"),
+    ]
+    for label, args, pattern in cases:
+        status, output = run(
+            exe, inp, ["--gfn", "2"] + args + ["--input", xcontrol, "--norestart"],
+            rundir,
+        )
+        if status == 0:
+            fail("%s accepted $fix although the method does not support it" % label,
+                 output)
+        if pattern not in output:
+            fail("%s did not explain the rejected $fix block" % label, output)
+        for artifact in ("xtbts.xyz", "irc_forward.xyz", "irc_path.xyz"):
+            if os.path.exists(os.path.join(rundir, artifact)):
+                fail("%s wrote %s although it refused the $fix block"
+                     % (label, artifact), output)
+        print("reject fix: %-9s rejected $fix with status %d" % (label, status))
 
 
 def check_ts(exe, inp, rundir):
@@ -1180,6 +1768,20 @@ def main():
         check_vib_namespace(exe, inp, rundir)
     elif mode == "vibetemp":
         check_vib_etemp(exe, inp, rundir)
+    elif mode == "fix":
+        check_fix(exe, inp, rundir)
+    elif mode == "scanblock":
+        check_scanblock(exe, inp, rundir)
+    elif mode == "saddlefix":
+        check_saddlefix(exe, inp, rundir)
+    elif mode == "rejectfix":
+        check_rejectfix(exe, inp, rundir)
+    elif mode == "thermo":
+        check_thermo(exe, inp, rundir)
+    elif mode == "thermoknobs":
+        if len(rest) < 1:
+            fail("the thermoknobs mode needs the saddle geometry")
+        check_thermo_knobs(exe, inp, rundir, rest[0])
     elif mode == "optnamespace":
         check_opt_namespace(exe, inp, rundir)
     elif mode == "ljsonnorun":

@@ -52,6 +52,31 @@ module xtb_landscape_testpot
    public :: landscape_rosenbrock_model, new_rosenbrock_model
    public :: landscape_muller_brown_model, new_muller_brown_model
    public :: landscape_leps_model, new_leps_model
+   public :: landscape_quadratic_fix_model, new_quadratic_fix_model
+
+   !> Quadratic model with a **non-diagonal** Hessian and a `$fix` mask.
+   !>
+   !> `E = 1/2 (x - x0)^T K (x - x0)` with the full symmetric `K` in two
+   !> dimensions, and the gradient zeroed on the components `frozen(i)` marks -
+   !> exactly what the xtb calculator does for a `$fix` atom
+   !> (`src/xtb/calculator.f90:304-306`).  The coupling `K(1,2)` is the point of
+   !> the model: an RFO step built from the full Hessian moves a frozen
+   !> component although its gradient is zero, so this is the analytic
+   !> regression test of the projection in
+   !> `xtb_landscape_optimize::landscape_optimize_model`.
+   type, extends(landscape_energy_model) :: landscape_quadratic_fix_model
+      !> Hessian (hartree/bohr^2), symmetric
+      real(wp) :: k(2, 2) = 0.0_wp
+      !> Position of the unconstrained minimum (bohr)
+      real(wp) :: x0(2) = 0.0_wp
+      !> Frozen components; the model zeroes their gradient
+      logical :: frozen(2) = .false.
+   contains
+      !> Energy and gradient
+      procedure :: evaluate => quadratic_fix_evaluate
+      !> Exact Hessian
+      procedure :: hessian => quadratic_fix_hessian
+   end type landscape_quadratic_fix_model
 
    !> Anisotropic harmonic oscillator, `E = 1/2 sum_i k_i (x_i - x0_i)^2`.
    !>
@@ -244,6 +269,75 @@ subroutine new_leps_model(self, d_e, beta, r_e, sato)
    if (present(sato)) self%sato = sato
 
 end subroutine new_leps_model
+
+!> Construct the quadratic `$fix` model.
+subroutine new_quadratic_fix_model(self, k, x0, frozen)
+   !> New model
+   type(landscape_quadratic_fix_model), intent(out) :: self
+   !> Hessian (hartree/bohr^2), symmetric
+   real(wp), intent(in) :: k(2, 2)
+   !> Unconstrained minimum (bohr)
+   real(wp), intent(in) :: x0(2)
+   !> Frozen components
+   logical, intent(in) :: frozen(2)
+
+   self%k = k
+   self%x0 = x0
+   self%frozen = frozen
+
+end subroutine new_quadratic_fix_model
+
+!> Energy and gradient of the quadratic `$fix` model, gradient zeroed on the
+!> frozen components.
+subroutine quadratic_fix_evaluate(self, x, energy, gradient, fail)
+   !> Model
+   class(landscape_quadratic_fix_model), intent(inout) :: self
+   !> Coordinates (bohr)
+   real(wp), intent(in) :: x(:)
+   !> Energy (hartree)
+   real(wp), intent(out) :: energy
+   !> Gradient (hartree/bohr)
+   real(wp), intent(out) :: gradient(:)
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   real(wp) :: d(2)
+
+   fail = .false.
+   if (size(x) /= 2 .or. size(gradient) /= 2) then
+      fail = .true.
+      energy = 0.0_wp
+      gradient = 0.0_wp
+      return
+   end if
+   d = x(1:2) - self%x0
+   energy = 0.5_wp*dot_product(d, matmul(self%k, d))
+   gradient = matmul(self%k, d)
+   where (self%frozen) gradient = 0.0_wp
+
+end subroutine quadratic_fix_evaluate
+
+!> Exact Hessian of the quadratic `$fix` model (the full `K`; the coupling to
+!> the frozen component is deliberately kept).
+subroutine quadratic_fix_hessian(self, x, hess, fail)
+   !> Model
+   class(landscape_quadratic_fix_model), intent(inout) :: self
+   !> Coordinates (bohr)
+   real(wp), intent(in) :: x(:)
+   !> Hessian (hartree/bohr^2)
+   real(wp), intent(out) :: hess(:, :)
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   fail = .false.
+   if (size(x) /= 2 .or. size(hess, 1) /= 2 .or. size(hess, 2) /= 2) then
+      fail = .true.
+      hess = 0.0_wp
+      return
+   end if
+   hess = self%k
+
+end subroutine quadratic_fix_hessian
 
 !> Energy and gradient of the anisotropic harmonic oscillator
 subroutine harmonic_evaluate(self, x, energy, gradient, fail)

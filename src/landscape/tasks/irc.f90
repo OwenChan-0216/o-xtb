@@ -85,6 +85,7 @@ module xtb_landscape_tasks_irc
       & landscape_hessian_provider, new_landscape_hessian_provider
    use xtb_landscape_tasks_opt, only : landscape_engine_model
    use xtb_landscape_optimize, only : landscape_optimize_model
+   use xtb_landscape_constraints, only : landscape_frozen_mask
    use xtb_landscape_vib_modes, only : landscape_vib_analysis
    use xtb_landscape_saddle_eigenfollow, only : landscape_transition_mode
    use xtb_landscape_irc_corrector, only : landscape_irc_masses, &
@@ -166,6 +167,27 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
          & landscape_restart_name(settings%engine%restart_mode)
       write(env%unit, '(1x,a,f12.3,a)') "electronic temperature:   ", &
          & settings%etemp, " K (frozen for the whole run)"
+   end if
+
+   ! `$fix` is not implemented for the reaction path: the path advance happens
+   ! in the mass weighted metric (`bohr*amu^1/2`), and the arc length column
+   ! `s` is a contract of this task (M6: `s` is the mass weighted arc length,
+   ! `docs/xtb-landscape-PLAN.md` section 5.3.7).  Restricting a step to the
+   ! `$fix` subspace shortens the step actually taken, so `s` can no longer be
+   ! accumulated from the *requested* step - and the LQA corrector iterates on
+   ! a requested arc length (`Sigma_n` reaches `s_target` with a Newton step)
+   ! which a projected step cannot reach, so its fixed point is not defined.
+   ! Every method is refused with `$fix` rather than run in a metric that is
+   ! neither the contract of this task nor the unconstrained one
+   ! (docs/_simplify-recon/04-o2-and-silent-defects-fix.md section 5.3;
+   ! PLAN section 6.9 open item).
+   if (any(landscape_frozen_mask(mol%n))) then
+      call env%error("the reaction path (--lirc) does not support $fix: its "//&
+         & "path advance is defined in the mass weighted arc length, which a "//&
+         & "fixed coordinate would have to redefine.  Use --lopt or --lts "//&
+         & "(their searches project the step), or remove the $fix block", source)
+      result%message = "the reaction path does not support $fix"
+      return
    end if
 
    ! --- engine -----------------------------------------------------------
@@ -669,7 +691,8 @@ subroutine relax_endpoint(env, model, x_end, settings, x_min, rmsd, e_min, &
    opt%g_rms = settings%g_rms
    opt%d_max = settings%d_max
    opt%d_rms = settings%d_rms
-   call landscape_optimize_model(env, model, opt, x_end, scratch, x_min)
+   call landscape_optimize_model(env, model, opt, x_end, scratch, x_min, &
+      & frozen=landscape_frozen_mask(size(x_end)/3))
    if (.not. allocated(x_min)) then
       call env%error("the IRC endpoint relaxation returned no geometry", source)
       fail = .true.

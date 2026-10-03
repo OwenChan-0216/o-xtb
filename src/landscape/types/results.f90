@@ -87,6 +87,22 @@ module xtb_landscape_results
       !> `TOTAL FREE ENERGY` and the reused thermodynamic table as
       !> `total free energy`
       real(wp) :: gibbs = 0.0_wp
+      !> **Effective** temperature (kelvin) of `enthalpy`/`gibbs`: the value
+      !> the reused thermochemistry used, read back out of the container
+      !> (`freq_results%temp`, `set%thermotemp(set%nthermo)`) after the
+      !> priority rule "command line > xcontrol `$thermo` > builtin default"
+      !> has been applied.  Reporting the settings field instead would make
+      !> `landscape_vib.json` contradict its own `gibbs` whenever the
+      !> temperature comes from a `$thermo temp=...` block.  Zero until the
+      !> thermochemistry wrapper has run.
+      real(wp) :: temperature = 0.0_wp
+      !> **Effective** frequency scaling factor of the thermochemistry
+      !> (`set%thermo_fscal` after the merge described on `temperature`).
+      !> `print_thermo` substitutes 1.03 for GFN-FF when the factor is the
+      !> builtin 1.0 - the same substitution the `--hess` route makes - so
+      !> this is the factor of the merged parameter state, not necessarily
+      !> the number the printout multiplies with for that one calculator.
+      real(wp) :: freq_scal = 0.0_wp
    end type landscape_vib_result
 
    !> Result of an intrinsic reaction coordinate integration (`irc` task,

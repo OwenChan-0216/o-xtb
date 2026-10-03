@@ -265,6 +265,59 @@ test('landscape vib etemp', python, env: landscape_env, args: [
   landscape_cli_dir / 'landscape-cli-vib-etemp',
 ])
 
+# `$fix` holds the frozen atom for every minimiser, including the RFO one whose
+# step is built from the Hessian (mirrors `xtb/landscape-fix-rfo`)
+test('landscape fix rfo', python, env: landscape_env, args: [
+  landscape_cli_check, 'fix', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-fix',
+])
+
+# a landscape run type rejects the xcontrol `$scan` block instead of silently
+# performing a different task (mirrors `xtb/landscape-scan-xcontrol`)
+test('landscape scan xcontrol', python, env: landscape_env, args: [
+  landscape_cli_check, 'scanblock', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-scanblock',
+])
+
+# `--lvib` thermochemistry follows the `$thermo` priority rule and agrees with
+# `--hess` under the same block (mirrors `xtb/landscape-vib-thermo`)
+test('landscape vib thermo', python, env: landscape_env, args: [
+  landscape_cli_check, 'thermo', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-thermo',
+])
+
+# the rotor (`sthr`) and imaginary (`imagthr`) cutoffs of `$thermo` take effect
+# through `--lvib-rotor-cutoff`/`--lvib-imag-cutoff` as well
+# (mirrors `xtb/landscape-vib-thermo-knobs`; the second geometry is the bent HCN
+# saddle, which has one imaginary mode to invert)
+test('landscape vib thermo knobs', python, env: landscape_env, args: [
+  landscape_cli_check, 'thermoknobs', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-vib-thermo-knobs',
+  meson.current_build_dir() / 'landscape_hcn.xyz',
+])
+
+# `$fix` holds the frozen atom for the single ended saddle searches as well
+# (mirrors `xtb/landscape-lts-fix`; the input is the bent HCN transition state
+# guess whose atom 1 is frozen)
+hcn_xyz = meson.current_build_dir() / 'landscape_hcn.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("3\\nbent HCN (transition state guess)\\nH 0.0 1.05 0.0\\nC 0.0 0.0 0.0\\nN 1.156 0.0 0.0\\n")',
+  hcn_xyz,
+  check: true,
+)
+test('landscape lts fix', python, env: landscape_env, args: [
+  landscape_cli_check, 'saddlefix', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-lts-fix',
+])
+
+# the band searches and the reaction path refuse `$fix` instead of moving the
+# frozen atoms (mirrors `xtb/landscape-lirc-fix`)
+test('landscape lirc fix', python, env: landscape_env, args: [
+  landscape_cli_check, 'rejectfix', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-lirc-fix',
+])
+
 # `--lscan-max-steps`: a scan without a converged point reports a missing
 # minimum (M2 leftovers M-1/M-2)
 test('landscape scan max steps', python, env: landscape_env, args: [

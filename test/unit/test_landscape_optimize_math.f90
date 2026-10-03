@@ -42,7 +42,9 @@ module test_landscape_optimize_math
    use xtb_landscape_diis, only : landscape_diis_type, new_landscape_diis
    use xtb_landscape_testpot, only : landscape_harmonic_model, &
       & landscape_rosenbrock_model, landscape_muller_brown_model, &
-      & new_harmonic_model, new_rosenbrock_model, new_muller_brown_model
+      & landscape_quadratic_fix_model, &
+      & new_harmonic_model, new_rosenbrock_model, new_muller_brown_model, &
+      & new_quadratic_fix_model
    use xtb_landscape_optimize, only : landscape_optimize_model
    implicit none
    private
@@ -81,6 +83,7 @@ subroutine collect_landscape_optimize_math(testsuite)
       new_unittest("engine-hvp", test_engine_hvp), &
       new_unittest("rfo-after-warning", test_rfo_after_warning), &
       new_unittest("line-search-toggle", test_line_search_toggle), &
+      new_unittest("fix-projection", test_fix_projection), &
       new_unittest("hess-acc-wiring", test_hess_acc_wiring) &
       ]
 
@@ -936,5 +939,67 @@ subroutine run_algorithms(env, error, model, xstart, xref, tol, max_steps, level
    end do
 
 end subroutine run_algorithms
+
+!> `$fix`: no minimiser may move a frozen component.
+!>
+!> The model couples the frozen component 1 to the free component 2
+!> (`K(1,2) = 3`), which is the property the projection exists for: from the
+!> start point `(1, 1)` the gradient is `(0, 7)` (component 1 zeroed by the
+!> model, as the calculator zeroes a `$fix` atom) and the RFO step built from
+!> the full Hessian is `K^-1 g = (-3, 4)`, i.e. a **3 bohr** displacement of the
+!> frozen component.  The constrained minimum is `(1, -0.75)`, because the free
+!> component solves `K(2,1) x1 + K(2,2) x2 = 0`; the frozen component keeps its
+!> start value exactly.  Every algorithm has to reach that point, and the
+!> assertion on `xfinal(1)` is the falsifiable one - removing the projection
+!> from `landscape_optimize_model` moves it by more than 1e-1 bohr.
+subroutine test_fix_projection(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(landscape_quadratic_fix_model) :: model
+   type(landscape_opt_settings) :: set
+   type(landscape_result) :: result
+   real(wp), allocatable :: xstart(:), xfinal(:)
+   real(wp) :: k(2, 2)
+   logical :: frozen(2)
+   integer :: i
+
+   call init(env)
+   k = reshape([4.0_wp, 3.0_wp, 3.0_wp, 4.0_wp], [2, 2])
+   frozen = [.true., .false.]
+   call new_quadratic_fix_model(model, k, [0.0_wp, 0.0_wp], frozen)
+   xstart = [1.0_wp, 1.0_wp]
+
+   do i = 1, size(algorithms)
+      set = landscape_opt_settings()
+      set%algorithm = algorithms(i)
+      set%max_steps = 500
+      set%printlevel = 0
+      set%write_files = .false.
+      call set%set_conv_level("vtight")
+      call landscape_optimize_model(env, model, set, xstart, result, xfinal, &
+         & frozen=frozen)
+      if (.not. allocated(xfinal)) then
+         call check(error, .false., trim(landscape_opt_algorithm_name( &
+            & algorithms(i)))//" returned no geometry")
+         return
+      end if
+      write(stdout, '(1x,a,a,i6,a,l1,a,es12.4,a,es12.4)') "  ", &
+         & landscape_opt_algorithm_name(algorithms(i)), result%n_steps, &
+         & " steps, converged ", result%converged, ", x1 ", xfinal(1), &
+         & ", x2 ", xfinal(2)
+      call check(error, result%converged, &
+         & trim(landscape_opt_algorithm_name(algorithms(i)))//" did not converge")
+      if (allocated(error)) return
+      call check(error, abs(xfinal(1) - xstart(1)) < 1.0e-12_wp, &
+         & trim(landscape_opt_algorithm_name(algorithms(i)))// &
+         & " moved the frozen component")
+      if (allocated(error)) return
+      call check(error, abs(xfinal(2) + 0.75_wp) < 1.0e-8_wp, &
+         & trim(landscape_opt_algorithm_name(algorithms(i)))// &
+         & " did not reach the constrained minimum")
+      if (allocated(error)) return
+   end do
+
+end subroutine test_fix_projection
 
 end module test_landscape_optimize_math

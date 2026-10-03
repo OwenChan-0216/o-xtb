@@ -68,6 +68,7 @@ module xtb_landscape_scan_relax
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack
    use xtb_landscape_optimize, only : landscape_optimize_model
+   use xtb_landscape_constraints, only : landscape_frozen_mask
    use xtb_landscape_results, only : landscape_result
    implicit none(type, external)
    private
@@ -644,7 +645,8 @@ subroutine landscape_scan_relax_point(env, base, settings, coords, targets, &
       & at, settings%constraint_fc, settings%spring_expo)
    opt = landscape_scan_inner_settings(settings)
 
-   call landscape_optimize_model(env, model, opt, x0, result, xout)
+   call landscape_optimize_model(env, model, opt, x0, result, xout, &
+      & frozen=landscape_frozen_mask(size(at)))
    if (.not. allocated(xout)) then
       call env%error("the inner minimisation returned no geometry", source)
       fail = .true.

@@ -134,6 +134,7 @@ module xtb_landscape_saddle_dimer
       & landscape_result_add_step, landscape_result_trim, landscape_report_add, &
       & landscape_print_step, p_landscape_bound_step_max
    use xtb_landscape_coords, only : vec_norm, vec_maxabs, vec_rms
+   use xtb_landscape_constraints, only : landscape_project_fixed_atoms
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_saddle_eigenfollow, only : landscape_rigid_modes, &
       & landscape_project_rigid, landscape_transition_mode, &
@@ -826,6 +827,12 @@ subroutine landscape_dimer_optimize(env, objective, settings, x0, result, &
             step = min(tau_eff*step_norm, settings%step_max)*unit
          end if
          if (n_rigid > 0) call landscape_project_rigid(step, rigid, n_rigid)
+         ! `$fix`: the translation step must not move a fixed atom.  The dimer
+         ! does not need a Hessian, but the mobility `tau` scales the *whole*
+         ! force vector, and the finite difference force of a fixed atom is
+         ! zero only up to the SCF gradient zeroing of the calculator, so the
+         ! projection is applied here exactly like the minimiser does it.
+         call landscape_project_fixed_atoms(step)
          if (vec_norm(step) <= dimer_tiny) exit
 
          x_trial = x + step

@@ -66,6 +66,7 @@ module xtb_landscape_saddle_prfo
       & landscape_result_add_step, landscape_result_trim, landscape_report_add, &
       & landscape_print_step
    use xtb_landscape_coords, only : vec_norm, vec_maxabs
+   use xtb_landscape_constraints, only : landscape_project_fixed_atoms
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_hessian_update, only : update_by_enum
    use xtb_landscape_saddle_eigenfollow, only : landscape_transition_mode, &
@@ -585,6 +586,17 @@ subroutine landscape_saddle_optimize(env, objective, settings, x0, result, &
       if (n_rigid > 0) then
          call landscape_project_rigid(step, rigid, n_rigid)
       end if
+      ! `$fix`: the accepted step must not move a fixed atom.  The gradient is
+      ! already zero there (the calculator does that), but the P-RFO step is
+      ! expanded in the eigenvectors of the Hessian, which mix the frozen and
+      ! the free components - the same defect the minimiser had.  Projecting
+      ! the step (and not the Hessian) is deliberate: unlike a rigid body mode,
+      ! a `$fix` direction is **not** a null direction of the Hessian, so
+      ! removing it from the matrix would create three artificial zero
+      ! eigenvalues per fixed atom and distort the eigenvalue selection and the
+      ! `hlow` lift.  The projections of the rigid directions are unaffected -
+      ! both are applied to the same step, one after the other.
+      call landscape_project_fixed_atoms(step)
 
       x_trial = x + step
       call objective%evaluate(x_trial, e_trial, g_trial, fail)
@@ -777,6 +789,10 @@ contains
       do itry = 1, ntries
          dvec = settings%escape_step*mode%vector
          if (n_rigid > 0) call landscape_project_rigid(dvec, rigid, n_rigid)
+         ! the escape walk is a geometry displacement as well, so it may not
+         ! move a fixed atom either; a mode that lives entirely on the fixed
+         ! coordinates therefore stops the walk instead of being followed
+         call landscape_project_fixed_atoms(dvec)
          if (vec_norm(dvec) <= tiny(1.0_wp)) then
             call env%warning("the lowest mode has no internal component; the "//&
                & "escape walk is stopped", source)

@@ -987,6 +987,39 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 | SR1 | Murtagh–Sargent 1970；Conn–Gould–Toint 2000 | 不定 Hessian | 分母 `\|y·s\|` 与 `\|sᵀ(H−…)s\|` 双阈值守卫；接近零则跳过更新 |
 | 通用要求 | — | — | 更新后**强制对称化**；协方差/曲率异常 → `env%warning` + 跳过 |
 
+### 6.9 `$fix` 支持矩阵（本轮新增：既有什么已修、什么明确报错）
+
+xtb 把 `$fix` 实现在**计算器层**（`src/xtb/calculator.f90:304-306`：固定原子的梯度置零）。
+这对**一阶**方向足够，但**不**蕴含二阶步的固定分量为零：RFO/P-RFO 的步在本征矢里展开，
+而本征矢混合固定与自由分量（`docs/_simplify-recon/04-o2-and-silent-defects-fix.md` §2.1）。
+因此凡是会产生二阶步的路径，都必须**额外投影**或**明确拒绝**，不允许静默。
+
+| 路径 | 处理 | 位置 | 状态 |
+|---|---|---|---|
+| `--lopt`（sd/cg/lbfgs/bfgs/diis/rfo） | 投影方向向量 | `src/landscape/optimize/driver.f90`（`landscape_project_frozen`） | ✅ 本轮修复 + 测试 + 注入 |
+| `--lscan` 松弛内层 | 同上（同一个 driver） | `src/landscape/scan/relax_scan.f90`（`landscape_scan_relax_point`） | ✅ |
+| `--lts` 端点松弛、`--lirc` 端点松弛 | 同上 | `src/landscape/tasks/ts.f90`（`relax_one_endpoint`）、`tasks/irc.f90`（`relax_endpoint`） | ✅ |
+| `--lts --lts-method prfo\|bprfo\|dimer` | 投影接受的步（复用刚体投影的同一位置） | `saddle/prfo.f90`（主步 + escape walk）、`saddle/dimer.f90` | ✅ 本轮（报告 §5.2） |
+| `--lts --lts-method neb\|cineb\|autoneb\|string\|gsm` | **`env%error` 拒绝** | `src/landscape/tasks/ts.f90`（band 分支之前） | ⛔ **待办**：band 图像的插值/IDPP/重分布对 `$fix` 无定义（两端点不一致时） |
+| `--lirc`（gs\|lqa\|hpc\|eulerpc） | **`env%error` 拒绝** | `src/landscape/tasks/irc.f90`（入口） | ⛔ **待办**：见下 |
+| `--lscan --lscan-mode rigid` | 未覆盖（纯几何构造） | `scan/scan1d.f90`/`scan2d.f90` | ⛔ 待办（未做实验） |
+
+**`--lirc` 的待办（为什么本轮不做）**：IRC 的推进在**质量加权**度量（`bohr*amu^1/2`）里，
+且 `s` 列是 M6 的**契约**（质量加权弧长，§6.5「弧长定义」一行）。把步投影到 `$fix` 子空间后：
+
+1. **弧长语义必须二选一并写进契约**：`s` 是「请求的步长累加」还是「实际走出的弧长」？
+   投影会缩短实际步长，因此两者不再相等；自洽的选法是**只统计允许子空间内的弧长**
+   （`s_cur = s_cur + |Δq_projected|`），但这会让 `s` 与未投影运行的定义在同一条路径上不同口径，
+   属于契约变更，需先拍板。
+2. **LQA 的正确器在投影下有不确定的不动点**：`Sigma_n` 步以 **Newton 迭代打到请求的 `s_target`**
+   （`irc/corrector.f90:399-493`），投影后的步**无法**达到该弧长目标 ⇒ 迭代的不动点不是「投影后的修正点」。
+   这是「不确信正确」的判断依据。
+3. **GS 的球面弛豫**尚未关闭（§6.5 的 Lagrange open item），叠加 `$fix` 会让该行为基线的区分成本翻倍。
+
+⇒ 按「宁可响亮失败」原则，本轮把 `--lirc` + `$fix` 变成**显式错误**并登记为待办；
+修法（已分析可行）是把每个方法接受点的**质量加权位移**投影（`Δq` 的固定分量置零 ⇔ `Δx` 的固定分量置零，
+因为 `Δq_i = sqrt(m_i) Δx_i`），并按第 1 条重写 `s` 的累加，然后逐方法重跑 M6 验收。
+
 ---
 
 ## 7. 数值卫生规范
@@ -1099,7 +1132,7 @@ E      = E0 + gᵀ Δq + ½ Δqᵀ H Δq                          (4.16)
 
 **M0 验收测试**
 1. `ctest -R landscape` 全绿（见 §12.9 实跑输出）；
-2. **构建真实通过**：`cmake -S . -B /tmp/xtb-land/build -DWITH_TBLITE=OFF -DWITH_CPCMX=OFF -DWITH_TESTS=ON -DCMAKE_BUILD_TYPE=Release` + `cmake --build`（见 §10 环境约束）；
+2. **构建真实通过**：`cmake -S . -B /tmp/xtb-o2/build -DWITH_TBLITE=OFF -DWITH_CPCMX=OFF -DWITH_TESTS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG"` + `cmake --build`（见 §10 环境约束）；
 3. 现有 `test/unit` 无回归（`ctest -R 'landscape|api'` + CLI 冒烟全绿）；
 4. `xtb --help` / `xtb --version` 仍正常（`xtb/Argparser_print_help`、`xtb/Argparser_print_version` 全绿）；
 5. 代码审查：N1–N18 checklist（`engine%ctrl%hessian_source` 已删除，见 §12.8 D3）。
@@ -2195,6 +2228,7 @@ namespace 前缀）；单元 `landscape-e2e` 的 `sp-ljson`（`sp` 无 runtyp，
 |---|---|---|
 | `cmake --version` | 4.3.2 | 必须 `-DWITH_CPCMX=OFF`（否则 cpcmx 与 toml-f 目标重名，`CMakeLists.txt:56-58`） |
 | `gfortran --version` | GNU Fortran 12.2.0 | 支持 `implicit none(type, external)`、`allocate(polymorphic, source=)`、`select type` |
+| 优化档 | **必须 `-DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG"`**；`Release` 的 GNU 默认是 `-O3` | ★实测（2026-10-03，`docs/_simplify-recon/04-o2-and-silent-defects-fix.md`）：gfortran 12.2.0 编译 `edcfbbe` 源码的 Hessian 路径在 `-O3` 下给出 `-931.59/3329.78/3345.94 cm⁻¹`（错），`-O0/-O1/-O2` 全部正确且与参照二进制逐位一致；`-O3 -fno-tree-vectorize` 同样错 ⇒ 机制未定位。**`24c069f` 未复现**，但风险无法界定 ⇒ 官方档位取 `-O2`。`cmake/CMakeLists.txt` 在检测到 `-O3` 时 `message(WARNING ...)`。四体系验收在 -O2 与 -O3 下 `hessian`/`vibspectrum` **逐字节相同** |
 | `meson` / `ninja` | **未安装**（`command not found`） | `meson.build` 必须写但无法验证（R-16） |
 | mctc-lib | 本机无，CMake 经 FetchContent 联网拉取 v0.5.1 | 构建需网络；已验证可行 |
 | 构建目录 | 一律 `/tmp/...` | 仓库内**不得**出现 `build/` |
@@ -2211,7 +2245,7 @@ ctest --test-dir /tmp/xtb-land/build -R 'Singlepoint|GFN|model-hessian|optimizer
 **M0/M1 必须执行的验证命令**（实现阶段）：
 
 ```bash
-cmake -S . -B /tmp/xtb-build-ls -DWITH_CPCMX=OFF -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B /tmp/xtb-build-ls -DWITH_CPCMX=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG"
 cmake --build /tmp/xtb-build-ls -j
 ctest --test-dir /tmp/xtb-build-ls --output-on-failure -R landscape
 ```

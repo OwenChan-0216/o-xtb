@@ -24,6 +24,7 @@ list(APPEND srcs
   "${dir}/types/settings.f90"
   "${dir}/types/results.f90"
   "${dir}/types/coords.f90"
+  "${dir}/types/constraints.f90"
   "${dir}/types/log.f90"
   "${dir}/types/hessian.f90"
   "${dir}/types/json.f90"

@@ -3046,6 +3046,90 @@ add_test("xtb/landscape-e2e-maple"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-maple
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
 
+# The three CLI checks of the `-O2`/silent-defect round
+# (`docs/_simplify-recon/04-o2-and-silent-defects-fix.md`): they compare floating
+# point values (a displacement, two thermochemistry totals) and write their own
+# xcontrol files, so they run through `landscape_cli_check.py` like the meson
+# tests of the same name instead of a `cmake -P` script.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${PYTHON}" "${SCRIPT}" ${ARGS}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "landscape_cli_check.py failed with status ${status}\n${output}")
+endif()
+]=])
+set(LANDSCAPE-CLI-PY "${CMAKE_CURRENT_SOURCE_DIR}/landscape_cli_check.py")
+
+# `$fix` must hold the frozen atom for every minimiser; the RFO step is the
+# falsifiable engine, because it is built from the Hessian and not from the
+# gradient.
+add_test("xtb/landscape-fix-rfo"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=fix;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-fix"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-fix
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# A landscape run type must reject the xcontrol `$scan` block instead of
+# silently performing a different task.
+add_test("xtb/landscape-scan-xcontrol"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=scanblock;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-scanblock"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-scanblock
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `--lvib` follows the `$thermo` priority rule (explicit CLI > xcontrol >
+# builtin default) and therefore agrees with `--hess` under the same block.
+add_test("xtb/landscape-vib-thermo"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=thermo;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-thermo"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-thermo
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The `$thermo` block has four keys and the frequency settings one `*_was_set`
+# guard per key; `xtb/landscape-vib-thermo` covers `temp` and `scale`, this one
+# covers `sthr` (`--lvib-rotor-cutoff`) and `imagthr`
+# (`--lvib-imag-cutoff`) and asserts the merged values as well.
+add_test("xtb/landscape-vib-thermo-knobs"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=thermoknobs;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-vib-thermo-knobs;${LANDSCAPE-HCN}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-vib-thermo-knobs
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `$fix` must hold the frozen atom for the single ended saddle searches too:
+# the P-RFO/B-PRFO step is expanded in the eigenvectors of the Hessian, which
+# mix the frozen and the free components, so all three methods used to move it.
+add_test("xtb/landscape-lts-fix"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=saddlefix;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lts-fix"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lts-fix
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The band searches of `--lts` and the reaction path `--lirc` have no defined
+# `$fix` semantics yet and must refuse the run instead of moving the atoms.
+add_test("xtb/landscape-lirc-fix"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=rejectfix;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lirc-fix"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lirc-fix
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # 340x OpenMP anti-scaling of many small single points out of the picture
 # (AGENTS.md section 6.8).
@@ -3064,6 +3148,12 @@ set_tests_properties(
   "xtb/landscape-e2e-chain-failure"
   "xtb/landscape-e2e-layers"
   "xtb/landscape-e2e-maple"
+  "xtb/landscape-fix-rfo"
+  "xtb/landscape-scan-xcontrol"
+  "xtb/landscape-vib-thermo"
+  "xtb/landscape-vib-thermo-knobs"
+  "xtb/landscape-lts-fix"
+  "xtb/landscape-lirc-fix"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

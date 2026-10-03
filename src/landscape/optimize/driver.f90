@@ -47,6 +47,7 @@ module xtb_landscape_optimize
       & landscape_result_add_step, landscape_result_trim, landscape_report_add, &
       & landscape_print_step
    use xtb_landscape_coords, only : vec_norm, vec_maxabs
+   use xtb_landscape_constraints, only : landscape_project_frozen
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_line_search, only : landscape_line_search
    use xtb_landscape_sd, only : landscape_sd_direction
@@ -73,7 +74,7 @@ contains
 !> `x_final` returns the optimised coordinates and `traj` the recorded
 !> trajectory (`(ndim, nframes)`, the first frame is the starting geometry).
 subroutine landscape_optimize_model(env, objective, settings, x0, result, &
-      & x_final, traj)
+      & x_final, traj, frozen)
    character(len=*), parameter :: source = 'landscape_optimize_model'
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
@@ -89,7 +90,13 @@ subroutine landscape_optimize_model(env, objective, settings, x0, result, &
    real(wp), allocatable, intent(out), optional :: x_final(:)
    !> Recorded trajectory (bohr)
    real(wp), allocatable, intent(out), optional :: traj(:, :)
-
+   !> Mask of the Cartesian components held fixed by `$fix` (length `3N`,
+   !> `xtb_landscape_constraints::landscape_frozen_mask`).  Every search
+   !> direction is projected onto the subspace this mask leaves free, which is
+   !> what makes the RFO step respect `$fix` (see the module documentation of
+   !> `xtb_landscape_constraints`).  Omitted, or all-false, means unconstrained
+   !> and reproduces the previous behaviour bitwise.
+   logical, intent(in), optional :: frozen(:)
    type(landscape_lbfgs_type) :: lbfgs
    type(landscape_cg_type) :: cg
    type(landscape_bfgs_type) :: bfgs
@@ -97,16 +104,32 @@ subroutine landscape_optimize_model(env, objective, settings, x0, result, &
    type(landscape_step) :: record
    real(wp), allocatable :: x(:), g(:), d(:), step(:), x_trial(:), g_trial(:)
    real(wp), allocatable :: hmat(:, :), hnew(:, :), hinit(:, :), frames(:, :)
+   logical, allocatable :: fix_mask(:)
    real(wp) :: energy, e_trial, de, trust, trust_hi, rho, predicted
    real(wp) :: gmax, grms, dmax, drms
    logical :: fail, ok, ls_fail, steepest, accepted, use_trust, check_displ
-   logical :: fallback, fallback_step
+   logical :: fallback, fallback_step, constrained
    integer :: istep, nstagnate, nreject, n_evals, ls_evals, ndim, nframes
    integer :: method
 
    if (size(x0) == 0) return
    call reset_result(result)
    ndim = size(x0)
+
+   ! `$fix`: a second order step must not move a fixed atom even though its
+   ! gradient is zero, so every direction is projected onto the subspace the
+   ! mask leaves free (see `xtb_landscape_constraints`).  With an absent or
+   ! all-false mask `constrained` stays false and nothing below changes.
+   allocate(fix_mask(ndim), source=.false.)
+   if (present(frozen)) then
+      if (size(frozen) /= ndim) then
+         result%message = "the $fix mask does not match the coordinates"
+         call env%error("the frozen component mask has the wrong length", source)
+         return
+      end if
+      fix_mask = frozen
+   end if
+   constrained = any(fix_mask)
 
    allocate(x(ndim), g(ndim), d(ndim), step(ndim), x_trial(ndim), g_trial(ndim))
    x = x0
@@ -253,6 +276,18 @@ subroutine landscape_optimize_model(env, objective, settings, x0, result, &
          call finish()
          return
       end select
+
+      ! `$fix`: drop the frozen components of the direction.  For SD/CG/L-BFGS/
+      ! GDIIS this is a provable no-op (they are built from the zeroed gradient
+      ! and from history vectors that inherit its zeros); BFGS only when its
+      ! seed is decoupled (the default `hlow*I` is, a Lindh-D2 seed from
+      ! `--lopt-hessian model` is not), and for RFO it is the projection onto
+      ! the subspace `$fix` leaves free, which is the whole fix (see
+      ! `xtb_landscape_constraints`).  The gradient
+      ! vanishes on the frozen components, so the projected direction is still
+      ! a descent direction and `predicted` stays an upper bound of the model
+      ! decrease of the step that is actually taken.
+      if (constrained) call landscape_project_frozen(d, fix_mask)
 
       if (.not. use_trust) then
          call clip_step(d, settings%max_displ)

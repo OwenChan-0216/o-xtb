@@ -89,6 +89,7 @@ module xtb_landscape_tasks_ts
       & landscape_hessian_provider, new_landscape_hessian_provider
    use xtb_landscape_tasks_opt, only : landscape_engine_model
    use xtb_landscape_optimize, only : landscape_optimize_model
+   use xtb_landscape_constraints, only : landscape_frozen_mask
    use xtb_landscape_saddle_prfo, only : landscape_saddle_optimize
    use xtb_landscape_saddle_dimer, only : landscape_dimer_optimize
    use xtb_landscape_vib_modes, only : landscape_vib_analysis
@@ -203,6 +204,28 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
             & "(`--lts-method neb|cineb|autoneb|string|gsm`) and is ignored "//&
             & "by '"//trim(landscape_ts_method_name(settings%method))//"'", &
             & 'landscape_ts')
+      end if
+   end if
+
+   ! `$fix` is supported by the single ended searches (P-RFO, B-PRFO, dimer:
+   ! their accepted step is projected onto the subspace `$fix` leaves free,
+   ! `saddle/prfo.f90`, `saddle/dimer.f90`), but **not** by the band searches.
+   ! A band image lies between the two endpoints and is rebuilt by
+   ! interpolation, by the IDPP initial path and by the redistribution after
+   ! every step (`path/idpp.f90`, `path/string.f90`, `path/gsm.f90`), so
+   ! "which coordinate is fixed" has no defined meaning when the two endpoints
+   ! disagree on it - `$fix atoms: 1` with a product whose atom 1 is elsewhere
+   ! would move atom 1 of every interior image.  The run is refused instead of
+   ! moved silently (docs/_simplify-recon/04-o2-and-silent-defects-fix.md
+   ! section 5.2; PLAN section 6.9 open item).
+   if (landscape_ts_method_is_band(settings%method)) then
+      if (any(landscape_frozen_mask(mol%n))) then
+         call env%error("the band searches (--lts-method neb|cineb|autoneb|"//&
+            & "string|gsm) do not support $fix: their interior images are "//&
+            & "interpolated between the two endpoints.  Use --lts-method "//&
+            & "prfo, bprfo or dimer, or remove the $fix block", source)
+         result%message = "the band searches do not support $fix"
+         return
       end if
    end if
 
@@ -1185,7 +1208,8 @@ subroutine relax_one_endpoint(env, model, opt, settings, geometry, label, &
    if (fail) return
    g_before = sqrt(sum(gflat**2))
 
-   call landscape_optimize_model(env, model, opt, x0, res, xfinal)
+   call landscape_optimize_model(env, model, opt, x0, res, xfinal, &
+      & frozen=landscape_frozen_mask(size(geometry, 2)))
    if (.not. allocated(xfinal)) then
       fail = .true.
       return

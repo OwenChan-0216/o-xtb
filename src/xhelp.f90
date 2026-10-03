@@ -282,6 +282,8 @@ subroutine help(iunit)
    "--lopt",&
    "    minimize the geometry with the landscape task suite (src/landscape); the", &
    "    algorithm is selected with --lopt-engine and the thresholds with --lopt-level",&
+   "    an xcontrol $scan block is not executed by this run type and aborts the run", &
+   "    (use --opt for that block, or --lscan with --lscan-coord)", &
    "",&
    "--lopt-engine NAME",&
    "    minimisation algorithm of the landscape suite, one of sd, cg, lbfgs,", &
@@ -654,6 +656,9 @@ subroutine help(iunit)
    "    harmonic frequencies, normal modes and thermochemistry with the landscape task", &
    "    suite (src/landscape); writes vibspectrum, vib_normal_modes, g98.out and hessian", &
    "    with the names and formats of --hess", &
+   "    an xcontrol $thermo block (temp, sthr, imagthr, scale) is honoured unless", &
+   "    the matching --lvib-temp, --lvib-rotor-cutoff, --lvib-imag-cutoff or", &
+   "    --lvib-freq-scal option is given: explicit command line > $thermo > default", &
    "",&
    "--lvib-hessian SOURCE",&
    "    Hessian backend of the frequency task, one of numerical (default, central", &

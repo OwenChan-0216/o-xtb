@@ -578,22 +578,45 @@ module xtb_landscape_settings
       !> mode count of this task agrees with `--hess`.
       real(wp) :: linear_tol = 1.0e-4_wp
       !> Temperatures of the thermochemical table (kelvin); only the first
-      !> `n_temperature` entries are used
+      !> `n_temperature` entries are used.  The CLI writes both fields and sets
+      !> `temperature_was_set`; without that flag the xcontrol `$thermo temp=...`
+      !> list (or, if that block is absent, the builtin default of `set`) is
+      !> used unchanged (see `landscape_vib_set_thermo_settings`).
       real(wp) :: temperature(50) = [298.15_wp, spread(0.0_wp, 1, 49)]
       !> Number of temperatures used
       integer :: n_temperature = 1
+      !> True when `--lvib-temp` was given: the explicit command line value has
+      !> priority over the xcontrol `$thermo temp=...` key
+      logical :: temperature_was_set = .false.
       !> Rotor cutoff of the quasi-RRHO treatment (cm^-1, xtb
       !> `set%thermo_sthr`): low frequency modes below this value are treated
       !> by the Grimme free-rotor interpolation instead of the harmonic
       !> partition function
       real(wp) :: rotor_cutoff = 50.0_wp
+      !> True when `--lvib-rotor-cutoff` was given (xcontrol key `sthr`)
+      logical :: rotor_cutoff_was_set = .false.
       !> Imaginary frequency cutoff (cm^-1, xtb `set%thermo_ithr`): a mode
       !> with a smaller magnitude is treated as a numerical artifact of the
       !> projected Hessian rather than as a saddle point
+      !>
+      !> **Two cutoffs, deliberately separate**: this field is the one the
+      !> *frequency analysis* uses (mode counting, `n_imag`, the `status` of
+      !> the result), while the thermochemistry uses `set%thermo_ithr`.
+      !> `--lvib-imag-cutoff` sets both, but the xcontrol key
+      !> `$thermo imagthr` changes **only** the thermochemical one, so a run
+      !> with `$thermo imagthr` reports a mode count from this cutoff next to a
+      !> partition function built with the other one.  That is intended: "what
+      !> counts as imaginary for the analysis" and "how imaginary modes enter
+      !> the partition function" are different questions.  Both values are
+      !> printed and written to the JSON document.
       real(wp) :: imag_cutoff = -20.0_wp
+      !> True when `--lvib-imag-cutoff` was given (xcontrol key `imagthr`)
+      logical :: imag_cutoff_was_set = .false.
       !> Frequency scaling factor applied by the thermochemistry (xtb
       !> `set%thermo_fscal`, recommended value 1.0 for GFN2-xTB)
       real(wp) :: freq_scal = 1.0_wp
+      !> True when `--lvib-freq-scal` was given (xcontrol key `scale`)
+      logical :: freq_scal_was_set = .false.
       !> Write `hessian`, `vibspectrum`, `vib_normal_modes` and `g98.out`
       logical :: write_files = .true.
    contains

@@ -61,7 +61,8 @@ module xtb_landscape_tasks_vib
    use xtb_landscape_hessian, only : landscape_write_hessian_file
    use xtb_landscape_vib_numhess, only : landscape_vib_hessian
    use xtb_landscape_vib_modes, only : landscape_vib_analysis
-   use xtb_landscape_vib_thermo, only : landscape_vib_thermo_output
+   use xtb_landscape_vib_thermo, only : landscape_vib_thermo_output, &
+      & landscape_vib_set_thermo_settings, landscape_vib_check_thermo_settings
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_result, &
       & landscape_json_add_counter, landscape_json_add_value, &
@@ -104,9 +105,16 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
    fail = .false.
    allocate(hess(3*mol%n, 3*mol%n), gradient(3, mol%n))
 
-   ! Reject thermochemical settings the reused RRHO model cannot handle before
-   ! any single point is evaluated.
-   call check_thermo_settings(env, settings, ok)
+   ! Merge the thermochemical parameters (priority: explicit command line >
+   ! xcontrol `$thermo` > builtin default) and reject the values the reused
+   ! RRHO model cannot handle, before any single point is evaluated.  The check
+   ! reads the **merged** parameter state, so a bad value of the `$thermo`
+   ! block (`scale=-1`, `temp=-5`, `imagthr=20`, ...) is refused exactly like
+   ! the corresponding `--lvib-*` flag; validating only the settings object
+   ! missed the block, because `set_thermo` checks nothing
+   ! (`landscape_vib_check_thermo_settings`).
+   call landscape_vib_set_thermo_settings(settings)
+   call landscape_vib_check_thermo_settings(env, ok)
    if (.not. ok) then
       result%message = "frequency analysis failed"
       return
@@ -251,8 +259,13 @@ end subroutine landscape_vib
 !> `zpe`, `enthalpy` and `gibbs` are the thermochemical quantities of the
 !> reused model (`freq_results%zp/%htot/%gtot`, hartree); the end-to-end
 !> validation compares them against the `--hess` route
-!> (`test/unit/landscape_e2e_check.py`, mode `chain`).  An imaginary mode does
-!> not make the analysis a failure - it is a legitimate result of a geometry
+!> (`test/unit/landscape_e2e_check.py`, mode `chain`).  `temperature` and
+!> `freq_scal` are the **effective** values of the merged parameter state
+!> (`landscape_vib_result%temperature`/`%freq_scal`), not the settings fields:
+!> with a `$thermo temp=400` block the settings still carry the 298.15 K
+!> default, so reporting them would describe the 400 K `gibbs` of the same
+!> document as a 298.15 K result.  An imaginary mode does not
+!> make the analysis a failure - it is a legitimate result of a geometry
 !> that is not a minimum (the `--hess` path reports it the same way) - but it
 !> is `incomplete` rather than `ok`, so a regression diff of the status field
 !> catches a changed mode count.
@@ -283,8 +296,9 @@ subroutine write_json(env, settings, result, vib)
    call landscape_json_add_value(doc, 'zpe', vib%zpe)
    call landscape_json_add_value(doc, 'enthalpy', vib%enthalpy)
    call landscape_json_add_value(doc, 'gibbs', vib%gibbs)
-   call landscape_json_add_value(doc, 'temperature', settings%temperature(1))
-   call landscape_json_add_value(doc, 'freq_scal', settings%freq_scal)
+   ! The values of the **merged** parameter state (see the routine doc above).
+   call landscape_json_add_value(doc, 'temperature', vib%temperature)
+   call landscape_json_add_value(doc, 'freq_scal', vib%freq_scal)
    call landscape_json_add_flag(doc, 'linear', vib%linear)
    call landscape_json_add_flag(doc, 'project_tr', settings%project_tr)
    if (allocated(vib%freq)) then
@@ -293,49 +307,6 @@ subroutine write_json(env, settings, result, vib)
    call landscape_json_write(env, doc, ok)
 
 end subroutine write_json
-
-!> Validate the thermochemical settings of the frequency task.
-!>
-!> The reused model (`print_thermo`/`thermodyn`, `src/main/property.F90`,
-!> `src/thermo.f90`) divides by the temperature (`beta = 1/(kB T)`, hence
-!> `log(sqrt(pi/beta ...))`) and by the frequency scaling factor, and it
-!> classifies a mode as imaginary by `freq < imag_cutoff`; a non-positive
-!> temperature, a non-positive scaling factor or a positive imaginary cutoff
-!> therefore produce Inf/NaN entries or silently inverted flags instead of
-!> failing.  The checks live here rather than in the parser so that every
-!> caller of the task (command line and API) is covered.
-subroutine check_thermo_settings(env, settings, ok)
-   character(len=*), parameter :: source = 'landscape_vib'
-   !> Computational environment
-   type(TEnvironment), intent(inout) :: env
-   !> Frequency settings
-   type(landscape_vib_settings), intent(in) :: settings
-   !> True if every parameter is usable
-   logical, intent(out) :: ok
-
-   integer :: ntemp
-
-   ok = .true.
-   ntemp = max(1, min(settings%n_temperature, size(settings%temperature)))
-   if (any(settings%temperature(1:ntemp) <= 0.0_wp)) then
-      call env%error("the thermochemical temperature must be positive", source)
-      ok = .false.
-   end if
-   if (settings%freq_scal <= 0.0_wp) then
-      call env%error("the frequency scaling factor must be positive", source)
-      ok = .false.
-   end if
-   if (settings%imag_cutoff > 0.0_wp) then
-      call env%error("the imaginary frequency cutoff must not be positive", source)
-      ok = .false.
-   end if
-   if (settings%rotor_cutoff < 0.0_wp) then
-      call env%error("the rotor cutoff of the quasi-RRHO treatment must not "//&
-         & "be negative", source)
-      ok = .false.
-   end if
-
-end subroutine check_thermo_settings
 
 !> Write the projected, non mass weighted Hessian as the `hessian` file.
 !>

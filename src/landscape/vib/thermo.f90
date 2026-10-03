@@ -30,7 +30,9 @@
 !>
 !>  1. translate `landscape_vib_settings` into the parameter state the existing
 !>     model reads (`set%thermotemp`, `set%nthermo`, `set%thermo_sthr`,
-!>     `set%thermo_ithr`, `set%thermo_fscal`, `src/setparam.f90:284-291`),
+!>     `set%thermo_ithr`, `set%thermo_fscal`, `src/setparam.f90:284-291`) under
+!>     the priority rule "explicit command line > xcontrol `$thermo` > builtin
+!>     default" (`landscape_vib_set_thermo_settings`),
 !>  2. fill the `freq_results` container of `xtb_type_data` from the
 !>     `landscape_vib_result` (frequencies, mass weighted normal modes,
 !>     reduced masses) and the reference energy,
@@ -38,8 +40,17 @@
 !>     `--hess` - which prints the frequency table, writes `vibspectrum` and
 !>     `g98.out`, and reaches `print_thermo`/`thermodyn` for the thermodynamic
 !>     table, and
-!>  4. read the zero point energy and the imaginary mode count back out of the
-!>     container.
+!>  4. read the zero point energy, the imaginary mode count and the **effective**
+!>     temperature out of the container.
+!>
+!> Steps 1 and 4 are also why `landscape_vib_result%temperature`/`%freq_scal`
+!> exist: the structured result of the task has to carry the values that were
+!> used, not the settings defaults the user may have overridden with a
+!> `$thermo` block.
+!>
+!> `landscape_vib_check_thermo_settings` rejects the **merged** values the model
+!> cannot handle; the task calls it before the first single point, so
+!> `--lvib-temp 0` and `$thermo temp=-5` are refused by the same code.
 !>
 !> The `set` object is the only pre-existing mutable state the landscape suite
 !> writes; it is written here and nowhere else, immediately before the call,
@@ -73,6 +84,7 @@ module xtb_landscape_vib_thermo
 
    public :: landscape_vib_thermo_output
    public :: landscape_vib_set_thermo_settings
+   public :: landscape_vib_check_thermo_settings
 
 contains
 
@@ -116,6 +128,11 @@ subroutine landscape_vib_thermo_output(env, mol, chk, settings, vib, energy, ok)
 
    call landscape_vib_set_thermo_settings(settings)
 
+   ! The effective scaling factor is part of the result: `landscape_vib.json`
+   ! reports it, and the scaling factor of the merged state is the one
+   ! `print_thermo` applies (`set%thermo_fscal`).
+   vib%freq_scal = set%thermo_fscal
+
    call res%allocate(mol%n)
    ! `n3true` is the number of frequencies the existing printout iterates
    ! over; xtb sets it to 3N unless atoms are frozen, which the landscape
@@ -141,6 +158,11 @@ subroutine landscape_vib_thermo_output(env, mol, chk, settings, vib, energy, ok)
    end if
 
    vib%zpe = res%zp
+   ! The temperature **read back from the container**: `main_freq` stores the
+   ! value it used for the table and for `gibbs` in `freq_results%temp`
+   ! (`set%thermotemp(set%nthermo)`, `src/main/property.F90`), so the result
+   ! field cannot diverge from the printout it describes.
+   vib%temperature = res%temp
    ! H(T) and G(T) are read back so that the end-to-end chain can assert the
    ! two against the `--hess` route.  `print_thermo` stores the **thermal**
    ! contributions in `freq_results%htot/%gtot` (it prints the totals as
@@ -159,24 +181,95 @@ subroutine landscape_vib_thermo_output(env, mol, chk, settings, vib, energy, ok)
 
 end subroutine landscape_vib_thermo_output
 
-!> Copy the thermochemical settings into the parameter state of xtb.
+!> Push the thermochemical settings into the parameter state of xtb.
 !>
-!> `set%thermotemp` holds 50 temperatures, of which `nthermo` are used; both
-!> the value and the count come from the settings object.  Everything else is
-!> copied verbatim from `src/setparam.f90:284-291` defaults.
+!> **Priority: explicit command line > xcontrol `$thermo` > builtin default.**
+!> `set%thermotemp`/`set%nthermo`, `set%thermo_sthr`, `set%thermo_ithr` and
+!> `set%thermo_fscal` already hold the `$thermo` value when the input file had
+!> such a block (`src/set_module.f90:1960-2014`, called from
+!> `xtb_constrain_param::read_userdata` before any task runs), and the builtin
+!> default of `src/setparam.f90:284-294` otherwise.  A landscape CLI flag
+!> therefore only overwrites the value when it was actually given; the
+!> `*_was_set` flags of `landscape_vib_settings` carry that information,
+!> because a settings field alone cannot distinguish "explicitly 298.15 K"
+!> from "the default 298.15 K".
+!>
+!> The four keys are the complete set the `$thermo` block understands
+!> (`src/set_module.f90:1981-2012`): `temp` (a list, `set%nthermo` entries),
+!> `sthr`, `imagthr` and `scale`.  Nothing else of the block reaches the
+!> thermochemistry, so nothing else has to be merged here.
 subroutine landscape_vib_set_thermo_settings(settings)
    !> Frequency settings
    type(landscape_vib_settings), intent(in) :: settings
 
    integer :: ntemp
 
-   ntemp = max(1, min(settings%n_temperature, size(set%thermotemp)))
-   set%nthermo = ntemp
-   set%thermotemp(1:ntemp) = settings%temperature(1:ntemp)
-   set%thermo_sthr = settings%rotor_cutoff
-   set%thermo_ithr = settings%imag_cutoff
-   set%thermo_fscal = settings%freq_scal
+   if (settings%temperature_was_set) then
+      ntemp = max(1, min(settings%n_temperature, size(set%thermotemp)))
+      set%nthermo = ntemp
+      set%thermotemp(1:ntemp) = settings%temperature(1:ntemp)
+   end if
+   if (settings%rotor_cutoff_was_set) set%thermo_sthr = settings%rotor_cutoff
+   if (settings%imag_cutoff_was_set) set%thermo_ithr = settings%imag_cutoff
+   if (settings%freq_scal_was_set) set%thermo_fscal = settings%freq_scal
 
 end subroutine landscape_vib_set_thermo_settings
+
+!> Reject thermochemical parameters the reused RRHO model cannot handle.
+!>
+!> The check runs on the **merged** parameter state, not on the settings object:
+!> after `landscape_vib_set_thermo_settings` the values of `set%` are the
+!> effective ones whatever their source (explicit command line, xcontrol
+!> `$thermo` block or builtin default), so `--lvib-temp 0` and
+!> `$thermo temp=-5` are caught by the same code.  Validating `settings%`
+!> alone missed the block: `xtb_setparam::set_thermo` has no positivity check
+!> of its own (`src/set_module.f90`, the `case('scale')` and `case('temp')`
+!> branches), so `$thermo scale=-1` was multiplied into every frequency by
+!> `print_thermo` and `$thermo imagthr=20` silently inverted the meaning of
+!> the imaginary cutoff.  The reused model divides by the temperature
+!> (`beta = 1/(kB T)`) and by the scaling factor, and it classifies a mode as
+!> imaginary by `freq < imag_cutoff`, so those values produce Inf/NaN entries
+!> or inverted flags instead of failing.
+!>
+!> The caller runs this **before** the first single point, so an unusable
+!> parameter costs nothing (and is reported the same way from the command line
+!> and from the API).
+subroutine landscape_vib_check_thermo_settings(env, ok)
+   character(len=*), parameter :: source = 'landscape_vib_thermo_settings'
+   !> Computational environment
+   type(TEnvironment), intent(inout) :: env
+   !> True if every effective parameter is usable
+   logical, intent(out) :: ok
+
+   integer :: ntemp
+
+   ok = .true.
+   ntemp = max(1, min(set%nthermo, size(set%thermotemp)))
+   if (any(set%thermotemp(1:ntemp) <= 0.0_wp)) then
+      call env%error("the thermochemical temperature must be positive "//&
+         & "(checked after the xcontrol `$thermo` block and --lvib-temp are "//&
+         & "merged)", source)
+      ok = .false.
+   end if
+   if (set%thermo_fscal <= 0.0_wp) then
+      call env%error("the frequency scaling factor must be positive "//&
+         & "(checked after the xcontrol `$thermo` block and --lvib-freq-scal "//&
+         & "are merged)", source)
+      ok = .false.
+   end if
+   if (set%thermo_ithr > 0.0_wp) then
+      call env%error("the imaginary frequency cutoff must not be positive "//&
+         & "(checked after the xcontrol `$thermo` block and "//&
+         & "--lvib-imag-cutoff are merged)", source)
+      ok = .false.
+   end if
+   if (set%thermo_sthr < 0.0_wp) then
+      call env%error("the rotor cutoff of the quasi-RRHO treatment must not "//&
+         & "be negative (checked after the xcontrol `$thermo` block and "//&
+         & "--lvib-rotor-cutoff are merged)", source)
+      ok = .false.
+   end if
+
+end subroutine landscape_vib_check_thermo_settings
 
 end module xtb_landscape_vib_thermo

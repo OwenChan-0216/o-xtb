@@ -234,6 +234,9 @@ contains
       logical :: strict
       logical :: exitRun
       logical :: cold_fusion
+      !> Landscape run type for the `$scan` diagnostic (empty when the run type
+      !> is not a landscape task)
+      character(len=16) :: lruntyp_flag
 
 !  OMP stuff
       integer :: TID, OMP_GET_NUM_THREADS, OMP_GET_THREAD_NUM
@@ -471,6 +474,40 @@ contains
       ! CONSTRAINTS & SCANS
       ! now we are at a point that we can check for requested constraints
       call read_userdata(xcontrol, env, mol)
+
+      ! ------------------------------------------------------------------------
+      ! the xcontrol `$scan` block belongs to the ANCopt family
+      !
+      ! `relaxed_scan` executes it only on the `anyopt` path of this program
+      ! (the `if (nscan > 0)` guard inside the `if (anyopt)` branch below,
+      ! reached by `--opt` and friends; the line number of the initial report
+      ! went stale with this very guard, so it is not repeated here).  No
+      ! landscape run type executes it, and before this check a run such as
+      ! `--lopt --input <file with $scan>` returned status 0 after a plain
+      ! minimisation, wrote no `xtbscan.log` and printed no diagnostic: the
+      ! caller asked for a scan and silently got a different task.  The error
+      ! names both replacements, because a mistyped run type is the only way to
+      ! get here.
+      lruntyp_flag = ''
+      select case (set%runtyp)
+      case (p_run_lopt)
+         lruntyp_flag = '--lopt'
+      case (p_run_lscan)
+         lruntyp_flag = '--lscan'
+      case (p_run_lts)
+         lruntyp_flag = '--lts'
+      case (p_run_lirc)
+         lruntyp_flag = '--lirc'
+      case (p_run_lvib)
+         lruntyp_flag = '--lvib'
+      end select
+      if (nscan > 0 .and. len_trim(lruntyp_flag) > 0) then
+         call env%error(trim(lruntyp_flag)//" does not execute the xcontrol "//&
+            & "$scan block: use --opt to run it, or --lscan with "//&
+            & "--lscan-coord/--lscan-atoms for a scan of the landscape suite", &
+            & source)
+      end if
+      call env%checkpoint("the run type does not execute the xcontrol $scan block")
       ! ------------------------------------------------------------------------
       ! get some memory
       allocate (cn(mol%n), sat(mol%n), g(3, mol%n), source=0.0_wp)
@@ -3726,6 +3763,7 @@ contains
                   lvset%temperature = 0.0_wp
                   lvset%temperature(1) = ddum
                   lvset%n_temperature = 1
+                  lvset%temperature_was_set = .true.
                else
                   call env%error("The --lvib-temp flag requires a number", source)
                end if
@@ -3741,6 +3779,7 @@ contains
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
                   lvset%rotor_cutoff = ddum
+                  lvset%rotor_cutoff_was_set = .true.
                else
                   call env%error("The --lvib-rotor-cutoff flag requires a number", source)
                end if
@@ -3757,6 +3796,7 @@ contains
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
                   lvset%imag_cutoff = ddum
+                  lvset%imag_cutoff_was_set = .true.
                else
                   call env%error("The --lvib-imag-cutoff flag requires a number", source)
                end if
@@ -3772,6 +3812,7 @@ contains
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
                   lvset%freq_scal = ddum
+                  lvset%freq_scal_was_set = .true.
                else
                   call env%error("The --lvib-freq-scal flag requires a number", source)
                end if

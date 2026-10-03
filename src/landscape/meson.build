@@ -19,6 +19,7 @@ srcs += files(
   'types/settings.f90',
   'types/results.f90',
   'types/coords.f90',
+  'types/constraints.f90',
   'types/log.f90',
   'types/hessian.f90',
   'types/json.f90',
