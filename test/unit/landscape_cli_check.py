@@ -47,6 +47,15 @@ mode mirrors one CMake test one-to-one:
   ircswap <exe> <input> <rundir>     -> xtb/landscape-irc-swap
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
+  method <exe> <input> <rundir> <hcn> <nh3> <nh3product>
+                                     -> xtb/landscape-method
+  methodnative <exe> <input> <rundir> <big>
+                                     -> xtb/landscape-method-native,
+                                         xtb/landscape-method-ohess,
+                                         xtb/landscape-method-opt-reject
+  methodtable <exe> <input> <rundir> <hcn> <nh3> <nh3product>
+                                     -> xtb/landscape-method-table (all 18
+                                         suite names and the four `auto` runs)
 
 The environment (XTBPATH) is inherited from the meson test environment, exactly
 like in the CMake build.
@@ -60,6 +69,22 @@ import subprocess
 import sys
 
 
+def decode(raw):
+    """Decode captured output without ever raising.
+
+    xtb writes Fortran record markers into its formatted output in rare
+    cases (measured with the 501 atom GFN-FF fixture of `check_method_native`:
+    1/8/192 invalid bytes depending on the run - a pre-existing upstream
+    defect, `docs/_simplify-recon/28-stage2-fix-report.md` T2).  Letting
+    `UnicodeDecodeError` escape here would make every consumer of this module
+    red for a reason that has nothing to do with the assertion under test,
+    so the captured bytes are decoded with `errors='replace'`.
+    """
+    if isinstance(raw, str):
+        return raw
+    return raw.decode("utf-8", errors="replace")
+
+
 def run(exe, inp, args, rundir):
     """Run xtb and return (status, combined output)."""
     os.makedirs(rundir, exist_ok=True)
@@ -67,9 +92,9 @@ def run(exe, inp, args, rundir):
         [exe, inp] + args,
         cwd=rundir,
         capture_output=True,
-        text=True,
+        text=False,
     )
-    return proc.returncode, proc.stdout + proc.stderr
+    return proc.returncode, decode(proc.stdout) + decode(proc.stderr)
 
 
 def fail(message, output=""):
@@ -1938,6 +1963,726 @@ def check_ljson_no_runtype(exe, inp, rundir):
              % documents)
 
 
+def check_method(exe, inp, rundir, hcn, nh3, nh3down):
+    """`--method` is the canonical name of the four method flags.
+
+    Mirrors `xtb/landscape-method` (CLI redesign section 4).  Three
+    properties are asserted, each with its own falsifiable mutation:
+
+    * **alias**: every pair `--method <name>` / `--<task>-method-flag <name>`
+      has to produce a byte identical result file, and the run has to reach
+      the task with that name (the milestone line), so the alias cannot be a
+      silent no-op;
+    * **filter**: a name that belongs to another task has to abort with a
+      message that names the flag of that task (`--lopt --method dimer` ->
+      `--lts`), and an unknown name or a missing run type has to abort as
+      well;
+    * **conflict/auto/repeat**: two different values through two different
+      flags are an error, `auto` keeps the default of the task (so it is
+      byte identical to the run without `--method`) and a repeated flag keeps
+      the last value.
+
+    The extra fixtures are the HCN transition state guess (`--lts`/`--lirc`),
+    the ammonia pair (band search) and the 501 atom GFN-FF cluster (native
+    engine of `xtb/landscape-method-native`); `inp` is the water input.
+    """
+
+    def invoke(label, input_file, args, cwd=None):
+        """Run one command in its own directory, return (status, text, dir)."""
+        workdir = os.path.join(rundir, label) if cwd is None else cwd
+        if cwd is None:
+            shutil.rmtree(workdir, ignore_errors=True)
+            os.makedirs(workdir)
+        proc = subprocess.run(
+            [exe, input_file] + args, cwd=workdir, capture_output=True, text=False
+        )
+        return proc.returncode, decode(proc.stdout) + decode(proc.stderr), workdir
+
+    def identical(label, file_a, dir_a, file_b, dir_b):
+        with open(os.path.join(dir_a, file_a), "rb") as handle:
+            left = handle.read()
+        with open(os.path.join(dir_b, file_b), "rb") as handle:
+            right = handle.read()
+        if left != right:
+            fail("%s: %s differs between the two routes" % (label, file_a))
+
+    def expect_milestone(label, args, input_file, milestone, skipped=()):
+        status, output, workdir = invoke(label, input_file, args)
+        if status != 0:
+            fail("%s: exit status %d" % (label, status), output)
+        if milestone not in output:
+            fail("%s: the task did not report %r" % (label, milestone), output)
+        for other in skipped:
+            if other in output:
+                fail("%s: the run reported %r as well" % (label, other), output)
+        return workdir, output
+
+    def expect_error(label, args, input_file, pattern, second=None):
+        status, output, _ = invoke(label, input_file, args)
+        if status == 0:
+            fail("%s: expected a non-zero exit" % label, output)
+        if not re.search(pattern, output):
+            fail("%s: missing %r in the output" % (label, pattern), output)
+        if second is not None and not re.search(second, output):
+            fail("%s: missing %r in the output" % (label, second), output)
+
+    # --- alias: opt, scan, ts (single ended and band) and irc ---------------
+    opt_method, _ = expect_milestone(
+        "alias-opt-method",
+        ["--gfn", "2", "--lopt", "--method", "bfgs", "--norestart"],
+        inp, "landscape: bfgs minimisation",
+        skipped=("landscape: lbfgs minimisation",),
+    )
+    opt_engine, _ = expect_milestone(
+        "alias-opt-engine",
+        ["--gfn", "2", "--lopt", "--lopt-engine", "bfgs", "--norestart"],
+        inp, "landscape: bfgs minimisation",
+    )
+    identical("alias-opt", "xtbopt.xyz", opt_method, "xtbopt.xyz", opt_engine)
+    opt_upper, _ = expect_milestone(
+        "alias-opt-upper",
+        ["--gfn", "2", "--lopt", "--method", "BFGS", "--norestart"],
+        inp, "landscape: bfgs minimisation",
+    )
+    identical("alias-opt-upper", "xtbopt.xyz", opt_method, "xtbopt.xyz", opt_upper)
+
+    scan_args = ["--lscan-coord", "distance", "--lscan-atoms", "1,2",
+                 "--lscan-step", "0.05", "--lscan-nstep", "2", "--lscan-oneway"]
+    scan_method, _ = expect_milestone(
+        "alias-scan-method",
+        ["--gfn", "2", "--lscan", "--method", "cg"] + scan_args,
+        inp, "landscape: relaxed scan",
+    )
+    scan_flag, _ = expect_milestone(
+        "alias-scan-flag",
+        ["--gfn", "2", "--lscan", "--lscan-method", "cg"] + scan_args,
+        inp, "landscape: relaxed scan",
+    )
+    identical("alias-scan", "xtbscan.log", scan_method, "xtbscan.log", scan_flag)
+
+    ts_common = ["--gfn", "2", "--lts-ninit", "force", "--norestart"]
+    ts_method, _ = expect_milestone(
+        "alias-ts-method", ["--lts", "--method", "dimer"] + ts_common,
+        hcn, "landscape: converged",
+    )
+    ts_flag, _ = expect_milestone(
+        "alias-ts-flag", ["--lts", "--lts-method", "dimer"] + ts_common,
+        hcn, "landscape: converged",
+    )
+    identical("alias-ts", "xtbts.xyz", ts_method, "xtbts.xyz", ts_flag)
+
+    # The climbing image side effect has to live in the shared setter: both
+    # routes ignite the same image and write the same band result.
+    band_common = ["--gfn", "2", "--lts-images", "5",
+                   "--lts-product", nh3down, "--norestart", "--namespace", "p1"]
+    cineb_method, cineb_output = expect_milestone(
+        "alias-cineb-method", ["--lts", "--method", "cineb"] + band_common,
+        nh3, "landscape: converged",
+    )
+    cineb_flag, cineb_flag_output = expect_milestone(
+        "alias-cineb-flag", ["--lts", "--lts-method", "cineb"] + band_common,
+        nh3, "landscape: converged",
+    )
+    for label, output in (("alias-cineb-method", cineb_output),
+                          ("alias-cineb-flag", cineb_flag_output)):
+        if not re.search(r"climbing image [0-9]+ ignited at iteration", output):
+            fail("%s: the climbing image was never ignited" % label, output)
+        if not re.search(r"climbing image [(]TS candidate[)]: [0-9]+", output):
+            fail("%s: the climbing image was not reported" % label, output)
+    identical("alias-cineb", "p1.path.xyz", cineb_method, "p1.path.xyz", cineb_flag)
+    identical("alias-cineb", "p1.xtbts.xyz", cineb_method, "p1.xtbts.xyz", cineb_flag)
+
+    # The IRC needs a converged transition state as input.
+    status, output, workdir = invoke(
+        "irc-prepare", hcn,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "irc0"],
+    )
+    if status != 0:
+        fail("the --lirc preparation run failed with status %d" % status, output)
+    ts_file = os.path.join(workdir, "irc0.xtbts.xyz")
+    if not os.path.exists(ts_file):
+        fail("the --lirc preparation run wrote no xtbts.xyz", output)
+    irc_common = ["--gfn", "2", "--lirc-max-steps", "2", "--norestart",
+                  "--namespace", "irc1"]
+    irc_status_m, irc_output_m, irc_dir_m = invoke(
+        "alias-irc-method", ts_file, ["--lirc", "--method", "gs"] + irc_common
+    )
+    irc_status_f, irc_output_f, irc_dir_f = invoke(
+        "alias-irc-flag", ts_file, ["--lirc", "--lirc-method", "gs"] + irc_common
+    )
+    if irc_status_m != 0 or irc_status_f != 0:
+        fail("the two --lirc routes exited %d and %d"
+             % (irc_status_m, irc_status_f), irc_output_m + irc_output_f)
+    identical("alias-irc", "irc1.irc.log", irc_dir_m, "irc1.irc.log", irc_dir_f)
+
+    # --- filter: a name of another task names the flag of that task ---------
+    expect_error("filter-lopt-dimer",
+                 ["--gfn", "2", "--lopt", "--method", "dimer", "--norestart"],
+                 inp, r"dimer is a transition-state method", r"--lts")
+    expect_error("filter-lopt-hpc",
+                 ["--gfn", "2", "--lopt", "--method", "hpc", "--norestart"],
+                 inp, r"intrinsic reaction coordinate method", r"--lirc")
+    expect_error("filter-lscan-dimer",
+                 ["--gfn", "2", "--lscan", "--method", "dimer"],
+                 inp, r"dimer is a transition-state method", r"--lts")
+    expect_error("filter-lts-bfgs",
+                 ["--gfn", "2", "--lts", "--method", "bfgs", "--norestart"],
+                 inp, r"bfgs is a minimisation method", r"--lopt")
+    expect_error("filter-lirc-bfgs",
+                 ["--gfn", "2", "--lirc", "--method", "bfgs"],
+                 inp, r"bfgs is a minimisation method", r"--lopt")
+    expect_error("filter-lopt-native",
+                 ["--gfn", "2", "--lopt", "--method", "ancopt", "--norestart"],
+                 inp, r"only available with --opt or --ohess", r"--opt")
+    expect_error("filter-lvib",
+                 ["--gfn", "2", "--lvib", "--method", "bfgs"],
+                 inp, r"cannot be used with --lvib", r"--lvib-hessian")
+    expect_error("filter-sp",
+                 ["--gfn", "2", "--sp", "--method", "bfgs"],
+                 inp, r"needs a landscape run type")
+    expect_error("filter-none",
+                 ["--gfn", "2", "--method", "bfgs"],
+                 inp, r"needs a landscape run type")
+    expect_error("filter-unknown",
+                 ["--gfn", "2", "--lopt", "--method", "bogus", "--norestart"],
+                 inp, r"unknown landscape method 'bogus'")
+    expect_error("filter-method-missing",
+                 ["--gfn", "2", "--lopt", "--method"],
+                 inp, r"requires a method name")
+    expect_error("filter-native-none",
+                 ["--gfn", "2", "--method", "ancopt", "--norestart"],
+                 inp, r"only available with --opt or --ohess")
+
+    # --- conflict: two different values through two different flags --------
+    for label, args in (
+        ("conflict-opt", ["--gfn", "2", "--lopt", "--method", "bfgs",
+                          "--lopt-engine", "cg", "--norestart"]),
+        ("conflict-opt-reverse", ["--gfn", "2", "--lopt", "--lopt-engine", "cg",
+                                  "--method", "bfgs", "--norestart"]),
+        ("conflict-scan", ["--gfn", "2", "--lscan", "--method", "cg",
+                           "--lscan-method", "bfgs"]),
+        ("conflict-ts", ["--gfn", "2", "--lts", "--method", "dimer",
+                         "--lts-method", "prfo", "--norestart"]),
+        ("conflict-irc", ["--gfn", "2", "--lirc", "--method", "gs",
+                          "--lirc-method", "lqa"]),
+    ):
+        expect_error(label, args, inp, r"conflicting landscape methods", r"--method")
+
+    # same value through both flags is idempotent
+    status, output, workdir = invoke(
+        "conflict-same",
+        inp,
+        ["--gfn", "2", "--lopt", "--method", "bfgs", "--lopt-engine", "bfgs",
+         "--norestart"],
+    )
+    if status != 0:
+        fail("the same value through both flags was rejected", output)
+    if "landscape: bfgs minimisation" not in output:
+        fail("the idempotent pair did not reach the task", output)
+
+    # --- auto: the default of the selected task, a no-op -------------------
+    plain, _ = expect_milestone(
+        "auto-plain", ["--gfn", "2", "--lopt", "--norestart"], inp,
+        "landscape: lbfgs minimisation",
+    )
+    auto, auto_output = expect_milestone(
+        "auto-method", ["--gfn", "2", "--lopt", "--method", "auto", "--norestart"],
+        inp, "landscape: lbfgs minimisation",
+    )
+    identical("auto-lopt", "xtbopt.xyz", plain, "xtbopt.xyz", auto)
+    if "[NOTICE] --lopt-engine default" not in auto_output:
+        fail("`auto` suppressed the builtin default notice", auto_output)
+    explicit, _ = expect_milestone(
+        "auto-explicit",
+        ["--gfn", "2", "--lopt", "--lopt-engine", "bfgs", "--norestart"],
+        inp, "landscape: bfgs minimisation",
+    )
+    auto_explicit, auto_explicit_output = expect_milestone(
+        "auto-explicit-auto",
+        ["--gfn", "2", "--lopt", "--lopt-engine", "bfgs", "--method", "auto",
+         "--norestart"],
+        inp, "landscape: bfgs minimisation",
+    )
+    identical("auto-explicit", "xtbopt.xyz", explicit, "xtbopt.xyz", auto_explicit)
+    if "[NOTICE] --lopt-engine default" in auto_explicit_output:
+        fail("`auto` overrode the explicit engine", auto_explicit_output)
+    ts_auto, _ = expect_milestone(
+        "auto-ts", ["--gfn", "2", "--lts", "--method", "auto",
+                    "--lts-ninit", "force", "--norestart"],
+        hcn, "landscape: converged",
+    )
+    ts_plain, _ = expect_milestone(
+        "auto-ts-plain", ["--gfn", "2", "--lts", "--lts-ninit", "force",
+                          "--norestart"],
+        hcn, "landscape: converged",
+    )
+    identical("auto-ts", "xtbts.xyz", ts_auto, "xtbts.xyz", ts_plain)
+
+    # --- a repeated flag keeps the last value ------------------------------
+    cg, cg_output = expect_milestone(
+        "repeat-cg", ["--gfn", "2", "--lopt", "--method", "cg", "--norestart"],
+        inp, "landscape: cg minimisation",
+    )
+    last, last_output = expect_milestone(
+        "repeat-last",
+        ["--gfn", "2", "--lopt", "--method", "bfgs", "--method", "cg",
+         "--norestart"],
+        inp, "landscape: cg minimisation",
+        skipped=("landscape: bfgs minimisation",),
+    )
+    identical("repeat-method", "xtbopt.xyz", cg, "xtbopt.xyz", last)
+    engine_last, _ = expect_milestone(
+        "repeat-engine-last",
+        ["--gfn", "2", "--lopt", "--lopt-engine", "bfgs", "--lopt-engine", "cg",
+         "--norestart"],
+        inp, "landscape: cg minimisation",
+        skipped=("landscape: bfgs minimisation",),
+    )
+    identical("repeat-engine", "xtbopt.xyz", cg, "xtbopt.xyz", engine_last)
+
+    # --- a repeated band flag is equivalent to a repeated `--method` --------
+    # (stage 2 review L3)  The climbing image stage that `cineb` implies is a
+    # side effect of the *final* method, not of every flag: otherwise
+    # `--lts-method cineb --lts-method neb` kept the climbing stage while the
+    # equivalent `--method cineb --method neb` did not.
+    repeat_band = ["--gfn", "2", "--lts-images", "5",
+                   "--lts-product", nh3down, "--norestart", "--namespace", "p2"]
+    band_flag, band_flag_output = expect_milestone(
+        "repeat-band-flag",
+        ["--gfn", "2", "--lts", "--lts-method", "cineb",
+         "--lts-method", "neb"] + repeat_band[2:],
+        nh3, "landscape: transition state search (neb)",
+    )
+    band_method, band_method_output = expect_milestone(
+        "repeat-band-method",
+        ["--gfn", "2", "--lts", "--method", "cineb",
+         "--method", "neb"] + repeat_band[2:],
+        nh3, "landscape: transition state search (neb)",
+    )
+    for label, output in (("repeat-band-flag", band_flag_output),
+                          ("repeat-band-method", band_method_output)):
+        if re.search(r"climbing image [0-9]+ ignited", output):
+            fail("%s: the discarded `cineb` still ignited the climbing image"
+                 % label, output)
+    identical("repeat-band", "p2.path.xyz", band_flag, "p2.path.xyz", band_method)
+    identical("repeat-band", "p2.xtbts.xyz", band_flag, "p2.xtbts.xyz", band_method)
+
+    # an explicit `--lts-climb` still switches the stage on
+    explicit_climb = expect_milestone(
+        "repeat-band-explicit-climb",
+        ["--gfn", "2", "--lts", "--method", "neb", "--lts-climb"]
+        + repeat_band[2:],
+        nh3, "landscape: transition state search (neb)",
+    )
+    if not re.search(r"climbing image [0-9]+ ignited", explicit_climb[1]):
+        fail("repeat-band-explicit-climb: `--lts-climb` was lost")
+
+
+def check_method_native(exe, inp, rundir, big):
+    """The four native engines behind `--method` (CLI redesign section 4.8).
+
+    Mirrors `xtb/landscape-method-native`, `-ohess` and `-opt-reject`.  The
+    discriminators are the measured stdout tokens of the native engines
+    (`ANC micro-cycles` / `L-ANC optimizer` / `initial time step` /
+    `current lattice:`); `landscape: ` appearing in the same output is the
+    failure - the name has to select the native path, not the suite.
+
+    `big` is a 501 atom GFN-FF cluster: `src/main/defaults.f90:42-46` gives
+    such a system `p_engine_lbfgs` unless the engine is pinned, so it is the
+    only fixture that can see the explicit assignment of `ancopt` (on a small
+    system the default is `rf` as well).
+
+    Scope note for `landscape_native_engine` (stage 2 review INFO-1, fix
+    report T7): the value **is** read at runtime - `src/prog/main.F90:3977`
+    writes it into `set%opt_engine`, and the 501 atom fixture below is
+    falsifiable against that assignment (without it the run reports
+    `L-ANC optimizer` instead of `ANC micro-cycles`).  What is *not* testable
+    yet is the stage 3 effect (dispatching `--opt`/`--ohess` to the suite):
+    that read does not exist in this build, and no test here claims it.
+    The declaration default itself (the `landscape_native_engine = 0` line
+    before the flag loop) stays a **static** check - `intent(out)` makes a
+    missing initialisation read undefined memory that `-O2` usually happens
+    to see as 0, which is what the design section 4.7.1 records.
+    """
+
+    def invoke(label, input_file, args):
+        workdir = os.path.join(rundir, label)
+        shutil.rmtree(workdir, ignore_errors=True)
+        os.makedirs(workdir)
+        proc = subprocess.run(
+            [exe, input_file] + args, cwd=workdir, capture_output=True, text=False
+        )
+        return proc.returncode, decode(proc.stdout) + decode(proc.stderr), workdir
+
+    for name, token in (("ancopt", "ANC micro-cycles"),
+                        ("rf", "ANC micro-cycles"),
+                        ("lancopt", "L-ANC optimizer"),
+                        ("l-ancopt", "L-ANC optimizer"),
+                        ("fire", "initial time step"),
+                        ("inertial", "initial time step"),
+                        ("pbc_lbfgs", "current lattice:")):
+        status, output, _ = invoke(
+            "native-" + name, inp,
+            ["--gfn", "2", "--opt", "--method", name, "--norestart"],
+        )
+        if status != 0:
+            fail("--opt --method %s exited %d" % (name, status), output)
+        if token not in output:
+            fail("--opt --method %s did not reach the native engine" % name, output)
+        if "landscape: " in output:
+            fail("--opt --method %s ran the landscape suite" % name, output)
+
+    # the order of `--method` and the run type flag is irrelevant
+    status, forward, dir_forward = invoke(
+        "native-order-forward", inp,
+        ["--gfn", "2", "--opt", "--method", "ancopt", "--norestart"],
+    )
+    status2, backward, dir_backward = invoke(
+        "native-order-backward", inp,
+        ["--gfn", "2", "--method", "ancopt", "--opt", "--norestart"],
+    )
+    if status != 0 or status2 != 0:
+        fail("the two flag orders exited %d and %d" % (status, status2),
+             forward + backward)
+    for label, output in (("forward", forward), ("backward", backward)):
+        if "ANC micro-cycles" not in output:
+            fail("the %s order did not reach the native engine" % label, output)
+    with open(os.path.join(dir_forward, "xtbopt.xyz"), "rb") as handle:
+        left = handle.read()
+    with open(os.path.join(dir_backward, "xtbopt.xyz"), "rb") as handle:
+        right = handle.read()
+    if left != right:
+        fail("the two flag orders converge to different geometries")
+
+    # an explicit `ancopt` must beat the >500 atom default `lbfgs`
+    status, output, _ = invoke(
+        "native-big", big,
+        ["--gfnff", "--opt", "--method", "ancopt", "--norestart"],
+    )
+    if status != 0:
+        fail("the 501 atom run exited %d" % status, output)
+    if "ANC micro-cycles" not in output:
+        fail("the explicit `ancopt` did not reach the native engine", output)
+    if "L-ANC optimizer" in output:
+        fail("the >500 atom default overrode the explicit engine", output)
+
+    # `--ohess` dispatches the same native engines and keeps the native
+    # Hessian/frequency path: `ancopt` is the default engine of a small
+    # system, so the files have to be byte identical to the plain run.
+    status, output, ohess_native = invoke(
+        "native-ohess", inp,
+        ["--gfn", "2", "--ohess", "--method", "ancopt", "--norestart"],
+    )
+    if status != 0:
+        fail("--ohess --method ancopt exited %d" % status, output)
+    if "ANC micro-cycles" not in output:
+        fail("--ohess --method ancopt did not reach the native engine", output)
+    if "landscape: " in output:
+        fail("--ohess --method ancopt ran the landscape suite", output)
+    status, output, ohess_plain = invoke(
+        "native-ohess-plain", inp,
+        ["--gfn", "2", "--ohess", "--norestart"],
+    )
+    if status != 0:
+        fail("the plain --ohess run exited %d" % status, output)
+    for name in ("hessian", "vibspectrum", "xtbopt.xyz", "xtbopt.log",
+                 "compliance.dat"):
+        with open(os.path.join(ohess_native, name), "rb") as handle:
+            left = handle.read()
+        with open(os.path.join(ohess_plain, name), "rb") as handle:
+            right = handle.read()
+        if left != right:
+            fail("--ohess --method ancopt changed %s" % name)
+
+    # a landscape method name under `--opt`/`--ohess` is refused with the
+    # working alternative instead of being a silent no-op (stage 2 boundary
+    # of the CLI redesign, section 4.7)
+    for label, args, pattern in (
+        ("native-reject-opt", ["--gfn", "2", "--opt", "--method", "bfgs"],
+         r"would have no effect"),
+        ("native-reject-ohess", ["--gfn", "2", "--ohess", "--method", "bfgs"],
+         r"would have no effect"),
+    ):
+        status, output, _ = invoke(label, inp, args)
+        if status == 0:
+            fail("%s: expected a non-zero exit" % label, output)
+        if "--lopt" not in output:
+            fail("%s: the message does not name --lopt" % label, output)
+        if not re.search(pattern, output):
+            fail("%s: missing %r" % (label, pattern), output)
+
+    # --- U15: the command line wins over the xcontrol, but not silently ----
+    # (CLI redesign section 4.7.1, fix report T10)  `$opt engine=` is ignored
+    # as soon as `--method <native>` pinned the engine; the conflicting
+    # request has to be reported instead of disappearing, and a request that
+    # agrees with the command line must stay quiet.
+    rf_control = os.path.join(rundir, "opt_engine_rf.ctl")
+    with open(rf_control, "w") as handle:
+        handle.write("$opt\n   engine=rf\n")
+    lbfgs_control = os.path.join(rundir, "opt_engine_lbfgs.ctl")
+    with open(lbfgs_control, "w") as handle:
+        handle.write("$opt\n   engine=lbfgs\n")
+    same_control = os.path.join(rundir, "opt_engine_twice.ctl")
+    with open(same_control, "w") as handle:
+        handle.write("$opt\n   engine=rf\n$end\n$opt\n   engine=lbfgs\n")
+
+    for label, args, warned in (
+        ("u15-conflict", ["--gfn", "2", "--opt", "--method", "lancopt",
+                          "--norestart", "--input", rf_control], True),
+        ("u15-agree", ["--gfn", "2", "--opt", "--method", "lancopt",
+                       "--norestart", "--input", lbfgs_control], False),
+        ("u15-cli-only", ["--gfn", "2", "--opt", "--method", "lancopt",
+                          "--norestart"], False),
+        ("u15-xcontrol-only", ["--gfn", "2", "--opt", "--norestart",
+                               "--input", rf_control], False),
+        # a repeated `$opt engine=` with two different values was silently
+        # ignored before as well; it is the same conflict and is reported too
+        ("u15-xcontrol-twice", ["--gfn", "2", "--opt", "--norestart",
+                                "--input", same_control], True),
+    ):
+        status, output, _ = invoke(label, inp, args)
+        if status != 0:
+            fail("%s: exit status %d" % (label, status), output)
+        ignored = "is ignored: an optimizer engine was already selected" in output
+        if ignored != warned:
+            fail("%s: expected %s warning for the ignored $opt engine"
+                 % (label, "a" if warned else "no"), output)
+        if warned and "[WARNING]" not in output:
+            fail("%s: the conflict was reported without a [WARNING] line"
+                 % label, output)
+        # the command line selection survives in every case
+        if "--method" in args and "L-ANC optimizer" not in output:
+            fail("%s: the command line engine was overridden by the $opt block"
+                 % label, output)
+
+
+def check_method_table(exe, inp, rundir, hcn, nh3, nh3product):
+    """Every suite method name of `--method` has to reach its task (M1).
+
+    Mirrors `xtb/landscape-method-table`.  `check_method` (mode `method`) pins
+    the alias/conflict/`auto` grammar and runs 6 of the 18 suite names; this
+    table runs **all 18** plus the four `auto` runs, so a name that is accepted
+    by the parser and then never reaches the task cannot stay green.
+
+    The assertion per name is deliberately two-sided where the task writes the
+    resolved name into a file:
+
+      * `opt`  (6): stdout milestone `landscape: <name> minimisation` + a
+        non-empty `xtbopt.xyz`.  No product of this task carries the name, so
+        the file check only proves the task ran; the milestone is the
+        dispatch assertion (measured: `sd` and `cg` coincide on GFN2 water by
+        design of the CG restart, so a trajectory comparison cannot separate
+        all six names).
+      * `ts`   (8): milestone `landscape: transition state search (<name>)`
+        **and** `<ns>.xtbts.log`, whose first line is written from the resolved
+        method (`src/landscape/tasks/ts.f90:685`).
+      * `irc`  (4): milestone **and** `<ns>.irc.log`
+        (`src/landscape/tasks/irc.f90:996`), which carries the same information.
+
+    Failures are collected and reported together: one mutation of the name
+    table has to name every affected name, not only the first one.
+
+    `hcn` is a transition state guess (`--lts`/`--lirc` parent), `nh3` with
+    `nh3product` is the band fixture, `inp` is the water input.
+    """
+    misses = []
+
+    def invoke(label, input_file, args):
+        workdir = os.path.join(rundir, label)
+        shutil.rmtree(workdir, ignore_errors=True)
+        os.makedirs(workdir)
+        proc = subprocess.run(
+            [exe, input_file] + args, cwd=workdir, capture_output=True, text=False
+        )
+        return proc.returncode, decode(proc.stdout) + decode(proc.stderr), workdir
+
+    def inspect(label, input_file, args, milestone, product=None, token=None):
+        status, output, workdir = invoke(label, input_file, args)
+        if status != 0:
+            misses.append("%s: exit status %d" % (label, status))
+        if milestone is not None and milestone not in output:
+            misses.append("%s: the run did not report %r" % (label, milestone))
+        if product is not None:
+            path = os.path.join(workdir, product)
+            if not os.path.exists(path):
+                misses.append("%s: no %s was written" % (label, product))
+            else:
+                with open(path, "rb") as handle:
+                    body = decode(handle.read())
+                if token not in body:
+                    misses.append("%s: %s does not report %r" % (label, product, token))
+        return workdir, output
+
+    # --- the six minimisers, on the water fixture --------------------------
+    for name in ("sd", "cg", "lbfgs", "bfgs", "diis", "rfo"):
+        _, output = inspect(
+            "table-opt-" + name, inp,
+            ["--gfn", "2", "--lopt", "--method", name, "--norestart"],
+            "landscape: %s minimisation" % name,
+        )
+        # the DEFAULT engine notice is suppressed only when a name was given
+        if "[NOTICE] --lopt-engine default" in output:
+            misses.append("table-opt-%s: the name did not count as an explicit engine" % name)
+
+    # --- the eight saddle searches -----------------------------------------
+    # single ended: P-RFO / B-PRFO / dimer
+    for name in ("prfo", "bprfo", "dimer"):
+        inspect(
+            "table-ts-" + name, hcn,
+            ["--gfn", "2", "--lts", "--method", name, "--lts-ninit", "force",
+             "--norestart", "--namespace", "nm"],
+            "landscape: transition state search (%s)" % name,
+            product="nm.xtbts.log",
+            token="transition state search: %s" % name,
+        )
+    # chain of states: NEB / CI-NEB / AutoNEB (band) and string / GSM (growing
+    # string).  The growing string ignores `--lts-images` (it is configured by
+    # `--lts-string-nnodes`, `settings.f90:271-275`), so it gets its own
+    # argument list.
+    band = ["--lts-images", "5", "--lts-product", nh3product,
+            "--norestart", "--namespace", "nm"]
+    string = ["--lts-string-nnodes", "5", "--lts-product", nh3product,
+              "--norestart", "--namespace", "nm"]
+    # the climbing stage of the family: the band ignites a climbing image, the
+    # string refines a climbing node; `neb` must not climb at all
+    climbing = {
+        "neb": None,
+        "cineb": r"climbing image [0-9]+ ignited at iteration",
+        "autoneb": r"climbing image [0-9]+ ignited at iteration",
+        "string": r"climbing image [(]TS candidate[)]: [0-9]+",
+        "gsm": r"climbing image [(]TS candidate[)]: [0-9]+",
+    }
+    for name in ("neb", "cineb", "autoneb"):
+        _, output = inspect(
+            "table-ts-" + name, nh3,
+            ["--gfn", "2", "--lts", "--method", name] + band,
+            "landscape: transition state search (%s)" % name,
+            product="nm.xtbts.log",
+            token="transition state search: %s" % name,
+        )
+        found = re.search(climbing[name], output) if climbing[name] else None
+        if climbing[name] and found is None:
+            misses.append("table-ts-%s: the climbing stage was never reported" % name)
+        if climbing[name] is None and found is not None:
+            misses.append("table-ts-%s: `neb` ignited a climbing image" % name)
+    for name in ("string", "gsm"):
+        _, output = inspect(
+            "table-ts-" + name, nh3,
+            ["--gfn", "2", "--lts", "--method", name] + string,
+            "landscape: transition state search (%s)" % name,
+            product="nm.xtbts.log",
+            token="transition state search: %s" % name,
+        )
+        if re.search(climbing[name], output) is None:
+            misses.append("table-ts-%s: the climbing stage was never reported" % name)
+
+    # --- the four reaction path integrators --------------------------------
+    status, output, workdir = invoke(
+        "table-irc-prepare", hcn,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "irc0"],
+    )
+    ts_file = os.path.join(workdir, "irc0.xtbts.xyz")
+    if status != 0 or not os.path.exists(ts_file):
+        fail("the IRC preparation run failed with status %d" % status, output)
+    for name in ("gs", "lqa", "hpc", "eulerpc"):
+        inspect(
+            "table-irc-" + name, ts_file,
+            ["--gfn", "2", "--lirc", "--method", name,
+             "--lirc-max-steps", "2", "--norestart", "--namespace", "nm"],
+            "landscape: intrinsic reaction coordinate (%s)" % name,
+            product="nm.irc.log",
+            token="intrinsic reaction coordinate: %s" % name,
+        )
+
+    # --- `auto` is the default of every task -------------------------------
+    # (stage 2 review section 9 listed `--lscan --method auto` and
+    # `--lirc --method auto` as uncovered; `lopt`/`lts` are in mode `method`)
+    scan_args = ["--lscan-coord", "distance", "--lscan-atoms", "1,2",
+                 "--lscan-step", "0.05", "--lscan-nstep", "2",
+                 "--lscan-oneway"]
+    scan_plain, _ = inspect(
+        "table-scan-auto-plain", inp, ["--gfn", "2", "--lscan"] + scan_args,
+        "landscape: relaxed scan",
+    )
+    scan_auto, _ = inspect(
+        "table-scan-auto", inp,
+        ["--gfn", "2", "--lscan", "--method", "auto"] + scan_args,
+        "landscape: relaxed scan",
+    )
+    with open(os.path.join(scan_plain, "xtbscan.log"), "rb") as handle:
+        plain_log = handle.read()
+    with open(os.path.join(scan_auto, "xtbscan.log"), "rb") as handle:
+        auto_log = handle.read()
+    if plain_log != auto_log:
+        misses.append("table-scan-auto: `--method auto` changed xtbscan.log")
+    irc_plain, _ = inspect(
+        "table-irc-auto-plain", ts_file,
+        ["--gfn", "2", "--lirc", "--lirc-max-steps", "2", "--norestart",
+         "--namespace", "nm"],
+        None,
+    )
+    irc_auto, _ = inspect(
+        "table-irc-auto", ts_file,
+        ["--gfn", "2", "--lirc", "--method", "auto", "--lirc-max-steps", "2",
+         "--norestart", "--namespace", "nm"],
+        None,
+    )
+    with open(os.path.join(irc_plain, "nm.irc.log"), "rb") as handle:
+        plain_irc = handle.read()
+    with open(os.path.join(irc_auto, "nm.irc.log"), "rb") as handle:
+        auto_irc = handle.read()
+    if plain_irc != auto_irc:
+        misses.append("table-irc-auto: `--method auto` changed irc.log")
+
+    # --- the inner minimiser of a relaxed scan is observable ---------------
+    # (stage 2 review L2 / fix report T8)  `landscape_scan_settings%method` is
+    # handed to the constraint relaxation, but no output file carries it and
+    # the milestone above is mode only, so a name that was stored and then
+    # ignored was invisible.  The task now echoes the effective inner
+    # minimiser, and two different inner minimisers have to change
+    # `xtbscan.log`, which is the part the echo alone cannot prove.  The
+    # fixture is written here so that the check does not depend on a fixture
+    # of the build system; it is the stretched water of
+    # `LANDSCAPE-H2O-STRETCH` in `test/unit/CMakeLists.txt`.
+    stretch = os.path.join(rundir, "stretch.xyz")
+    with open(stretch, "w") as handle:
+        handle.write("3\nstretched water\n"
+                     "O  0.0000000  0.0000000  0.0000000\n"
+                     "H  0.0000000  0.0000000  1.3000000\n"
+                     "H  1.3000000  0.0000000 -0.4000000\n")
+    inner_log = {}
+    for name in ("lbfgs", "cg", "sd"):
+        workdir, output = inspect(
+            "table-scan-inner-" + name, stretch,
+            ["--gfn", "2", "--lscan", "--method", name] + scan_args,
+            "landscape: relaxed scan",
+        )
+        banner = re.search(r"inner minimiser: +(\S+)", output)
+        if banner is None or banner.group(1) != name:
+            misses.append("table-scan-inner-%s: the task did not echo the "
+                          "effective inner minimiser" % name)
+        with open(os.path.join(workdir, "xtbscan.log"), "rb") as handle:
+            inner_log[name] = handle.read()
+    for name in ("cg", "sd"):
+        if inner_log[name] == inner_log["lbfgs"]:
+            misses.append("table-scan-inner-%s: the inner minimiser did not "
+                          "change xtbscan.log" % name)
+    # a rigid scan builds the geometry and has no inner minimiser
+    _, rigid_output = inspect(
+        "table-scan-rigid", stretch,
+        ["--gfn", "2", "--lscan", "--lscan-mode", "rigid"] + scan_args,
+        "landscape: rigid scan",
+    )
+    if "inner minimiser" in rigid_output:
+        misses.append("table-scan-rigid: a rigid scan echoed an inner minimiser")
+
+    if misses:
+        fail("%d of the method names did not reach their task:\n  %s"
+             % (len(misses), "\n  ".join(misses)))
+
+
 def check_error(exe, inp, rundir, pattern, args):
     """An invalid request must abort with a non-zero status and a message."""
     status, output = run(exe, inp, args, rundir)
@@ -2198,6 +2943,18 @@ def main():
         if len(rest) < 1:
             fail("the echo mode needs a case name")
         check_echo(exe, inp, rundir, rest[0])
+    elif mode == "method":
+        if len(rest) < 3:
+            fail("the method mode needs the HCN, NH3 and NH3 product fixtures")
+        check_method(exe, inp, rundir, rest[0], rest[1], rest[2])
+    elif mode == "methodnative":
+        if len(rest) < 1:
+            fail("the methodnative mode needs the 501 atom fixture")
+        check_method_native(exe, inp, rundir, rest[0])
+    elif mode == "methodtable":
+        if len(rest) < 3:
+            fail("the methodtable mode needs the HCN, NH3 and NH3 product fixtures")
+        check_method_table(exe, inp, rundir, rest[0], rest[1], rest[2])
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

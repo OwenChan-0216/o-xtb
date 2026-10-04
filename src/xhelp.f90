@@ -271,6 +271,20 @@ subroutine help(iunit)
    "    call ancopt(3) to perform a geometry optimization, levels from crude, sloppy,", &
    "    loose, normal (default), tight, verytight to extreme can be chosen",&
    "",&
+   "--method NAME",&
+   "    select the method of the current landscape run type; the value domain is", &
+   "    filtered by the run type and an unknown or mismatched name aborts the run.", &
+   "    --lopt and --lscan accept the minimisers sd, cg, lbfgs, bfgs, diis, rfo;", &
+   "    --lts accepts the saddle searches prfo, bprfo, dimer, neb, cineb, autoneb,", &
+   "    string, gsm; --lirc accepts the integrators gs, hpc, lqa, eulerpc; auto keeps", &
+   "    the default of the task.  With --opt and --ohess the native engines ancopt", &
+   "    (alias rf), lancopt (alias l-ancopt), fire (alias inertial) and pbc_lbfgs are", &
+   "    accepted, a landscape name is refused until --opt is dispatched to the", &
+   "    suite.  --method is the canonical name of --lopt-engine, --lscan-method,", &
+   "    --lts-method and --lirc-method: the same value is idempotent, a different", &
+   "    value through two of the flags aborts the run.  The name is not", &
+   "    case-sensitive",&
+   "",&
    "--ljson",&
    "    write the structured result landscape_<task>.json (status, counters and", &
    "    the convergence history) for every landscape task; the file is meant for", &

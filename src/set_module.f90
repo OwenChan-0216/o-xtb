@@ -1783,6 +1783,8 @@ subroutine set_opt(env,key,val)
    character(len=*),intent(in) :: val
    integer  :: err
    integer  :: idum
+   !> Engine requested by `$opt engine=`, 0 for a name this build does not know
+   integer  :: iengine
    real(wp) :: ddum
    logical  :: ldum
    logical,save :: set1  = .true.
@@ -1882,6 +1884,14 @@ subroutine set_opt(env,key,val)
       if (getValue(env,val,ldum).and.set17) set%optset%exact_rf = ldum
       set17 = .false.
    case('engine')
+      ! U15 of the CLI redesign (section 4.7.1): the command line wins over the
+      ! xcontrol, but it must not win **silently**.  `set%opt_engine` is
+      ! allocated before this block runs when `--method ancopt|rf|lancopt|
+      ! l-ancopt|fire|inertial|pbc_lbfgs` selected a native engine together
+      ! with `--opt`/`--ohess` (and, in the pre-existing code path, when this
+      ! key was already given once).  The value is kept - the CLI selection
+      ! must survive - and a conflicting request is reported here instead of
+      ! disappearing.
       if (.not.allocated(set%opt_engine)) then
          select case(lowercase(val))
          case default; call env%warning("engine '"//val//"' is not implemented",source)
@@ -1890,6 +1900,19 @@ subroutine set_opt(env,key,val)
          case('pbc_lbfgs');        set%opt_engine = p_engine_pbc_lbfgs
          case('inertial','fire');  set%opt_engine = p_engine_inertial
          end select
+      else
+         select case(lowercase(val))
+         case('rf','ancopt');      iengine = p_engine_rf
+         case('lbfgs','l-ancopt'); iengine = p_engine_lbfgs
+         case('pbc_lbfgs');        iengine = p_engine_pbc_lbfgs
+         case('inertial','fire');  iengine = p_engine_inertial
+         case default;             iengine = 0
+         end select
+         if (iengine /= 0 .and. iengine /= set%opt_engine) then
+            call env%warning("engine '"//trim(val)//"' is ignored: an "//&
+               & "optimizer engine was already selected (--method or an "//&
+               & "earlier $opt engine=)",source)
+         end if
       end if
    case('output')
       if (.not.allocated(set%opt_outfile)) set%opt_outfile = val

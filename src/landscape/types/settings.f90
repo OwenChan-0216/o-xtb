@@ -434,6 +434,15 @@ module xtb_landscape_settings
       !> native flag.  The notice is suppressed when the algorithm was named on
       !> the command line, which is what this flag records.
       logical :: algorithm_was_set = .false.
+      !> Flag that selected `algorithm`, empty until one was named on the
+      !> command line.
+      !>
+      !> It holds the state of the alias conflict check of the shared setter
+      !> (`xtb_prog_main::set_landscape_opt_algorithm`, CLI redesign section
+      !> 4.3): a second selection of a **different** algorithm through
+      !> **another** flag (`--method` versus `--lopt-engine`) is an error,
+      !> while the same value and a repeated flag keep the last value.
+      character(len=:), allocatable :: algorithm_source
       !> Maximum displacement of a single macro step (bohr).  The RFO trust
       !> radius is additionally bounded by this value (`min(trust_max,
       !> max_displ)`), so a single step never exceeds it for any algorithm.
@@ -535,6 +544,11 @@ module xtb_landscape_settings
       !> Inner minimiser of a relaxed scan, name of a `p_landscape_opt_*`
       !> algorithm; unknown names are rejected by the task
       character(len=16) :: method = 'lbfgs'
+      !> Flag that selected `method`, empty until one was named on the command
+      !> line; the state of the alias conflict check of
+      !> `xtb_prog_main::set_landscape_scan_algorithm` (CLI redesign section
+      !> 4.3, same rule as `landscape_opt_settings%algorithm_source`)
+      character(len=:), allocatable :: method_source
       !> Number of scanned coordinates, 1 or 2
       integer :: ndim = 1
       !> Scanned coordinates; entry `i > ndim` is ignored
@@ -665,6 +679,11 @@ module xtb_landscape_settings
    type, extends(landscape_settings) :: landscape_ts_settings
       !> Search method, one of `p_landscape_ts_*`
       integer :: method = p_landscape_ts_prfo
+      !> Flag that selected `method`, empty until one was named on the command
+      !> line; the state of the alias conflict check of
+      !> `xtb_prog_main::set_landscape_ts_algorithm` (CLI redesign section 4.3,
+      !> same rule as `landscape_opt_settings%algorithm_source`)
+      character(len=:), allocatable :: method_source
       !> Initial trust radius of the P-RFO step (bohr), the `--lts trust=0.1`
       !> shortcut of PLAN section 6.3
       real(wp) :: trust = 3.7795e-1_wp
@@ -866,6 +885,11 @@ module xtb_landscape_settings
       !> D2); naming the flag on the command line suppresses the notice
       !> (recorded here).
       logical :: method_was_set = .false.
+      !> Flag that selected `method`, empty until one was named on the command
+      !> line; the state of the alias conflict check of
+      !> `xtb_prog_main::set_landscape_irc_algorithm` (CLI redesign section 4.3,
+      !> same rule as `landscape_opt_settings%algorithm_source`)
+      character(len=:), allocatable :: method_source
       !> Which negative mode defines the initial direction (1-based,
       !> 1 = most negative), the `target_mode` of the MAPLE reference
       integer :: target_mode = 1

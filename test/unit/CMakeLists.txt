@@ -3354,6 +3354,63 @@ endif()
 ]=])
 set(LANDSCAPE-CLI-PY "${CMAKE_CURRENT_SOURCE_DIR}/landscape_cli_check.py")
 
+# The unified method selector `--method` (CLI redesign section 4) is the
+# canonical name of the four `--l*` method flags: `--method` aliases them, a
+# name of another task is refused with a pointer at that task's flag, two
+# different values through two different flags are an error, `auto` keeps the
+# default of the task and a repeated flag keeps the last value.
+# `landscape_cli_check.py` mode `method` runs every pair and compares the
+# result files byte wise (OMP_NUM_THREADS=1, AGENTS.md section 6.1), so an
+# alias that does not reach the task cannot pass.
+add_test("xtb/landscape-method"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=method;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-method;${LANDSCAPE-HCN};${LANDSCAPE-NH3};${LANDSCAPE-NH3-DOWN}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-method
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The four native engines behind `--method` (`ancopt`/`rf`, `lancopt`/
+# `l-ancopt`, `fire`/`inertial`, `pbc_lbfgs`) have to select the **native**
+# path - the measured discriminators are the engine banners of stdout, and
+# `landscape: ` appearing next to one of them is the failure.  The 501 atom
+# GFN-FF cluster pins the explicit assignment of `ancopt`, because
+# `src/main/defaults.f90:42-46` would give a system with more than 500 atoms
+# `p_engine_lbfgs` and turn `--method ancopt` into L-ANCopt silently (CLI
+# redesign section 4.7, the R30/MEDIUM-1 pin).
+set(LANDSCAPE-BIG "${CMAKE_CURRENT_BINARY_DIR}/landscape_big.xyz")
+file(WRITE "${LANDSCAPE-BIG}" "501\n501 H atoms (the >500 atom engine default)\n")
+foreach(i RANGE 0 500)
+  math(EXPR ix "${i} % 10")
+  math(EXPR iy "(${i} / 10) % 10")
+  math(EXPR iz "${i} / 100")
+  math(EXPR x3 "${ix} * 3")
+  math(EXPR y3 "${iy} * 3")
+  math(EXPR z3 "${iz} * 3")
+  file(APPEND "${LANDSCAPE-BIG}" "H ${x3}.000000 ${y3}.000000 ${z3}.000000\n")
+endforeach()
+add_test("xtb/landscape-method-native"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=methodnative;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-method-native;${LANDSCAPE-BIG}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-method-native
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# Every suite method name of `--method` has to reach its task, not only the six
+# that the alias grammar test runs (stage 2 review M1, CLI redesign section
+# 9.2 `xtb/landscape-method-<task>-<name>`): all 18 names plus the four `auto`
+# runs, with the milestone of the task, the method line of `<ns>.xtbts.log` /
+# `<ns>.irc.log` and - for the scan - the effective inner minimiser.  One name
+# whose dispatch is broken is reported by name (the failures are collected).
+add_test("xtb/landscape-method-table"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=methodtable;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-method-table;${LANDSCAPE-HCN};${LANDSCAPE-NH3};${LANDSCAPE-NH3-DOWN}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-method-table
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # `--help` and the parser must agree in **both** directions (CLI redesign
 # sections 8.4, 8.6 and 17.4).  `landscape_help_check.py` extracts the two
 # spelling sets from the sources with the rules the script prints itself, and
@@ -3508,6 +3565,9 @@ set_tests_properties(
   "xtb/landscape-lts-fix"
   "xtb/landscape-lirc-fix"
   "xtb/landscape-fc-echo"
+  "xtb/landscape-method"
+  "xtb/landscape-method-native"
+  "xtb/landscape-method-table"
   "xtb/landscape-lopt-engine-echo"
   "xtb/landscape-lirc-default-echo"
   "xtb/landscape-lts-escape-echo"

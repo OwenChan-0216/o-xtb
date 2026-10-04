@@ -23,7 +23,7 @@
 
 ---
 
-## 修订记录（R1..R38）
+## 修订记录（R1..R41）
 
 > 本节只说明"改了什么、依据是什么"。每条都在正文里有对应改动点。
 > 证据类型沿用全文：`[实测]` / `[代码]` / `[文档]` / `[未验证]`。
@@ -67,6 +67,9 @@
 | **R36** | **阶段 1（A 组）实施留痕**：§17.1（`select_runtyp` 冲突检测）与 §17.5（5a 未知旗标 + 5b 枚举大小写）已落地并在 `17-stage1-impl-a.md` 留全证据。**三处订正设计**：(a) 5a 选**解析尾**方案（§17.5 的第一个方案 `[实测]` 打红 5 条既有回归测试，见 §10 末 R36 注）；(b) 5b 的 lowercase 覆盖**必须**含**存储点**（`lsset%mode`/`ltset%init_mode`/`ltset%n_init`/`l*-hessian_source` 的值会被下游用 `trim(...) == 'model'`/`'rigid'`/`'force'` 比较，只归一化谓词会造出**新的静默错算**）——父会话 §17.5 清单只列了 5 个谓词，实测缺 4 个谓词 + 5 个存储点；(c) `man/` 对套件旗标 **0 命中**（`man/xtb.1.adoc` 里 `landscape|--lopt|--lscan|--lirc|--lvib` 计数均为 0）⇒ §17.5 要求的"同步 man/"无对象，只有 `xhelp.f90` 需要改。另：F4 入册，计数 16 → **17** | §17.1/§17.5 实施；`_simplify-recon/17-stage1-impl-a.md`（含 6 个反向突变 + BC-4 逐位对比） | §10 F4、§10 末 R36 注、§8.5 |
 | **R28** | **LOW/INFO 逐条处置**（进 §14.7）：L-1（§5.1 #21 措辞→error）、L-2（6 处行号）、L-3（补 `optimizer.f90:801` 的逐帧写点）、L-6（G15 单列）、I-2（编号重建规则）；**另发现并修正** §4.1/§4.8 的两处**文件误归属**（`l_ancopt`/`fire` 实在 `relaxation_engine.f90:400/131`，旧稿写 `optimizer.f90`） | 复核 14 §4/§5；本轮 `grep -n` file:line | §14.7、§4.1、§3.9 |
 | **R38** | **阶段 1 收尾（父会话四项裁定，`22-stage1-final-report.md`）**：(a) §17.1 的**爆炸半径入册**为 **C8**（两个及以上互斥 runtype 旗标 → error 并点名第二个；`--sp --lopt-engine bfgs` 0 → 1），C 类 7 → **8**、总计数 17 → **18**，并更新本节的计数口径（§10 汇总行为权威）；(b) **D4 不改代码**（`--lscan` 默认双向是 M2 有意的滞回自检，改默认单向等于删自检；其关切由 D1 的 `--lscan-fc` 回显 + M2 的滞回文档覆盖），§17.3 的清单修正为 D1/D2/D3/D7；(c) 新增 **§17.7**：5 处库入口字面比较改用 `landscape_lowercase`（各配一条大/小写等值单测）、IRC 启动 banner 新增**生效** `Hessian source:` 回显（默认打、显式也给） | 父会话四项裁定；本轮 6 个反向突变（全部红 -> 还原绿）+ `ctest -R landscape` 118/118 与回归子集 12/12 全绿 + BC-4 逐位对比 | §10 C8/汇总行/R29 注、§8.3 D 清单、§17.1、§17.3、§17.7 |
+
+| **R40** | **阶段 2 缺口旗标归属订正 + `--cycles` 归属统一（复核 27 M2；本轮全量 `grep` 核实）**：(a) §6.3 的缺口旗标**本轮全部未实现**（`grep -c` 均为 0：`--lopt-max-steps`=0、`--lopt/lscan-hess-step`=0、`--lts/lirc/lvib-hess-step`=0、`--lopt/lscan-sccacc`=0、`--lopt/lvib-restart`=0）⇒ **整个 §6.3 新旗标块移出阶段 2**，登记为 **阶段 2b（非破坏收尾，先于阶段 3）**。**同时订正 §6.3/§7.2/§9.2 的一层更深的错**：其中部分**能力**其实已在 M2/M4/M6 以**任务限定名**落地（`--lscan/--lts/--lirc-max-steps`、`--lts/--lirc/--lvib-sccacc`、`--lscan/--lts/--lirc-restart`、`--lirc-step-hess`），**但从来没有 §6.3/§7.2 宣称的“统一 `--l*-hess-step` / `--l*-sccacc` 规范名”**；`--lopt-*` 三个（`max-steps`/`sccacc`/`restart`）与 `--lvib-restart` **根本不存在**。§9.2 的强制表里为这些旗标列的 4 行（`--lopt-max-steps`、`--l*-hess-step`、`--lopt/lscan-sccacc`、`--lopt/lvib-restart`）与它们点名的测试（`xtb/landscape-opt-max-steps` 等）**全部不存在**（实测：只有 `xtb/landscape-scan-max-steps` 这个 M2 遗留 test）⇒ 这 4 行标注为**未实现**；(b) §6.4 的 `--cycles` 行写“§9.1 阶段 2”与 §9.1 把 `--cycles` 写在阶段 3 **自相矛盾** ⇒ 统一为 **阶段 3** | 复核 27 M2；本轮 `grep -c -- "--<flag>'" src/prog/main.F90` 逐条实测（本行括注值） | §6.3、§6.4、§7.2、§9.1、§9.2、`28-stage2-fix-report.md §T4` |
+| **R41** | **阶段 2 修复轮登记（复核 27 的 M1/L1..L5/INFO-1 处置，`28-stage2-fix-report.md`）**：(a) M1 → 新增 `xtb/landscape-method-table`（**全部 18 个套件名 + 4 个 `auto` 运行**，逐名断言里程碑 + `<ns>.xtbts.log`/`<ns>.irc.log` 的方法行；一次相反的“名字表整体错位”突变同时打红 18 行 + 3 行 scan 回显）；(b) L1 → 4 个被改写的旧旗标补 BC-4 基线（10 次运行，全部输出文件 raw `cmp` 逐位同）；(c) L2 → `--lscan` 的**生效内层最小化器**回显（仅 relaxed；rigid 无内层器）+ “两个内层器必须改变 `xtbscan.log`”断言；(d) L3 → climbing 副作用从共享 setter 移到解析尾（对**最终值**只施加一次），`--lts-method cineb --lts-method neb` 与 `--method cineb --method neb` 等价；(e) L4 → **U15 落地**（`set_module.f90` 的 `.not.allocated` **else 分支**打 `[WARNING]`，即 R34 指定的实现点）；(f) L5 → `main.F90` 的别名表注释订正（`lancopt` 是**新增**拼写，不是 xcontrol 键；`set_module.f90:1889` 的旧引证作废）；(g) INFO-1 → 登记 `landscape_native_engine` 的**可测/不可测边界**（§9.2、§4.7.1）。(c)(d)(e) 各有反向突变证据；5 处刻意行为变更已在正文逐条登记 | 复核 27；`28-stage2-fix-report.md`（T3/T5/T8/T9/T10） | §4.7.1、§6.3、§6.4、§9.1、§9.2、`25-stage2-impl.md §1` |
 
 > **复核编号与计数的不一致（本轮记录）**：复核声明 HIGH 5 / MEDIUM 8 / LOW 7 / INFO 4，但正文只显式编号了
 > H1/H2/H3/H5、M1/M2/M4/M5/M6/M7/M8、LOW-1..LOW-7、2 条 INFO。**§14 按内容补足到与计数一致**，
@@ -1481,6 +1484,20 @@ xcontrol `$opt engine=` 同样的 first-wins 规则）⇒ **优先级：显式 C
 二趟解析需重建 parser 与全部 case，**改动面远大于**尾归一；而尾归一是同一文件里**已被验证过的模式**
 （`--ljson`、`--lscan-step`）。
 
+**R39【阶段 2 实施登记，过渡期限制】：`--opt`/`--ohess` 下的套件方法名**。§4.7 第 2 段的套件分派
+在**阶段 2** 只放行 `p_run_lopt`（`--lscan`/`--lts`/`--lirc` 各自分派），`p_run_opt`/`p_run_ohess`
+**只接受 4 个原生引擎名（含别名）与 `auto`**；一个套件方法名（`--opt --method bfgs`）⇒ `env%error`，
+消息点名 `--lopt` 并说明"在本构建里 `--opt`/`--ohess` 仍走原生 ANCopt，该名字不会生效"。
+**理由**：阶段 2 **不改** `--opt`/`--ohess` 的分派（阶段 3 才做），而 `lset`（套件 opt settings）在
+`--opt` 下**没有任何读点**（`run_landscape` 只在 `p_run_lopt` 分派块被调，本轮实现后为 `src/prog/main.F90:1006`）
+⇒ 照字面写 `lset%algorithm` 就是本项目已出现 4 次的**死旋钮**（铁律 1）。
+**阶段 3 的第一项动作之一就是移除这个限制**（`--opt`/`--ohess` 改派到套件后，`case (p_run_lopt, p_run_opt, p_run_ohess)`
+进同一套件 setter，并把 §4.7.1 的 `-opt-alias-once`/`-opt-native-nojson`/`-ohess-suite-once` 等断言转为绿）。
+**登记原因**：这是**有意的过渡期限制**，不写下来阶段 3 会忘记放开。
+**`auto` 的语义与阶段无关**：`auto` = **所选任务的默认**（阶段 3 改变 `--opt` 的"默认是什么"，
+但不改变 `auto` 的"含义"）；实现为 no-op，因此 `--lopt --method auto` 与 `--lopt` 逐位同、
+`--lopt-engine bfgs --method auto` 不报冲突。
+
 #### 4.7.1 测试规格（H-1/H-2/M-3 的"真的走到原生路径"断言）
 
 判别 token **全部本轮实测**（`/tmp/xtb-w2/build/xtb`，`OMP_NUM_THREADS=1`，非周期水，原生路径今天经
@@ -1515,7 +1532,7 @@ xcontrol `$opt engine=` 同样的 first-wins 规则）⇒ **优先级：显式 C
 | **`xtb/landscape-ohess-fres-bridge`（R29/T3）** | `--ohess normal`（套件）与同一末几何的 `--lvib` | `TOTAL ENTHALPY`/`TOTAL FREE ENERGY` 行存在且与 `--lvib` 的 `total enthalpy H(T)`/`G(T)` 一致（≤1e-6 Eh）；`TOTAL ENERGY` ≠ 0 | 删桥 ⇒ 两行消失；`anyhess` 真而不填 `fres` ⇒ 打印 `TOTAL ENERGY 0.000000000000` ⇒ 红 |
 | **`xtb/landscape-opt-xtbopt-once`（R29/L-4）** | `--opt`（套件）；以及 `--opt --namespace c1` | `optimized geometry written to:` = 0、`wrote xtbopt.xyz` = 1；`c1.xtbopt.xyz` 只写一次；计时块含 `landscape optimizer` 且不含 `ANC optimizer` | 去掉 `:1310-1320` 的抑制 ⇒ 两行提示都出现 ⇒ 红；恢复 `:4065` 的 runtyp-only 条件 ⇒ 计时标签回到 `ANC optimizer` ⇒ 红 |
 | **`xtb/landscape-lopt-no-method`（R30/MEDIUM-1）** | `--lopt`（无 `--method`） | exit 0；含 `landscape: lbfgs minimisation`、不含 `ANC micro-cycles`；写 `landscape_opt.json` | 删掉 flag 循环前的 `landscape_native_engine = 0` ⇒ 读到未定义值。**诚实标注**：`intent(out)` 的未定义值在 `-O2` 下经常"恰好为 0"，所以**运行时测试不能可靠地证伪这一条**；真正的验收是**静态且可核的**：`grep -n "landscape_native_engine" src/prog/main.F90` 必须同时给出声明行（带 `= 0`）与 flag 循环前那行（实现报告贴输出） |
-| **`xtb/landscape-method-native-vs-xcontrol`（R34/U15）** | `--opt --method fire --input <$opt engine=rf>` | exit 0；含 `[WARNING]`（提示 `$opt engine=rf` 被丢弃）、含 `initial time step`（fire 生效）、不含 `ANC micro-cycles` | 去掉 `set_module.f90:1885` 分支的 warning ⇒ `[WARNING]` 消失 ⇒ 红（行为不变，仍 fire —— 本项只加诊断） |
+| **`xtb/landscape-method-native-vs-xcontrol`（R34/U15）** | `--opt --method fire --input <$opt engine=rf>` | exit 0；含 `[WARNING]`（提示 `$opt engine=rf` 被丢弃）、含 `initial time step`（fire 生效）、不含 `ANC micro-cycles` | 去掉 `set_module.f90:1885` 分支的 warning ⇒ `[WARNING]` 消失 ⇒ 红（行为不变，仍 fire —— 本项只加诊断）。**R41 落地**：实现为 `xtb/landscape-method-native` 的 5 个 `u15-*` 用例（`--method lancopt` + `$opt engine=rf|lbfgs|不给|给两次`）。**实测订正 R34 的“只在 `--method` 之后命中”**：`set%opt_engine` 已赋值也可能是**同一 `$opt` 块重复给值**（首个生效、第二个原先静默消失）⇒ 该例也告警（用例 `u15-xcontrol-twice`），与“绝不静默覆盖”同一规则，已在 `28-stage2-fix-report.md` T10 登记 |
 
 > **Falsifiability**：每行最后一列都是**可注入的具体突变**（沿用 M4 报告 34 §1 的教训：先证明突变与被回退的
 > 逻辑**语义等价**，否则"绿"说明不了任何事）。
@@ -1828,6 +1845,13 @@ xcontrol `$opt engine=` 同样的 first-wins 规则）⇒ **优先级：显式 C
 
 ### 6.3 新增旗标（非破坏）
 
+> **落地阶段（R40 订正，本轮 `grep -c` 逐条实测）**：本表新增旗标**一个都没落地**。
+> 其中部分**能力**已在 M2/M4/M6 以**任务限定名**存在（`--lscan/--lts/--lirc-max-steps`、
+> `--lts/--lirc/--lvib-sccacc`、`--lscan/--lts/--lirc-restart`、`--lirc-step-hess`），
+> 但本表与 §7.2 宣称的“统一规范名”从未实现：`--lopt-max-steps`、`--lopt/lscan-hess-step`、
+> `--lts/lirc/lvib-hess-step`、`--lopt/lscan-sccacc`、`--lopt/lvib-restart` 的 `grep -c` **全部为 0**。
+> 已由 **R40** 整块移到 **阶段 2b**；§9.2 为它们列的 4 行已标“未实现”。
+
 | 新旗标 | 作用 | 依据 |
 |---|---|---|
 | `--method NAME` | 统一方法选择器 | §4 |
@@ -1844,7 +1868,7 @@ xcontrol `$opt engine=` 同样的 first-wins 规则）⇒ **优先级：显式 C
 |---|---|---|
 | `--opt [LEVEL]`（`main.F90:2153`） | runtyp 改派到套件（方案 C） | **语义改变**（§3、§10 A1） |
 | `--ohess [LEVEL]`（`main.F90:2166`） | runtyp 改派（方案 C） | **语义改变**（§10 B1..B5） |
-| `--cycles INT`（`main.F90:1955`） | 现存 CLI 旋钮（只影响原生 ANCopt，`get_optthr` 的 `maxcycle`）；套件 `--lopt` **不读它** | **新增映射**：`--cycles` 在套件 runtyp 下映射到 `--lopt/lscan/lts/lirc-max-steps`，或**响亮报错**（§9.1 阶段 2；否则 C 之后 `--cycles` 对 `--opt` **静默失效** = 新缺陷） |
+| `--cycles INT`（`main.F90:1955`） | 现存 CLI 旋钮（只影响原生 ANCopt，`get_optthr` 的 `maxcycle`）；套件 `--lopt` **不读它** | **新增映射**：`--cycles` 在套件 runtyp 下映射到 `--lopt/lscan/lts/lirc-max-steps`，或**响亮报错**（**§9.1 阶段 3**；R40 统一：旧稿写"阶段 2"与 §9.1 矛盾。否则 C 之后 `--cycles` 对 `--opt` **静默失效** = 新缺陷） |
 | `--hess`（`main.F90:2160`） | 无 | 保持 |
 | `--bhess`/`--metaopt`/`--path`/`--modef`/`--screen` | 无（保持原生） | 保持；但 `--method` 在其上报错（§4.6） |
 | `-s`/`--silent`（`xhelp.f90:780`，**未实现**；`[R17]` 旧稿误写 775） | 设计想用它抑制提示 | **必须实现**，否则提示无条件打印（§3.4）；也可在做 §8 时顺手实现 |
@@ -2112,9 +2136,12 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 
 **阶段 2 — `--method` 统一选择器（非破坏）**
 - 新增 `--method`；四个旧旗标变别名；冲突 error；`--method` 在未改派 runtyp 上报错（§4.6）
-- 新增缺口旗标（§6.3）：`--lopt-max-steps`、`--l*-hess-step`、`--l*-sccacc`、`--lopt/lvib-restart`
-- 验收：`--method <name>` 对**每个**任务的每个取值都有"证明生效"的 CLI 测试（§9.2）；
-  旧旗标逐条仍工作（BC-2）。
+- 新增缺口旗标（§6.3）：**本轮一个都没落地**（`grep -c` 逐条为 0，实测见 R40）；
+  统一规范名（`--l*-hess-step` / `--l*-sccacc` / `--lopt-max-steps` / `--lopt/lvib-restart`）
+  **整块移到阶段 2b**（R40）；阶段 2 不再声称包含本项
+- 验收：`--method <name>` 对**每个**任务的每个取值都有"证明生效"的 CLI 测试（§9.2）——
+  **R41 落地**：`xtb/landscape-method-table`（18 个套件名 + 4 个 `auto`）；
+  旧旗标逐条仍工作（BC-2），**R41 补全 BC-4**：4 个被改写的旧旗标（`--lopt-engine`/`--lscan-method`/`--lts-method`/`--lirc-method`）全部输出文件 raw `cmp` 逐位同。
 
 **阶段 3 — `--opt` / `--ohess` 改派（方案 C，破坏性）**
 - `--opt [LEVEL]` / `-o` → 套件默认优化器 + `[NOTICE]`（**R11：stdout**）
@@ -2161,23 +2188,24 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 
 | 选项（含别名） | 读取点 | 证明生效的测试 | 测试如何变红 |
 |---|---|---|---|
-| `--method bfgs`（每任务每取值，**23 个名字**——R9；**口径澄清（L-1）**：23 = 6 最小化器 + 8 ts + 4 irc + 4 原生引擎 + `auto`，**按引擎名字计**，不含 3 个原生别名拼写；若按拼写计则为 **25 个套件+原生拼写 + `auto`**，两者不可混用） | `settings.f90:*_from_name`；尾归一 §4.7 | `xtb/landscape-method-<task>-<name>`（断言 stdout 的算法名） | 删掉赋值 |
+| `--method bfgs`（每任务每取值，**23 个名字**——R9；**口径澄清（L-1）**：23 = 6 最小化器 + 8 ts + 4 irc + 4 原生引擎 + `auto`，**按引擎名字计**，不含 3 个原生别名拼写；若按拼写计则为 **25 个套件+原生拼写 + `auto`**，两者不可混用） | `settings.f90:*_from_name`；尾归一 §4.7 | **R41 落地：`xtb/landscape-method-table`（逐名，18 个套件名 + 4 个 `auto`）**：opt 名断言 `landscape: <name> minimisation` + `xtbopt.xyz`；ts 名断言 `landscape: transition state search (<name>)` **且** `<ns>.xtbts.log` 的方法行；irc 名断言里程碑 **且** `<ns>.irc.log`；`auto` 断言与不给 `--method` 的 `xtbscan.log`/`irc.log` 逐位同。旧稿只写了一个泛泛的 `xtb/landscape-method-<task>-<name>` 名字（复核 27 M1 指出 18 个名里 13 个无覆盖） | 把名字表整体错位（`landscape_opt/ts/irc_method_from_name` 循环轮换）⇒ 一次运行时 18 行逐个点名变红（实测 38 行）+ 3 行 scan 回显 |
 | `--method ancopt` / `rf` / `lancopt` / `l-ancopt` / `fire` / `inertial` / `pbc_lbfgs`（**R21：7 个拼写 / 4 个原生出口**（L-1 订正）） | §4.7 解析尾归一 + §4.8 | **§4.7.1 的 20 条 CLI 测试**（R29 后；断言原生分支：stdout 不含 `landscape:`，含实测唯一 token `ANC micro-cycles`/`L-ANC optimizer`/`initial time step`/`current lattice:`；`--ohess` 的 4 条见 §3.11.1） | 把该名字的映射删掉（→ 0）或改到别的引擎（token 变） |
 | 套件/原生身份谓词（H-2） | §3.11 `effective_landscape_task`/`landscape_is_suite_run` | `xtb/landscape-guard-fire-no-scan`（`--opt --method fire` + `$scan` **不**报错）、`-guard-fire-no-opt`（+ `$opt` 块不报错）、`-guard-pbc-native`（原生周期 exit 0） | 谓词退化为 `native_engine == p_engine_rf`（三个测试均红，R22 的反例） |
 | 原生块抑制（M-3） | §3.11 读点表 #4；`main.F90:931` | `xtb/landscape-opt-alias-once`（`--opt --ljson`：含 `landscape: lbfgs minimisation`、**不含** `ANC micro-cycles`、`n_steps` == `--lopt`）；`-opt-native-nojson`（`--opt --method ancopt --ljson` 不写 json） | 去掉 `landscape_native_engine /= 0` ⇒ 两个测试各自反向红 |
 | **原生 Hessian/频率抑制（R29/HIGH-1）** | §3.11.1；`main.F90:1156`（`numhess`）、`:1282`（`main_freq`）、`:1310-1320`、`:4065-4071` | `xtb/landscape-ohess-suite-once`（`--ohess`：`Numerical Hessian`=0、`Frequency Printout`=0、`landscape: harmonic frequencies`=1、`landscape engine: Hessians` 行=1）；`-ohess-native-hess`（`--ohess --method ancopt` 反向）；`-ohess-fres-bridge`（`TOTAL ENTHALPY`/`TOTAL FREE ENERGY` 与 `--lvib` 一致）；`-opt-xtbopt-once`（`wrote xtbopt.xyz`=1） | 见 §3.11.1 的逐行突变列（每个 token 都有对应的单行突变） |
-| **标志初值（R30/MEDIUM-1）** | §3.11.2；`main.F90:1574` 前一行 | **静态核**：`grep -n "landscape_native_engine" src/prog/main.F90`（得声明行、flag 循环前行、第 2 段两处）；运行时烟难：`xtb/landscape-lopt-no-method` | —— |
+| **标志初值（R30/MEDIUM-1）** | §3.11.2；`main.F90:1574` 前一行 | **静态核**：`grep -n "landscape_native_engine" src/prog/main.F90`（得声明行、flag 循环前行、第 2 段两处）；本项目**未落地** `xtb/landscape-lopt-no-method`（`grep -rn "lopt-no-method" test/unit/` = 0）——它写在设计里就是预期的“恒真/只能静态核”项。**R41/INFO-1 边界登记**：该值的**运行时效应分两半** —— (a) “写进 `set%opt_engine`”**今天可测且已被证伪**：501 原子 GFN-FF fixture 删掉那一行即得 `L-ANC optimizer` 而非 `ANC micro-cycles`（`xtb/landscape-method-native` 的 `native-big`）；(b) 阶段 3 的读取（`--opt`/`--ohess` 改派到套件）**在本构建中不存在** ⇒ 任何声称“引擎在 `--opt` 下被尊重”的运行时测试都是恒真；声明初值本身只能静态核（设计已记） | —— |
 | xcontrol `$opt` 守卫作用域（M-2/C7） | §3.8(c) | `xtb/landscape-opt-xcontrol-scope`（`--lopt --input <含 $opt>` 非零退出 + 点名 `--method ancopt`）+ §3.8c 原有 3 条 | 去掉守卫（今天 exit 0 静默 [实测]） |
 | `--lopt-level` 不收上游名（L-4） | §3.5 | `xtb/landscape-method-level-bridge`（`--lopt-level lax` 非零；`--opt lax --method bfgs` exit 0 + `[NOTICE]`） | 把上游名加进 `landscape_conv_level_known` ⇒ 红 |
 | `--lopt-engine`（别名） | `main.F90:2251` | 断言与 `--method <同名>` **输出逐位同**（别名等价性） | 改别名转发 |
 | `--lscan-method`（别名） | `main.F90:2316` | 同上（`--lscan` 下） | 同上 | 
-| `--lts-method`（别名，**带 climbing 副作用**） | `main.F90:2581` | 断言 `--lts --method cineb` 与 `--lts --lts-method cineb` 的 `climb` 行为同（`main.F90:2589-2593`） | 把副作用搬出共享 setter |
+| `--lts-method`（别名，**climbing 副作用**） | `main.F90:2581`（setter 只存值；副作用在解析尾 `parseArguments` 末尾对最终值施加一次） | 断言 `--lts --method cineb` 与 `--lts --lts-method cineb` 的 `climb` 行为同（`main.F90:2589-2593`）；**R41/L3**：`xtb/landscape-method` 的 `repeat-band-flag`/`repeat-band-method` 断言 `--lts-method cineb --lts-method neb` 与 `--method cineb --method neb` 都得到**无 climbing 的 neb** 且产物逐位同 | 把副作用搬回共享 setter（`repeat-band-flag` 红，实测）；~~把副作用搬出共享 setter~~（旧稿的突变描述已作废：副作用本来就不应逐旗标施加） |
 | `--lirc-method`（别名） | `main.F90:3325` | 同上（`--lirc` 下） | 同上 |
-| `--lts-step` / `--lvib-step` / `--lirc-step-hess`（3 别名） | `main.F90:2956/3714/3634` | `xtb/landscape-hess-step-alias-<task>`：断言与 `--l*-hess-step` **同一字段**（JSON/回显） | 把别名指向另一字段 |
-| `--lopt-max-steps N`（新） | `settings.f90:355` | `xtb/landscape-opt-max-steps`（N=8 vs 256 断言 `n_steps` 不同） | 删赋值 |
-| `--lopt-hess-step` / `--lscan-hess-step`（新） | `settings.f90:333` | `xtb/landscape-hess-step-<task>`（断言 `engine%hess_step` 回显改变） | 删赋值 |
-| `--lopt-sccacc` / `--lscan-sccacc`（新） | `settings.f90:335` | 同构 | 删赋值 |
-| `--lopt-restart` / `--lvib-restart`（新） | `settings.f90` restart_mode | 同构 | 删赋值 |
+| `--lts-step` / `--lvib-step` / `--lirc-step-hess`（3 别名） | `main.F90:2956/3714/3634` | **部分未实现（R40/C41）**：只有 `--lirc-step-hess` 存在（`main.F90:3684`，`grep -c` = 2）；`--lts-step`/`--lvib-step`/`--l*-hess-step` 均 0 命中 ⇒ 规范名从未落地 | —— |
+| `--lopt-max-steps N`（新） | `settings.f90:355` | **未实现（R40；`grep -c "--lopt-max-steps'" src/prog/main.F90` = 0）**；已存在的 M2 遗留是**另一个拼写** `--lscan-max-steps`（`main.F90:2596`，测试 `xtb/landscape-scan-max-steps`） | —— |
+| **scan 内层最小化器 `--lscan-method` / `--lscan --method`（R41/L2）** | `relax_scan.f90:597`（`opt%algorithm = from_name(settings%method)`；rigid 模式不用它） | `xtb/landscape-method-table`：`--lscan --method sd\|cg\|lbfgs` 断言 stdout 新回显 line `inner minimiser:         <name>`（`tasks/scan.f90` 的 banner，**仅 relaxed**）、断言 `--lscan-mode rigid` **不**回显，并断言 `cg`/`sd` 与 `lbfgs` 的 `xtbscan.log` **不同**（旧稿的 L-3 只知道“无法发现”：rigid 忽略它、两条别名路由共用 setter、里程碑与方法无关、`xtbscan.log` 不含方法名） | 让 banner 回显固定 `lbfgs` ⇒ 回显断言红；让 `relax_scan` 忽略 `settings%method`（恒用 sd）⇒ “两个内层器改变 `xtbscan.log`” 红（两项实测均红） |
+| `--lopt-hess-step` / `--lscan-hess-step`（新） | `settings.f90:333` | **未实现（R40；两者 `grep -c` = 0）**；任务限定名 `--lscan-hess-step` 也不存在 | —— |
+| `--lopt-sccacc` / `--lscan-sccacc`（新） | `settings.f90:335` | **未实现（R40；两者 `grep -c` = 0）**；存在的是 `--lts/--lirc/--lvib-sccacc` | —— |
+| `--lopt-restart` / `--lvib-restart`（新） | `settings.f90` restart_mode | **未实现（R40；两者 `grep -c` = 0）**；存在的是 `--lscan/--lts/--lirc-restart` | —— |
 | `--method` 冲突（异值） | §4.3 | `xtb/landscape-method-conflict`（`--method bfgs --lopt-engine cg` 非零退出） | 去掉冲突检测 |
 | `--opt normal` → 套件（含 `-o`） | `main.F90:2153` | `xtb/landscape-opt-alias`（断言 stdout 含 `[NOTICE]` 与 `landscape: lbfgs`，且 `xtbopt.xyz` 与 `--lopt` 逐位同） | 还原原生分支 |
 | `--opt` + `$scan` / 周期 / `$opt` 块 | §3.8 | `xtb/landscape-opt-scanblock`、`-opt-pbc`、`-opt-xcontrol`（非零退出 + 文本点名） | 去掉守卫 |

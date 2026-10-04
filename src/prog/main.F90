@@ -107,9 +107,11 @@ module xtb_prog_main
       & landscape_scan_settings, landscape_vib_settings, landscape_ts_settings, &
       & landscape_irc_settings, &
       & landscape_opt_algorithm_from_name, landscape_conv_level_known, &
-      & landscape_ts_method_known, landscape_ts_method_from_name, &
+      & landscape_opt_algorithm_name, landscape_ts_method_name, &
+      & landscape_irc_method_name, &
+      & landscape_ts_method_from_name, &
       & landscape_ts_init_mode_known, landscape_ts_ninit_known, &
-      & landscape_irc_method_known, landscape_irc_method_from_name, &
+      & landscape_irc_method_from_name, &
       & landscape_scan_coord_from_name, landscape_scan_coord_known, &
       & landscape_scan_coord_natoms, landscape_scan_mode_known, &
       & p_landscape_scan_coord_distance, p_landscape_restart_off, &
@@ -238,6 +240,10 @@ contains
       !> Landscape run type for the `$scan` diagnostic (empty when the run type
       !> is not a landscape task)
       character(len=16) :: lruntyp_flag
+      !> Native ANCopt engine selected by `--method` (`p_engine_*`), 0 for a
+      !> landscape method name and when the flag was not given; set by
+      !> `parseArguments` (CLI redesign sections 4.7/4.8, R30/MEDIUM-1)
+      integer :: landscape_native_engine = 0
 
 !  OMP stuff
       integer :: TID, OMP_GET_NUM_THREADS, OMP_GET_THREAD_NUM
@@ -252,7 +258,7 @@ contains
       ! read the command line arguments
       call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset, lvset, ltset, lircset)
+         & lsset, lvset, ltset, lircset, landscape_native_engine)
 
 
       ! No solvation available for PTB!
@@ -1477,7 +1483,7 @@ contains
 !> Parse command line arguments and forward them to settings
    subroutine parseArguments(env, args, inputFile, paramFile, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset, lvset, ltset, lircset)
+         & lsset, lvset, ltset, lircset, landscape_native_engine)
 
       use xtb_mctc_global, only: persistentEnv
 
@@ -1554,15 +1560,25 @@ contains
       real(wp) :: ddum
       character(len=:), allocatable :: flag, sec
       logical :: exist
-      integer :: landscape_algorithm
       integer :: iscan, idum2
       real(wp) :: scan_step_user(2)
       logical :: scan_step_given(2)
+
+      !> Method name of the `--method` flag; only the string is stored while
+      !> parsing, it is resolved after the loop (CLI redesign section 4.7)
+      character(len=:), allocatable :: landscape_method_name
 
       !> First run type requested on the command line and the flag that
       !> requested it; both are filled by `select_runtyp`, which reports a
       !> second, different run type as an error (CLI redesign section 17.1).
       character(len=:), allocatable :: selected_runtyp, selected_runtyp_flag
+
+      !> Native ANCopt engine selected by `--method` (`p_engine_*`), 0 for a
+      !> landscape method name and when the flag was not given (CLI redesign
+      !> sections 4.7/4.8).  It is written before the flag loop because an
+      !> `intent(out)` dummy is undefined on entry, and every run type - also
+      !> the ones without `--method` - reads it afterwards.
+      integer, intent(out) :: landscape_native_engine
 
       !> Unknown flags, blank separated; they are reported after the parsing
       !> loop, where the effect of `--strict` is known (section 17.5 5a)
@@ -1581,6 +1597,13 @@ contains
       tblite%color = get_xtb_feature('color')
       scan_step_user = 0.0_wp
       scan_step_given = .false.
+
+      ! `landscape_native_engine` is an `intent(out)` dummy and therefore
+      ! undefined on entry; it must be defined on every return path, because
+      ! the run types without `--method` read it as well (CLI redesign section
+      ! 4.7, step 0).  The flag loop is the first statement sequence that can
+      ! leave the subroutine through `env%error`, so the value is written here.
+      landscape_native_engine = 0
 
       nFlags = args%countFlags()
       call args%nextFlag(flag)
@@ -2274,18 +2297,32 @@ contains
             ! the dedicated flags below.
             call select_runtyp(env, 'lopt', '--lopt', selected_runtyp, selected_runtyp_flag)
 
+         case ('--method')
+            ! Unified method selector of the landscape suite (CLI redesign
+            ! section 4).  Only the name is stored here: it is resolved after
+            ! the parsing loop, where the run type is known regardless of the
+            ! order of the flags (the run type is set inside the run type
+            ! cases, so `--method bfgs --lopt` would not see `lopt` here).
+            !
+            ! `auto` is the default of the selected task; a name of the native
+            ! ANCopt family (`ancopt`/`rf`, `lancopt`/`l-ancopt`, `fire`/
+            ! `inertial`, `pbc_lbfgs`) selects the native engine and is legal
+            ! with `--opt`/`--ohess` only (section 4.7/4.8).
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               landscape_method_name = sec
+            else
+               call env%error("The --method flag requires a method name", source)
+            end if
+
          case ('--lopt-engine')
-            ! Minimisation algorithm of the landscape suite
+            ! Minimisation algorithm of the landscape suite; alias of
+            ! `--method` (CLI redesign section 4.3), the shared setter does the
+            ! name lookup and the alias conflict check
             call select_runtyp(env, 'lopt', '--lopt-engine', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
-               landscape_algorithm = landscape_opt_algorithm_from_name(sec)
-               if (landscape_algorithm == 0) then
-                  call env%error("Unknown landscape minimisation algorithm '"//sec//"'", source)
-               else
-                  lset%algorithm = landscape_algorithm
-                  lset%algorithm_was_set = .true.
-               end if
+               call set_landscape_opt_algorithm(env, lset, sec, '--lopt-engine', source)
             else
                call env%error("The --lopt-engine flag requires an algorithm name", source)
             end if
@@ -2341,15 +2378,12 @@ contains
             end if
 
          case ('--lscan-method')
-            ! Inner minimiser of a relaxed scan
+            ! Inner minimiser of a relaxed scan; alias of `--method` (CLI
+            ! redesign section 4.3)
             call select_runtyp(env, 'lscan', '--lscan-method', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
-               if (landscape_opt_algorithm_from_name(sec) == 0) then
-                  call env%error("Unknown landscape scan minimiser '"//sec//"'", source)
-               else
-                  lsset%method = sec
-               end if
+               call set_landscape_scan_algorithm(env, lsset, sec, '--lscan-method', source)
             else
                call env%error("The --lscan-method flag requires an algorithm name", source)
             end if
@@ -2607,24 +2641,14 @@ contains
             call select_runtyp(env, 'lts', '--lts', selected_runtyp, selected_runtyp_flag)
 
          case ('--lts-method')
-            ! Transition state search method
+            ! Transition state search method; alias of `--method` (CLI redesign
+            ! section 4.3).  The shared setter carries the climbing image side
+            ! effect, so `--lts --method cineb` and `--lts --lts-method cineb`
+            ! are the same run.
             call select_runtyp(env, 'lts', '--lts-method', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
-               if (landscape_ts_method_known(sec)) then
-                  ltset%method = landscape_ts_method_from_name(sec)
-                  ! `cineb` is the climbing image variant of the band search;
-                  ! `cineb` selects the climbing image stage; the AutoNEB and
-                  ! string searches use a climbing node for their saddle
-                  ! candidate, so selecting them switches it on as well.
-                  ! `--lts-climb` does the same for `--lts-method neb`.
-                  if (ltset%method == p_landscape_ts_cineb .or. &
-                        & ltset%method == p_landscape_ts_autoneb .or. &
-                        & ltset%method == p_landscape_ts_string .or. &
-                        & ltset%method == p_landscape_ts_gsm) ltset%path%climb = .true.
-               else
-                  call env%error("Unknown landscape transition state method '"//sec//"'", source)
-               end if
+               call set_landscape_ts_algorithm(env, ltset, sec, '--lts-method', source)
             else
                call env%error("The --lts-method flag requires a method name", source)
             end if
@@ -3354,16 +3378,12 @@ contains
          case ('--lirc-method')
             ! IRC integration method (hpc default | lqa | eulerpc | gs); the default
             ! is `hpc` since the M6 validation round measured it both more accurate
-            ! and 8.5x cheaper than `gs` (PLAN section 12.15, behaviour change)
+            ! and 8.5x cheaper than `gs` (PLAN section 12.15, behaviour change).
+            ! Alias of `--method` (CLI redesign section 4.3)
             call select_runtyp(env, 'lirc', '--lirc-method', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
-               if (landscape_irc_method_known(sec)) then
-                  lircset%method = landscape_irc_method_from_name(sec)
-                  lircset%method_was_set = .true.
-               else
-                  call env%error("Unknown landscape IRC method '"//sec//"'", source)
-               end if
+               call set_landscape_irc_algorithm(env, lircset, sec, '--lirc-method', source)
             else
                call env%error("The --lirc-method flag requires a method name", source)
             end if
@@ -3937,6 +3957,108 @@ contains
          end if
       end do
 
+      ! The unified method selector `--method` is resolved here, after every
+      ! flag has been parsed: the run type is only known when the whole
+      ! command line has been seen, because the run type flags select it inside
+      ! their own case (CLI redesign section 4.7, step 2).  `--method` never
+      ! calls `set_runtyp`, so it does not touch the "first run type wins" lock
+      ! of `set_runtyp` - `--method bfgs --lopt` and `--lopt --method bfgs` are
+      ! the same run.
+      if (allocated(landscape_method_name)) then
+         landscape_native_engine = landscape_native_engine_from_name(&
+            & landscape_method_name)
+         if (landscape_native_engine /= 0) then
+            ! Native ANCopt engine family (section 4.8).  The engine is pinned
+            ! explicitly, because `src/main/defaults.f90:42-46` would otherwise
+            ! fill in `p_engine_lbfgs` for a system with more than 500 atoms
+            ! and silently turn `--method ancopt` into L-ANCopt.
+            select case (set%runtyp)
+            case (p_run_opt, p_run_ohess)
+               set%opt_engine = landscape_native_engine
+            case default
+               call env%error("--method "//landscape_method_name//&
+                  & " selects a native optimizer engine, which is only "//&
+                  & "available with --opt or --ohess", source)
+            end select
+         else if (landscape_lowercase(landscape_method_name) == 'auto') then
+            ! `auto` is the default of the selected task; the settings objects
+            ! already hold it, so there is nothing to do.  It is a no-op rather
+            ! than a name lookup, so `--lopt-engine bfgs --method auto` keeps
+            ! the explicit `bfgs` instead of reporting a conflict.
+            continue
+         else
+            ! Landscape method name: dispatch on the run type (section 4.7,
+            ! step 2).  A name of another task is an error that names the flag
+            ! of that task (section 4.4), an unknown name is an error as well.
+            select case (set%runtyp)
+            case (p_run_lopt)
+               if (landscape_method_task(landscape_method_name) /= 'opt') then
+                  call landscape_method_mismatch(env, landscape_method_name, source)
+               else
+                  call set_landscape_opt_algorithm(env, lset, &
+                     & landscape_method_name, '--method', source)
+               end if
+            case (p_run_lscan)
+               if (landscape_method_task(landscape_method_name) /= 'opt') then
+                  call landscape_method_mismatch(env, landscape_method_name, source)
+               else
+                  call set_landscape_scan_algorithm(env, lsset, &
+                     & landscape_method_name, '--method', source)
+               end if
+            case (p_run_lts)
+               if (landscape_method_task(landscape_method_name) /= 'ts') then
+                  call landscape_method_mismatch(env, landscape_method_name, source)
+               else
+                  call set_landscape_ts_algorithm(env, ltset, &
+                     & landscape_method_name, '--method', source)
+               end if
+            case (p_run_lirc)
+               if (landscape_method_task(landscape_method_name) /= 'irc') then
+                  call landscape_method_mismatch(env, landscape_method_name, source)
+               else
+                  call set_landscape_irc_algorithm(env, lircset, &
+                     & landscape_method_name, '--method', source)
+               end if
+            case (p_run_lvib)
+               call env%error("--method "//landscape_method_name//&
+                  & " cannot be used with --lvib: the frequency task has no "//&
+                  & "method selector (use --lvib-hessian for its Hessian "//&
+                  & "backend)", source)
+            case (p_run_opt, p_run_ohess)
+               ! Stage 2/3 boundary of the CLI redesign: `--opt` and `--ohess`
+               ! still run the native ANCopt here, and the landscape tasks read
+               ! their own settings objects, so a landscape method name would
+               ! be accepted and then silently ignored.  The flag is refused
+               ! with the working alternative instead.  Stage 3 removes this
+               ! branch when `--opt`/`--ohess` are dispatched to the suite.
+               call env%error("--method "//landscape_method_name//&
+                  & " is a landscape method, but --opt and --ohess still run "//&
+                  & "the native ANCopt in this build, so the name would have "//&
+                  & "no effect: use --lopt (or the native engines --method "//&
+                  & "ancopt|lancopt|fire|pbc_lbfgs with --opt)", source)
+            case default
+               call env%error("--method needs a landscape run type: add "//&
+                  & "--lopt, --lscan, --lts or --lirc (or use --method "//&
+                  & "ancopt with --opt)", source)
+            end select
+         end if
+      end if
+
+      ! Some saddle methods imply the climbing image stage of the band
+      ! (`cineb` and the three climbing node searches; `--lts-climb` does the
+      ! same for `neb`).  The stage is applied **once**, to the value the
+      ! flags settled on, so a repeated flag is deterministic:
+      ! `--lts-method cineb --lts-method neb` and `--method cineb --method
+      ! neb` are the same run (stage 2 review L3).  Applied inside the setter
+      ! it was applied per flag and the first `cineb` left `climb` on.  The
+      ! stage is only ever switched on, exactly like `--lts-climb`, so an
+      ! explicit `--lts-climb` keeps working with any method.
+      select case (ltset%method)
+      case (p_landscape_ts_cineb, p_landscape_ts_autoneb, &
+            & p_landscape_ts_string, p_landscape_ts_gsm)
+         ltset%path%climb = .true.
+      end select
+
    end subroutine parseArguments
 
 !> Select a run type from one command line flag.
@@ -4001,6 +4123,267 @@ subroutine select_runtyp(env, typ, flag, selected_typ, selected_flag, apply)
    end if
 
 end subroutine select_runtyp
+
+!> Native ANCopt engine selected by a `--method` name.
+!>
+!> The value is the `p_engine_*` identifier of the native optimizer
+!> (`src/setparam.f90:77-80`) and 0 for a landscape method name.  The alias
+!> spellings are the keys of the xcontrol `$opt engine=` value
+!> (`src/set_module.f90:1886-1890`) with **two deliberate differences**: the
+!> bare `lbfgs` is **not** listed here (it is the landscape minimiser of
+!> section 4.1 / R21) and `lancopt` **is** listed although it is not an
+!> xcontrol key - `$opt engine=lancopt` is rejected there (it reports
+!> `engine 'lancopt' is not implemented` and selects nothing), only
+!> `lbfgs`/`l-ancopt` do.  The CLI spelling exists because `lbfgs` is taken by
+!> the suite (R9); the native L-ANCopt is reachable through `lancopt` and
+!> through `l-ancopt`, which both routes accept.  Keeping the two apart is
+!> what makes `--lopt --method lbfgs` the suite minimisation and
+!> `--opt --method lancopt` the native engine (CLI redesign section 4.7).
+!>
+!> The earlier claim that this table reproduces `src/set_module.f90:1888-1891`
+!> verbatim (stage 2 implementation report section 1) was **inaccurate**: it
+!> named `set_module.f90:1889` as the source of `lancopt`, but that line is the
+!> `lbfgs|l-ancopt` entry.  Corrected in
+!> `docs/_simplify-recon/28-stage2-fix-report.md` section T6.
+!>
+!> The name is matched case insensitively.
+pure function landscape_native_engine_from_name(name) result(engine)
+   !> Method name from the command line
+   character(len=*), intent(in) :: name
+   !> Native engine identifier, 0 for a landscape method name
+   integer :: engine
+
+   select case (landscape_lowercase(name))
+   case ('ancopt', 'rf')
+      engine = p_engine_rf
+   case ('lancopt', 'l-ancopt')
+      engine = p_engine_lbfgs
+   case ('fire', 'inertial')
+      engine = p_engine_inertial
+   case ('pbc_lbfgs')
+      engine = p_engine_pbc_lbfgs
+   case default
+      engine = 0
+   end select
+
+end function landscape_native_engine_from_name
+
+!> Task a landscape method name belongs to.
+!>
+!> Returns `'opt'` for the six minimisers (used by `--lopt` and `--lscan`),
+!> `'ts'` for the eight saddle searches and `'irc'` for the four reaction path
+!> integrators; an empty string marks an unknown name.  The answer is derived
+!> from the three name lookups of `xtb_landscape_settings`, so the set of
+!> valid names has exactly one spelling.  Every name belongs to exactly one
+!> task (section 4.2: `gs` is the IRC integrator, not a saddle search; `gsm`
+!> is the string search, not the IRC method).
+function landscape_method_task(name) result(task)
+   !> Method name from the command line
+   character(len=*), intent(in) :: name
+   !> Task of the name, empty for an unknown name
+   character(len=:), allocatable :: task
+
+   if (landscape_opt_algorithm_from_name(name) /= 0) then
+      task = 'opt'
+   else if (landscape_ts_method_from_name(name) /= 0) then
+      task = 'ts'
+   else if (landscape_irc_method_from_name(name) /= 0) then
+      task = 'irc'
+   else
+      task = ''
+   end if
+
+end function landscape_method_task
+
+!> Report a `--method` name that does not belong to the selected run type.
+!>
+!> The message names the run type flag of the task the name belongs to, so a
+!> mistyped `--method dimer` on `--lopt` points at `--lts` (CLI redesign
+!> section 4.4).  An unknown name and a `--method` without a run type are
+!> reported here as well, because both are the same kind of user error.
+subroutine landscape_method_mismatch(env, name, source)
+   !> Computational environment for the error report
+   type(TEnvironment), intent(inout) :: env
+   !> Method name from the command line
+   character(len=*), intent(in) :: name
+   !> Name of error producer
+   character(len=*), intent(in) :: source
+
+   select case (landscape_method_task(name))
+   case ('opt')
+      call env%error(name//" is a minimisation method; use it with --lopt "//&
+         & "or --lscan (the landscape suite was selected with --method)", source)
+   case ('ts')
+      call env%error(name//" is a transition-state method; use it with --lts "//&
+         & "(or --lts-method "//name//")", source)
+   case ('irc')
+      call env%error(name//" is an intrinsic reaction coordinate method; use "//&
+         & "it with --lirc", source)
+   case default
+      call env%error("unknown landscape method '"//trim(name)//"': ask for "//&
+         & "--method auto for the task default, or name a minimiser "//&
+         & "(sd, cg, lbfgs, bfgs, diis, rfo), a saddle search (prfo, bprfo, "//&
+         & "dimer, neb, cineb, autoneb, string, gsm) or an IRC integrator "//&
+         & "(gs, hpc, lqa, eulerpc)", source)
+   end select
+
+end subroutine landscape_method_mismatch
+
+!> Select the landscape minimisation algorithm of the `opt` task.
+!>
+!> Shared setter of `--method` and `--lopt-engine` (CLI redesign section 4.3):
+!> it resolves the name, records which flag selected it and refuses a second,
+!> **different** selection through **another** flag.  The same value is
+!> idempotent and a repeated flag keeps the last value, so the two aliases
+!> compose in any order.  The run type is **not** touched here - the setter is
+!> pure in that respect, which is what lets the parse-tail normalisation call
+!> it for `--lopt` without disturbing the "first run type wins" lock.
+subroutine set_landscape_opt_algorithm(env, settings, name, owner, source)
+   !> Computational environment for the error report
+   type(TEnvironment), intent(inout) :: env
+   !> Landscape minimisation settings
+   type(landscape_opt_settings), intent(inout) :: settings
+   !> Algorithm name from the command line
+   character(len=*), intent(in) :: name
+   !> Flag that selected the name (used by the conflict message)
+   character(len=*), intent(in) :: owner
+   !> Name of error producer
+   character(len=*), intent(in) :: source
+
+   integer :: algorithm
+
+   algorithm = landscape_opt_algorithm_from_name(name)
+   if (algorithm == 0) then
+      call env%error("Unknown landscape minimisation algorithm '"//name//"'", source)
+      return
+   end if
+   if (allocated(settings%algorithm_source) .and. &
+         & settings%algorithm_source /= owner .and. settings%algorithm /= algorithm) then
+      call env%error("conflicting landscape methods: "//owner//" "//&
+         & landscape_lowercase(name)//" and "//settings%algorithm_source//" "//&
+         & landscape_opt_algorithm_name(settings%algorithm), source)
+      return
+   end if
+   settings%algorithm = algorithm
+   settings%algorithm_source = owner
+   settings%algorithm_was_set = .true.
+
+end subroutine set_landscape_opt_algorithm
+
+!> Select the inner minimiser of the `scan` task.
+!>
+!> Shared setter of `--method` and `--lscan-method` (CLI redesign section 4.3,
+!> same conflict rule as `set_landscape_opt_algorithm`).  The scan stores the
+!> name, not the identifier, so it is stored lower case - the task resolves it
+!> again with `landscape_opt_algorithm_from_name`.
+subroutine set_landscape_scan_algorithm(env, settings, name, owner, source)
+   !> Computational environment for the error report
+   type(TEnvironment), intent(inout) :: env
+   !> Landscape scan settings
+   type(landscape_scan_settings), intent(inout) :: settings
+   !> Algorithm name from the command line
+   character(len=*), intent(in) :: name
+   !> Flag that selected the name (used by the conflict message)
+   character(len=*), intent(in) :: owner
+   !> Name of error producer
+   character(len=*), intent(in) :: source
+
+   integer :: algorithm, previous
+
+   algorithm = landscape_opt_algorithm_from_name(name)
+   if (algorithm == 0) then
+      call env%error("Unknown landscape scan minimiser '"//name//"'", source)
+      return
+   end if
+   if (allocated(settings%method_source)) then
+      previous = landscape_opt_algorithm_from_name(settings%method)
+      if (settings%method_source /= owner .and. previous /= algorithm) then
+         call env%error("conflicting landscape methods: "//owner//" "//&
+            & landscape_lowercase(name)//" and "//settings%method_source//" "//&
+            & trim(settings%method), source)
+         return
+      end if
+   end if
+   settings%method = landscape_lowercase(name)
+   settings%method_source = owner
+
+end subroutine set_landscape_scan_algorithm
+
+!> Select the saddle search method of the `ts` task.
+!>
+!> Shared setter of `--method` and `--lts-method` (CLI redesign section 4.3,
+!> same conflict rule).  The setter stores the method **only**; the climbing
+!> image stage that `cineb`, `autoneb`, `string` and `gsm` imply is applied
+!> once to the final value in `parseArguments`, after the flag loop (see the
+!> comment there): a side effect inside the setter would be applied per flag,
+!> so `--lts-method cineb --lts-method neb` kept `climb = .true.` while the
+!> equivalent `--method cineb --method neb` did not (stage 2 review L3).
+subroutine set_landscape_ts_algorithm(env, settings, name, owner, source)
+   !> Computational environment for the error report
+   type(TEnvironment), intent(inout) :: env
+   !> Landscape transition state settings
+   type(landscape_ts_settings), intent(inout) :: settings
+   !> Method name from the command line
+   character(len=*), intent(in) :: name
+   !> Flag that selected the name (used by the conflict message)
+   character(len=*), intent(in) :: owner
+   !> Name of error producer
+   character(len=*), intent(in) :: source
+
+   integer :: method
+
+   method = landscape_ts_method_from_name(name)
+   if (method == 0) then
+      call env%error("Unknown landscape transition state method '"//name//"'", source)
+      return
+   end if
+   if (allocated(settings%method_source) .and. &
+         & settings%method_source /= owner .and. settings%method /= method) then
+      call env%error("conflicting landscape methods: "//owner//" "//&
+         & landscape_lowercase(name)//" and "//settings%method_source//" "//&
+         & landscape_ts_method_name(settings%method), source)
+      return
+   end if
+   settings%method = method
+   settings%method_source = owner
+
+end subroutine set_landscape_ts_algorithm
+
+!> Select the IRC integration method of the `lirc` task.
+!>
+!> Shared setter of `--method` and `--lirc-method` (CLI redesign section 4.3,
+!> same conflict rule).
+subroutine set_landscape_irc_algorithm(env, settings, name, owner, source)
+   !> Computational environment for the error report
+   type(TEnvironment), intent(inout) :: env
+   !> Landscape reaction path settings
+   type(landscape_irc_settings), intent(inout) :: settings
+   !> Method name from the command line
+   character(len=*), intent(in) :: name
+   !> Flag that selected the name (used by the conflict message)
+   character(len=*), intent(in) :: owner
+   !> Name of error producer
+   character(len=*), intent(in) :: source
+
+   integer :: method
+
+   method = landscape_irc_method_from_name(name)
+   if (method == 0) then
+      call env%error("Unknown landscape IRC method '"//name//"'", source)
+      return
+   end if
+   if (allocated(settings%method_source) .and. &
+         & settings%method_source /= owner .and. settings%method /= method) then
+      call env%error("conflicting landscape methods: "//owner//" "//&
+         & landscape_lowercase(name)//" and "//settings%method_source//" "//&
+         & landscape_irc_method_name(settings%method), source)
+      return
+   end if
+   settings%method = method
+   settings%method_source = owner
+   settings%method_was_set = .true.
+
+end subroutine set_landscape_irc_algorithm
 
 !> Read up to four 1-based atom indices from a comma or blank separated list.
 !>

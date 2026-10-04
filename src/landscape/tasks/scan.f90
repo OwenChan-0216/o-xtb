@@ -45,7 +45,8 @@ module xtb_landscape_tasks_scan
    use xtb_landscape_settings, only : landscape_scan_settings, &
       & landscape_restart_name, landscape_scan_coord_name, &
       & landscape_missing_value, landscape_value_present, &
-      & landscape_lowercase
+      & landscape_lowercase, landscape_opt_algorithm_from_name, &
+      & landscape_opt_algorithm_name
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack
    use xtb_landscape_engine, only : landscape_engine, new_landscape_engine, &
@@ -120,6 +121,18 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
    if (settings%printlevel > 0) then
       write(env%unit, '(1x,a,a,a)') "landscape: ", trim(settings%mode), &
          & " scan"
+      ! The inner minimiser of a relaxed scan is part of the settings and is
+      ! handed to the constraint relaxation (`relax_scan.f90`), but no output
+      ! file carries it (`xtbscan.log` keeps the `--scan` record layout) and
+      ! the milestone above is mode only, so an ignored method was invisible.
+      ! It is echoed here for the relaxed mode; a rigid scan builds the
+      ! geometry and runs a single point, so it has no inner minimiser and
+      ! stays quiet (stage 2 review L2).
+      if (landscape_lowercase(settings%mode) == 'relaxed') then
+         write(env%unit, '(1x,a,a,a)') "  inner minimiser:         ", &
+            & trim(landscape_opt_algorithm_name(&
+            & landscape_opt_algorithm_from_name(settings%method)))
+      end if
       do i = 1, settings%ndim
          write(env%unit, '(1x,a,i0,a,a,4(1x,i0))') "  coordinate ", i, ": ", &
             & trim(landscape_scan_coord_name(settings%coord(i)%ctype)), &

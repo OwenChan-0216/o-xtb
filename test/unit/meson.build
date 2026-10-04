@@ -599,6 +599,47 @@ test('landscape path autoneb depth limit', python, env: landscape_env, args: [
   landscape_cli_dir / 'landscape-cli-autoneb-depth', nh3_down_xyz,
 ])
 
+# `--method` (CLI redesign section 4) is the canonical name of the four
+# `--l*` method flags: every pair has to write the same result file, a name of
+# another task is refused with a pointer at that task's flag, two different
+# values through two flags are an error, `auto` keeps the default and a
+# repeated flag keeps the last value (mirrors `xtb/landscape-method`).
+test('landscape method', python, env: landscape_env, args: [
+  landscape_cli_check, 'method', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-method', hcn_xyz, nh3_up_xyz, nh3_down_xyz,
+])
+
+# the four native engines behind `--method` (mirrors
+# `xtb/landscape-method-native`); the 501 atom GFN-FF cluster is the only
+# fixture that sees the explicit assignment of `ancopt`, because
+# `src/main/defaults.f90:42-46` gives a system with more than 500 atoms
+# `p_engine_lbfgs`
+big_xyz = meson.current_build_dir() / 'landscape_big.xyz'
+run_command(
+  python, '-c',
+  ('import sys\n'
+   'lines = ["501", "501 H atoms (the >500 atom engine default)"]\n'
+   'for i in range(501):\n'
+   '    lines.append("H %d.000000 %d.000000 %d.000000" % ((i % 10) * 3, (i // 10 % 10) * 3, (i // 100) * 3))\n'
+   'open(sys.argv[1], "w").write("\\n".join(lines) + "\\n")\n'),
+  big_xyz,
+  check: true,
+)
+test('landscape method native', python, env: landscape_env, args: [
+  landscape_cli_check, 'methodnative', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-method-native', big_xyz,
+])
+
+# every suite method name of `--method` has to reach its task (mirrors
+# `xtb/landscape-method-table`): all 18 suite names plus the four `auto` runs
+# with the task milestone and the method line of `<ns>.xtbts.log` /
+# `<ns>.irc.log`; failures are reported per name
+test('landscape method table', python, env: landscape_env, args: [
+  landscape_cli_check, 'methodtable', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-method-table', hcn_xyz, nh3_up_xyz,
+  nh3_down_xyz,
+])
+
 # CLI checks of the M6 IRC task.  `irc` mirrors `xtb/landscape-irc-cli`: the
 # input is the bent HCN transition state guess and the check converges it with
 # `--lts` first.  The three error branches use the shared `error` mode.

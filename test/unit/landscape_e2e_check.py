@@ -153,6 +153,11 @@ def run(exe, inp, args, rundir, extra_env=None):
         cwd=rundir,
         capture_output=True,
         text=True,
+        # xtb can emit Fortran record markers in its formatted output (a
+        # pre-existing upstream defect, `28-stage2-fix-report.md` T2).  A
+        # strict decode would make this chain test red for a reason that has
+        # nothing to do with its assertions.
+        errors="replace",
         env=env,
     )
     return proc.returncode, proc.stdout + proc.stderr
