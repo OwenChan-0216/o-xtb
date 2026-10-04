@@ -46,6 +46,7 @@ mode mirrors one CMake test one-to-one:
   ircknobs <exe> <input> <rundir>     -> xtb/landscape-irc-knobs
   irctermination <exe> <input> <rundir> -> xtb/landscape-irc-termination
   ircswap <exe> <input> <rundir>     -> xtb/landscape-irc-swap
+  ircosc <exe> <input> <rundir>      -> xtb/landscape-irc-osc-window
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
   method <exe> <input> <rundir> <hcn> <nh3> <nh3product>
@@ -1959,6 +1960,155 @@ def check_irc_swap(exe, inp, rundir):
     if plain_bwd != swapped_fwd:
         fail("--lirc-swap did not exchange the backward endpoint: %s vs %s"
              % (plain_bwd, swapped_fwd))
+
+
+def check_irc_osc(exe, inp, rundir):
+    """GS macro step limit cycle guard (xtb/landscape-irc-osc-window).
+
+    Mirrors the inline CMake script of the CMake build.  The Gonzalez-Schlegel
+    macro step stalls in a two cycle when the pivot sits on a basin floor, so
+    `--lirc-osc-window` (default 8) leaves the path after that many consecutive
+    macro steps that cancel each other (report 67, report 69).  The unit case
+    `gs-limit-cycle-guard` pins the truncation on the analytic Mueller-Brown
+    surface; this check shows the flag is live end to end from the other side:
+    on the HCN/HNC path the default window is inert, window 1 fires at the
+    first cancelling pair, window 0 reproduces the default, and a negative
+    window is rejected by the task.
+    """
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
+         "--namespace", "ircosc0"],
+        rundir,
+    )
+    if status != 0:
+        fail("the preparation --lts run failed with status %d" % status, output)
+    ts = os.path.join(rundir, "ircosc0.xtbts.xyz")
+    if not os.path.exists(ts):
+        fail("the preparation --lts run wrote no xtbts.xyz", output)
+
+    def case(suffix, window, extra=None):
+        args = ["--gfn", "2", "--lirc", "--lirc-method", "gs",
+                "--lirc-grad-tol", "0", "--norestart", "--namespace", suffix]
+        if window is not None:
+            args += ["--lirc-osc-window", str(window)]
+        if extra:
+            args.append(extra)
+        status, output = run(exe, ts, args, rundir)
+        if status != 0:
+            fail("xtb --lirc (window %s) failed with status %d"
+                 % (window, status), output)
+        points = {}
+        for direction in ["forward", "backward"]:
+            match = re.search(r"%s points: +([0-9]+)" % direction, output)
+            if not match:
+                fail("the run reports no %s point count" % direction, output)
+            points[direction] = int(match.group(1))
+        match = re.search(r"forward arc length: +([0-9.]+)", output)
+        if not match:
+            fail("the run reports no forward arc length", output)
+        return points, match.group(1), output
+
+    default, default_arc, default_out = case("ircosc1", None)
+    off, off_arc, off_out = case("ircosc2", 0)
+    one, one_arc, one_out = case("ircosc3", 1)
+
+    if re.search(r"limit cycle", default_out):
+        fail("the default GS limit cycle guard fired on the HCN path", default_out)
+    if default["forward"] != 45 or default["backward"] != 39:
+        fail("the default GS path has %d/%d points, expected 45/39"
+             % (default["forward"], default["backward"]), default_out)
+    if re.search(r"limit cycle", off_out):
+        fail("--lirc-osc-window 0 still reports a limit cycle", off_out)
+    if off != default or off_arc != default_arc:
+        fail("--lirc-osc-window 0 changed the path: %s (%s) vs %s (%s)"
+             % (off, off_arc, default, default_arc))
+    if not re.search(
+            r"limit cycle detected [(]the last 1 macro steps cancel[)] - terminating",
+            one_out):
+        fail("--lirc-osc-window 1 did not fire", one_out)
+    if one["forward"] >= default["forward"] or one["backward"] >= default["backward"]:
+        fail("--lirc-osc-window 1 did not truncate the path: %s vs %s"
+             % (one, default), one_out)
+    # the truncation is its own termination signal (d), not signal (c): `irc.log`
+    # names it, the warning says the endpoint is not a converged path point and
+    # `--ljson` carries it as `term_fwd = 4` with an incomplete, non-converged
+    # run whose endpoint is not assigned to a minimum (round-2 review HIGH-1)
+    log = read_log(rundir, "ircosc3.irc.log")
+    if not re.search(r"termination forward: +limit_cycle", log):
+        fail("irc.log does not name the limit cycle termination", log)
+    if not re.search(
+            r"one phase of the oscillation, not a converged path point", one_out):
+        fail("the limit cycle truncation warning is missing", one_out)
+    status, output = run(
+        exe, ts,
+        ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--lirc-grad-tol", "0",
+         "--lirc-osc-window", "1", "--lirc-no-endpoint-relax", "--ljson",
+         "--norestart", "--namespace", "ircosc6"],
+        rundir,
+    )
+    if status != 0:
+        fail("the --ljson limit cycle run failed with status %d" % status, output)
+    doc = read_json(rundir, "ircosc6.landscape_irc.json")
+    if doc["counters"]["term_fwd"] != 4:
+        fail("--ljson does not report term_fwd = 4 (limit_cycle): %s"
+             % doc["counters"]["term_fwd"], output)
+    if doc["status_name"] != "incomplete":
+        fail("a truncated IRC is not reported as incomplete (%s)"
+             % doc["status_name"], output)
+    if doc["converged"]:
+        fail("a truncated IRC still reports converged = true", output)
+    if doc["flags"]["reached_min_fwd"]:
+        fail("the truncated forward endpoint was assigned to a minimum", output)
+    if "limit cycle guard" not in doc["message"]:
+        fail("the truncated run message does not name the guard (%r)"
+             % doc["message"], output)
+    # the opt-in adaptive step (`--lirc-adaptive`, default off) reduces the step
+    # at the first cancelling pair instead of ending the walk: it has to report
+    # the reduction, change the path and leave no limit cycle message
+    adaptive, adaptive_arc, adaptive_out = case("ircosc5", None, "--lirc-adaptive")
+    if not re.search(r"reducing the effective step length", adaptive_out):
+        fail("--lirc-adaptive did not reduce the step length", adaptive_out)
+    if re.search(r"limit cycle", adaptive_out):
+        fail("--lirc-adaptive still reports a limit cycle", adaptive_out)
+    if adaptive_arc == default_arc:
+        fail("--lirc-adaptive did not change the forward arc length (%s)"
+             % adaptive_arc)
+    # a negative window is rejected by the task, so the value really reaches
+    # `check_irc_settings` and is not parsed and forgotten
+    status, output = run(
+        exe, ts,
+        ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--lirc-osc-window", "-1",
+         "--norestart", "--namespace", "ircosc4"],
+        rundir,
+    )
+    if status == 0:
+        fail("a negative --lirc-osc-window was accepted", output)
+    if not re.search(r"the IRC limit cycle window must not be negative", output):
+        fail("the negative --lirc-osc-window error does not name the window", output)
+    # a direction that stopped on the step budget is as unconverged as a
+    # truncated one: `status` already reported it as `incomplete`, but
+    # `converged` still claimed the run succeeded (the sibling of the limit
+    # cycle signal, found while fixing round 2 HIGH-1).  `--lirc-max-steps 2`
+    # forces signal (a) on both directions.
+    status, output = run(
+        exe, ts,
+        ["--gfn", "2", "--lirc", "--lirc-method", "gs", "--lirc-grad-tol", "0",
+         "--lirc-max-steps", "2", "--lirc-no-endpoint-relax", "--ljson",
+         "--norestart", "--namespace", "ircosc7"],
+        rundir,
+    )
+    if status != 0:
+        fail("the --ljson step budget run failed with status %d" % status, output)
+    doc = read_json(rundir, "ircosc7.landscape_irc.json")
+    if doc["counters"]["term_fwd"] != 1:
+        fail("--lirc-max-steps 2 did not terminate on the step budget (term_fwd %s)"
+             % doc["counters"]["term_fwd"], output)
+    if doc["status_name"] != "incomplete":
+        fail("a step budget stop is not reported as incomplete (%s)"
+             % doc["status_name"], output)
+    if doc["converged"]:
+        fail("a step budget stop still reports converged = true", output)
 
 
 def check_opt_namespace(exe, inp, rundir):
@@ -4628,6 +4778,8 @@ def main():
         check_irc_knobs(exe, inp, rundir)
     elif mode == "ircpc":
         check_irc_pc(exe, inp, rundir)
+    elif mode == "ircosc":
+        check_irc_osc(exe, inp, rundir)
     elif mode == "ircswap":
         check_irc_swap(exe, inp, rundir)
     elif mode == "irctermination":

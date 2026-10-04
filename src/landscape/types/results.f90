@@ -36,6 +36,7 @@ module xtb_landscape_results
    public :: p_landscape_bound_trust, p_landscape_bound_step_max
    public :: p_landscape_irc_term_error, p_landscape_irc_term_max_steps
    public :: p_landscape_irc_term_grad, p_landscape_irc_term_energy_rise
+   public :: p_landscape_irc_term_limit_cycle
    public :: landscape_irc_term_name
 
    !> Termination signal of an IRC integration: an error (no path was built).
@@ -48,6 +49,18 @@ module xtb_landscape_results
    !> Termination signal (c): the energy rose over `e_rise_steps` consecutive
    !> points (the path passed the minimum and is climbing again).
    integer, parameter :: p_landscape_irc_term_energy_rise = 3
+   !> Termination signal (d): the Gonzalez-Schlegel macro step walk was
+   !> **truncated** because it stalled in a limit cycle (consecutive macro
+   !> steps cancel each other, `--lirc-osc-window`).
+   !>
+   !> This is a cut, **not** a converged arrival: the returned endpoint is one
+   !> phase of the oscillation and sits of the order of one step length away
+   !> from the minimum the walk stalls on.  The signal is separate from (c)
+   !> even though both leave the walk from the same place, because the two
+   !> outcomes have to stay distinguishable in the machine readable products
+   !> (`irc.log` writes the name, `--ljson` the value): a truncated path must
+   !> not read as a normal one.  Signals 0-3 keep their meaning.
+   integer, parameter :: p_landscape_irc_term_limit_cycle = 4
 
    !> Result of a vibrational analysis (`vib` task, PLAN section 5.4).
    !>
@@ -580,6 +593,8 @@ pure function landscape_irc_term_name(term) result(name)
       name = 'gradient'
    case (p_landscape_irc_term_energy_rise)
       name = 'energy_rise'
+   case (p_landscape_irc_term_limit_cycle)
+      name = 'limit_cycle'
    case default
       name = 'error'
    end select

@@ -942,6 +942,18 @@ module xtb_landscape_settings
       !> (Gaussian `IRC=StepSize`, MAPLE `step_length_bohr`); `tight` is
       !> 0.05, HPC may use up to 0.40.  Range recommended by report 04
       !> section 1.3: 0.05 (tight) - 0.40 (HPC only).
+      !>
+      !> **The 0.05-0.20 range of the M6 acceptance does not hold for every
+      !> method** (measured, report 67): the Gonzalez-Schlegel macro step
+      !> stalls in a two cycle from step 0.20 on (88 points = 87 macro steps,
+      !> arc length 17.48899 and an endpoint 0.106 bohr from the nearest
+      !> minimum at 0.20 forward), so `gs` is validated for **0.05-0.15**;
+      !> `hpc` and `eulerpc` are correct at 0.20 (endpoint 3e-6 bohr from the
+      !> minimum).  The `osc_window` guard below truncates the stalled walk.
+      !> The guard only detects the **cancelling** (limit cycle) subclass of
+      !> the stall: a large step can still stop far from the minimum (measured
+      !> 0.40 forward endpoint 0.236 bohr, 0.30/0.35/0.50 forward 0.222/0.291/
+      !> 0.372 bohr).
       real(wp) :: step_length = 1.0e-1_wp
       ! Maximum number of macro steps of one direction: the inherited field
       ! `landscape_settings%max_steps` is reused (its default is 256).  PLAN
@@ -989,7 +1001,9 @@ module xtb_landscape_settings
       real(wp) :: mbs_tol = 1.0e-5_wp
       !> Termination signal (c): the path is left when the energy has risen
       !> over this many consecutive recorded points (report 04 section 1.6)
-      !> [待校准]
+      !> [待校准].  A large value does **not** guarantee that the walk runs to
+      !> the step budget: the GS limit cycle guard (`osc_window`) is an
+      !> independent signal (d) and truncates a stalled walk on its own.
       integer :: e_rise_steps = 3
       !> Termination signal (b): the path is left when the **RMS Cartesian
       !> gradient per component** (Euclidean norm divided by `sqrt(3N)`,
@@ -999,6 +1013,47 @@ module xtb_landscape_settings
       !> norm used for the recorded `|g|` is `sqrt(3N)` times this value
       !> [待校准]
       real(wp) :: grad_tol = 1.0e-3_wp
+      !> Limit cycle guard of the GS macro step (`--lirc-osc-window`): stop
+      !> the walk when this many consecutive macro steps cancel each other
+      !> (`|u_k + u_{k-1}| < 0.1 step`, the frozen named parameter
+      !> `osc_cancel_frac` of `irc/gs.f90`), i.e. the walk is stalled in a two
+      !> cycle.  The path is left with signal (d)
+      !> (`p_landscape_irc_term_limit_cycle`, **not** (c)) and a
+      !> `limit cycle detected` line is printed, because the returned endpoint
+      !> is not a converged path point.
+      !>
+      !> **Measured** (report 69; mechanism in report 67 and the `gs.f90`
+      !> module header): the guard is bitwise inert on every validated path -
+      !> Mueller-Brown 0.05/0.10/0.15 (22/16/9 points, arc length
+      !> 1.0660145816/1.5477203095/1.2707011443), LEPS 0.05 (294 points) and
+      !> GFN2 HCN/HNC at 0.10-0.40 with all four integrators - while it
+      !> truncates the stalled **88 point (87 macro step)** walk of
+      !> Mueller-Brown at step 0.20 forward to **13** points (arc length
+      !> 17.48899 -> 2.49688).  The
+      !> longest run of >170 degree reversals on those paths is 5 (MB 0.05),
+      !> 7 (0.10) and 4 (0.15), so the cancelling run there is shorter than
+      !> that and never reaches the window.
+      !> **0 disables the guard** and restores the unstoppable walk (the
+      !> `--lirc-osc-window 0` escape hatch of the falsifiability test).
+      integer :: osc_window = 8
+      !> Opt-in adaptive step length of the GS macro step
+      !> (`--lirc-adaptive`, **default off**).  When enabled, the effective step
+      !> length of the walk is halved (down to `step_length/16`) at the first
+      !> cancelling macro step pair, so a large `--lirc-step` recovers accuracy
+      !> instead of being truncated at the first cancellation (the guard above
+      !> still applies once the floor is reached).  Every reduction
+      !> and the effective step length are printed.
+      !>
+      !> **Only `--lirc-method gs` is affected**; the other methods ignore the
+      !> flag.
+      !>
+      !> **Off by default on purpose**: it reacts to the first cancellation and
+      !> therefore changes the path of the validated small step sizes (the GS
+      !> macro step produces up to 7 cancelling steps at step 0.10, report 67
+      !> section 5(a)), i.e. enabling it is a re-baseline.  The guard above is
+      !> the default answer to the defect, this flag the accuracy-oriented
+      !> escape hatch for a user who insists on a large step (report 69).
+      logical :: adaptive = .false.
       !> Hessian update along the path, one of `p_landscape_hess_update_*`
       !> (Bofill is the consensus default of the EulerPC paper, report 04
       !> section 1.5)

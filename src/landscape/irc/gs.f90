@@ -62,6 +62,72 @@
 !> over `e_rise_steps` consecutive points.
 !>
 !> -------------------------------------------------------------------
+!> Stalled two cycle of the macro step (measured; report 67, report 69)
+!> -------------------------------------------------------------------
+!> The sphere relaxation is a *local* constrained minimisation and its result
+!> depends on the initial guess `q_k - s g^q_k/|g^q_k|`, which is the point
+!> **opposite** `q_k` on the sphere.  Once the pivot stalls at the bottom of a
+!> basin (distance to the minimum < `s/2`) the sphere crosses two local
+!> constrained minima, one on each side of the basin floor, and the micro
+!> cycle is pulled to the one *opposite* the current point: the walk bounces
+!> by 180 degrees instead of advancing.  Measured on the analytic
+!> Mueller-Brown surface at step 0.20 the two phases are `(-0.15530, 0.47702)`
+!> and `(0.04295, 0.45231)`, **both inside the basin of `mb_min2`** (0.235 and
+!> 0.162 bohr from it, more than 0.98 bohr from `mb_min1`); the pivot sits
+!> 0.0061 bohr from `mb_min2`.  This is **not** a cross basin oscillation (that
+!> one exists, but on the HPC/EulerPC fallback path) and **not** a failed
+!> micro cycle: `n_pinned` stays 0 (the Lagrange step of report 64 is
+!> correct, the constrained minimum is simply not unique).
+!>
+!> Each cycle advances the running minimum by ~1e-5 hartree, so the energy
+!> rise criterion (c) fires only very late and the walk crawls.  Measured: at
+!> step 0.20 forward the walk runs to **88 points (87 macro steps), arc length
+!> 17.48899 `bohr*amu^1/2`** before (c) stops it; at **0.35 backward** the
+!> macro steps keep cancelling until the walk exhausts the whole step budget
+!> (400 points = `max_steps`, arc length 139.597491, `term = max_steps`), i.e.
+!> (c) does **not** fire there before the budget.  The endpoint sits 0.106 to
+!> 0.29 bohr from the nearest minimum instead of 0.025 bohr.  It is intrinsic
+!> to the scheme (the same two cycle appears on the LEPS surface, where it is
+!> *worse* at small steps), so the fix is to **detect it, not to remove it**:
+!> `landscape_irc_gs_walk` counts consecutive macro steps that cancel,
+!> `|u_k + u_{k-1}| < osc_cancel_frac * step` with `u_k = q_new - q_cur`,
+!> and leaves the path with signal (c) after `settings%osc_window` of them
+!> (default 8, 0 disables).
+!>
+!> The **two step cancellation** test is used instead of the turn angle
+!> between consecutive steps because the angle alone misfires: on the LEPS
+!> asymptote at step 0.05 the walk turns by more than 170 degrees 286 times
+!> while the reaction coordinate advances monotonically, whereas the
+!> cancellation test is bitwise inert there (measured; report 67 section 6).
+!> **The no-misfire domain is measured, not claimed**: at the validated LEPS
+!> step 0.05 the guard is bitwise inert, but at LEPS 0.10 it does change the
+!> path (212 -> 139 points, smallest H2 bond length 1.41422 -> 1.41396 bohr).
+!> Whether that truncation is right or an over-eager cut of a slow physical
+!> climb is **not** decided here (report 67 section 8.3); no assertion claims
+!> it.  The guard sits in this walk only.  The HPC and EulerPC fallbacks call
+!> `landscape_irc_gs_step` directly, in **isolation** (measured: at most 5-7
+!> fallbacks on HCN, never cancelling consecutively), so a guard there could
+!> not accumulate either; the `gs_walk` placement keeps the counter local to
+!> the walk rather than relying on the call graph.
+!>
+!> The guard truncates the stall, it does not remove it: the returned endpoint
+!> is still one phase of the oscillation, `step` scale away from the minimum.
+!> A user who insists on a large step and wants the accuracy back can ask for
+!> the opt-in `settings%adaptive` (`--lirc-adaptive`, **default off**), which
+!> halves the effective step length at the first cancellation (frozen floor
+!> `step/16`, every reduction printed).  It is off by default because it
+!> reacts to the first cancellation and therefore changes the validated small
+!> step paths (report 67 section 5(a)).
+!>
+!> **Validated step range.**  The 0.05/0.10/0.20 range of the M6 acceptance
+!> does **not** hold for this integrator: the clean range is **0.05-0.15**
+!> (measured 0.05: 21/23 macro steps and an endpoint 0.025/0.034 bohr from the
+!> minimum, 0.10: 15/13 and 0.054/0.085, 0.15: 8/11 and 0.128/0.080).  Step
+!> 0.20 forward is already supercritical (87 macro steps, arc length
+!> 17.48899, endpoint 0.106 bohr from `mb_min2`); the HPC and EulerPC
+!> predictors are correct at 0.20 and their contract is unaffected.
+!>
+!> -------------------------------------------------------------------
 !> Sphere relaxation (measured; the Lagrange step of report 64)
 !> -------------------------------------------------------------------
 !> `gs` is **not the default method** (the default is `hpc`, M6 behaviour
@@ -127,7 +193,8 @@ module xtb_landscape_irc_gs
    use xtb_type_environment, only : TEnvironment
    use xtb_landscape_settings, only : landscape_irc_settings, landscape_log_failed
    use xtb_landscape_results, only : p_landscape_irc_term_max_steps, &
-      & p_landscape_irc_term_grad, p_landscape_irc_term_energy_rise
+      & p_landscape_irc_term_grad, p_landscape_irc_term_energy_rise, &
+      & p_landscape_irc_term_limit_cycle
    use xtb_landscape_coords, only : vec_norm, vec_maxabs
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_hessian_update, only : update_by_enum
@@ -147,6 +214,18 @@ module xtb_landscape_irc_gs
    !> the descent direction is undefined there (the same guard as `lqa`, `hpc`
    !> and `eulerpc`, which turn it into termination signal (b))
    real(wp), parameter :: gs_gradient_guard = 1.0e-14_wp
+   !> Fraction of the step below which two consecutive macro steps count as
+   !> cancelling (`|u_k + u_{k-1}| < osc_cancel_frac * step`), the limit cycle
+   !> criterion of the walk.  **Frozen on purpose** (no command line flag):
+   !> report 67 measured that it is the value that separates the stalled two
+   !> cycle (net displacement ~1e-5 hartree per cycle) from the genuine
+   !> forward jitter of the LEPS asymptote, and raising it would make the
+   !> guard fire on the validated LEPS 0.05 path.  Only `osc_window` is
+   !> exposed.
+   real(wp), parameter :: osc_cancel_frac = 1.0e-1_wp
+   !> Lower bound of the adaptive step length as a fraction of the requested
+   !> `step_length` (`--lirc-adaptive`); frozen, like `osc_cancel_frac`
+   real(wp), parameter :: adaptive_floor_frac = 1.0_wp/16.0_wp
 
 contains
 
@@ -182,16 +261,22 @@ subroutine landscape_irc_gs_walk(env, model, settings, mass, x0, hess0, v, sign,
 
    real(wp), allocatable :: sqrt_mass(:), hq(:, :), q_ts(:), g_ts(:), g_cart(:)
    real(wp), allocatable :: q_cur(:), g_cur(:), q_new(:), g_new(:), x_new(:)
+   real(wp), allocatable :: u(:), u_prev(:)
    real(wp) :: e_ts, e_cur, e_new, e_min, gnorm_cur, gnorm_new, s_cur, ds, step
-   integer :: ndim, npoint, nrise, neval
-   logical :: ok, micro_converged, recalc
+   real(wp) :: eff_step
+   integer :: ndim, npoint, nrise, neval, osc_count
+   logical :: ok, micro_converged, recalc, have_prev
 
    fail = .false.
    ndim = size(x0)
    step = settings%step_length
+   eff_step = step
    allocate(sqrt_mass(ndim), hq(ndim, ndim), q_ts(ndim), g_ts(ndim))
    allocate(g_cart(ndim), q_cur(ndim), g_cur(ndim), q_new(ndim), g_new(ndim))
-   allocate(x_new(ndim))
+   allocate(x_new(ndim), u(ndim), u_prev(ndim))
+   u_prev = 0.0_wp
+   have_prev = .false.
+   osc_count = 0
 
    sqrt_mass = landscape_irc_sqrt_mass(mass)
    ! start from an empty path: the storage of a reused path is appended to
@@ -252,7 +337,7 @@ subroutine landscape_irc_gs_walk(env, model, settings, mass, x0, hess0, v, sign,
          recalc = mod(npoint, settings%hessian_recalc) == 0
       end if
       call landscape_irc_gs_step(env, model, settings, sqrt_mass, q_cur, g_cur, &
-         & hq, step, recalc, q_new, x_new, e_new, g_new, neval, micro_converged, fail)
+         & hq, eff_step, recalc, q_new, x_new, e_new, g_new, neval, micro_converged, fail)
       if (fail) return
       if (.not. micro_converged) path%n_pinned = path%n_pinned + 1
 
@@ -262,6 +347,38 @@ subroutine landscape_irc_gs_walk(env, model, settings, mass, x0, hess0, v, sign,
       gnorm_new = vec_norm(g_cart)
       ds = vec_norm(q_new - q_cur)
       s_cur = s_cur + ds
+
+      ! --- limit cycle detection (report 67, report 69) ------------------
+      ! `u_k = q_new - q_cur` is the displacement of this macro step.  A
+      ! stalled two cycle makes the last two displacements cancel:
+      ! `|u_k + u_{k-1}|` vanishes while the walk does not advance.  The test
+      ! is a **cancellation**, not a turn angle: on the LEPS asymptote at
+      ! step 0.05 the walk turns by more than 170 degrees on 286 steps while
+      ! the reaction coordinate advances monotonically, so an angle criterion
+      ! would misfire there, while this one is bitwise inert (measured,
+      ! report 67 section 6).
+      u = q_new - q_cur
+      if (have_prev) then
+         if (vec_norm(u + u_prev) < osc_cancel_frac*eff_step) then
+            osc_count = osc_count + 1
+            ! opt-in adaptive step: the walk is stalled, so continue it with a
+            ! shorter step instead of ending it (the guard below is the
+            ! default).  The reduction is a plain halving with a frozen floor,
+            ! so the sequence is deterministic.
+            if (settings%adaptive .and. eff_step > adaptive_floor_frac*step) then
+               eff_step = max(0.5_wp*eff_step, adaptive_floor_frac*step)
+               osc_count = 0
+               write(env%unit, '(1x,a,es13.6,a)') &
+                  & "irc: the macro steps cancel - reducing the effective step "//&
+                  & "length to ", eff_step, " bohr*amu^1/2"
+            end if
+         else
+            osc_count = 0
+         end if
+      end if
+      u_prev = u
+      have_prev = .true.
+
       call landscape_irc_path_add(path, x_new, e_new, s_cur, gnorm_new, &
          & vec_maxabs(g_cart), neval)
       npoint = npoint + 1
@@ -282,6 +399,20 @@ subroutine landscape_irc_gs_walk(env, model, settings, mass, x0, hess0, v, sign,
       end if
       if (nrise >= max(1, settings%e_rise_steps)) then
          path%term = p_landscape_irc_term_energy_rise
+         exit
+      end if
+
+      ! signal (d), not (c): the walk is stuck in a limit cycle and the
+      ! remaining steps would only burn the budget (see the module header).
+      ! The signal is its own one so that a **truncated** path stays
+      ! distinguishable from a normal one in `irc.log` and `--ljson`; the
+      ! message is explicit because the returned endpoint is **not** a
+      ! converged path point - it is one phase of the oscillation, `step`
+      ! scale away from the minimum the walk is sitting on.
+      if (settings%osc_window > 0 .and. osc_count >= settings%osc_window) then
+         write(env%unit, '(1x,a,i0,a)') "irc: limit cycle detected (the last ", &
+            & settings%osc_window, " macro steps cancel) - terminating"
+         path%term = p_landscape_irc_term_limit_cycle
          exit
       end if
 

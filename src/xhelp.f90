@@ -687,12 +687,17 @@ subroutine help(iunit)
    "    most accurate and 1.98 E/g per point), lqa (Page-McIver analytic quadratic", &
    "    propagation, cheapest at 1.00 E/g), eulerpc (Euler predictor-corrector, use a", &
    "    step of 0.20 or less) or gs (Gonzalez-Schlegel sphere relaxation, compatible", &
-   "    reference; 1.9-2.1 E/g per point and the largest path deviation).", &
+   "    reference; 1.9-2.1 E/g per point and the largest path deviation, validated", &
+   "    for steps up to 0.15).", &
    "    Alias of --method.  The method name is not case-sensitive", &
    "",&
    "--lirc-step VALUE",&
    "    step length in bohr*amu^1/2 (mass weighted arc length, default 0.10; use 0.05", &
-   "    for a tight path)", &
+   "    for a tight path). The clean range is 0.05-0.15 for --lirc-method gs, whose", &
+   "    macro step stalls in a two cycle from 0.20 on (--lirc-osc-window); hpc and", &
+   "    eulerpc are correct at 0.20. The guard only detects the cancelling (limit", &
+   "    cycle) subclass of the stall: a large step can still end far from the", &
+   "    minimum (measured 0.236 bohr at 0.40 forward)", &
    "",&
    "--lirc-max-steps N",&
    "    maximum number of macro steps of one direction; the default is", &
@@ -743,7 +748,9 @@ subroutine help(iunit)
    "    N < 2 is rejected", &
    "",&
    "--lirc-e-rise N",&
-   "    termination signal (c): stop after N consecutive rising energies (default 3)", &
+   "    termination signal (c): stop after N consecutive rising energies (default 3). A", &
+   "    large N does not guarantee running to the step budget: the GS limit cycle", &
+   "    guard (--lirc-osc-window) is an independent signal (d)", &
    "",&
    "--lirc-erise-steps N",&
    "    alias of --lirc-e-rise N", &
@@ -751,6 +758,25 @@ subroutine help(iunit)
    "--lirc-grad-tol VALUE",&
    "    termination signal (b): stop when the RMS gradient per Cartesian component", &
    "    falls below this value in hartree/bohr (default 1e-3)", &
+   "", &
+   "--lirc-osc-window N",&
+   "    limit cycle guard of the GS macro step: leave the path after N consecutive", &
+   "    macro steps that cancel each other (default 8, 0 disables the guard). The", &
+   "    guard is bitwise inert on every validated path and truncates the stalled", &
+   "    87 macro step walk of Mueller-Brown at step 0.20 to 13 steps. The endpoint", &
+   "    it returns is not a converged path point - it is one phase of the", &
+   "    oscillation, about one step length away from the minimum - so the run is", &
+   "    reported as incomplete and reached_min stays false unless an endpoint", &
+   "    relaxation confirms the geometry. Only --lirc-method gs is affected", &
+   "", &
+   "--lirc-adaptive",&
+   "    opt-in adaptive step length of the GS macro step (default off): halve the", &
+   "    effective step length (floor: a sixteenth of --lirc-step) at the first", &
+   "    cancelling macro step pair, so a large step recovers accuracy instead of", &
+   "    being truncated at the first cancellation (the guard still applies once", &
+   "    the floor is reached). It changes the validated small step paths and is", &
+   "    therefore a re-baseline; every reduction is printed. Only --lirc-method", &
+   "    gs is affected; the other methods ignore it", &
    "", &
    "--lirc-recalc N",&
    "    rebuild the exact Hessian every N macro steps, -1 disables (default -1). Pure", &

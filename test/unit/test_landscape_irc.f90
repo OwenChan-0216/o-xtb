@@ -37,7 +37,9 @@
 !>  * LEPS H + H2: both directions lower the energy and the H2 bond length
 !>    approaches the closed form equilibrium distance.
 !>  * termination signals: (a) `max_steps`, (b) the gradient threshold and
-!>    (c) the energy rise are reached with the documented conditions.
+!>    (c) the energy rise are reached with the documented conditions, and (d)
+!>    the GS limit cycle guard truncates a stalled macro step walk (a cut, not
+!>    a convergence: its endpoint counts only after an endpoint relaxation).
 !>  * the transition vector is deterministic and rejects a minimum.
 !>
 !> Units: mass weighted coordinates and arc lengths in `bohr*amu^1/2`,
@@ -54,7 +56,8 @@ module test_landscape_irc
    use xtb_landscape_engine, only : landscape_energy_model
    use xtb_landscape_coords, only : vec_norm
    use xtb_landscape_results, only : p_landscape_irc_term_max_steps, &
-      & p_landscape_irc_term_grad, p_landscape_irc_term_energy_rise
+      & p_landscape_irc_term_grad, p_landscape_irc_term_energy_rise, &
+      & p_landscape_irc_term_limit_cycle
    use xtb_landscape_saddle_eigenfollow, only : landscape_transition_mode, &
       & landscape_transition_mode_set_phase
    use xtb_landscape_irc_corrector, only : landscape_irc_sqrt_mass, &
@@ -134,6 +137,7 @@ subroutine collect_landscape_irc(testsuite)
       new_unittest("endpoint-rmsd-criterion", test_endpoint_rmsd_criterion), &
       new_unittest("phase-convention-sign-invariance", test_phase_sign_invariance), &
       new_unittest("leps-four-method-crosscheck", test_leps_four_method_crosscheck), &
+      new_unittest("gs-limit-cycle-guard", test_gs_limit_cycle_guard), &
       new_unittest("hpc-predictor-accuracy", test_hpc_predictor_accuracy) &
       ]
 
@@ -799,6 +803,10 @@ end subroutine test_termination_grad_tol
 !> The gradient threshold is disabled (0), so the only physical signal left is
 !> the energy rise; with `e_rise_steps` large enough the same path runs into
 !> the step budget instead.  That is the falsifiable pair of the signal.
+!>
+!> The limit cycle guard (report 69) is switched off for the second half: it is
+!> a second source of signal (c) and would otherwise end the stalled walk
+!> before the budget does.
 subroutine test_termination_energy_rise(error)
    type(error_type), allocatable, intent(out) :: error
    type(landscape_muller_brown_model) :: model
@@ -825,8 +833,15 @@ subroutine test_termination_energy_rise(error)
    call check(error, path%n < 200, "signal (c) did not end the path early")
    if (allocated(error)) return
 
-   ! disable (c): the same walk runs into the step budget
+   ! disable (c): the same walk runs into the step budget.  The limit cycle
+   ! guard would end the stalled walk long before the budget (it has its own
+   ! signal (d) `limit_cycle` since the round-2 review HIGH-1, it is no longer
+   ! a second source of (c)), so it has to be switched off as well for signal
+   ! (a) to be the only remaining exit - with the default window 8 the MB 0.05
+   ! forward walk does enter a cancelling stall once the energy rise criterion
+   ! no longer stops it at 22 points.
    settings%e_rise_steps = 100000
+   settings%osc_window = 0
    settings%method = p_landscape_irc_gs
    call walk_with(model, mass, x0, settings, 1.0_wp, path, fail)
    call check(error, .not. fail)
@@ -2048,6 +2063,12 @@ end subroutine test_path_cross_dimension_reuse
 !> further than `rmsd_end` from its relaxed minimum is **not** assigned to a
 !> minimum even though the path terminated at a stationary point.  Without a
 !> relaxed endpoint the criterion has no input and is skipped.
+!>
+!> Signal (d) (the limit cycle guard) is the **truncation** of a stalled walk:
+!> its endpoint is one phase of the oscillation, not a minimum, so it counts
+!> only when the endpoint relaxation independently confirms the geometry
+!> (round-2 review HIGH-1 - otherwise a truncated path would read as an
+!> arrival).
 subroutine test_endpoint_rmsd_criterion(error)
    type(error_type), allocatable, intent(out) :: error
    real(wp), parameter :: rmsd_end = 0.18897_wp
@@ -2056,6 +2077,24 @@ subroutine test_endpoint_rmsd_criterion(error)
    call check(error, .not. endpoint_reached(p_landscape_irc_term_max_steps, &
       & .true., .true., 0.0_wp, rmsd_end), &
       & "a path cut off by the step budget was assigned to a minimum")
+   if (allocated(error)) return
+   ! the limit cycle guard alone does not reach a minimum: the endpoint is one
+   ! phase of the oscillation, even when it happens to sit inside `rmsd_end`
+   ! of a relaxed minimum there is no relaxation to say which one
+   call check(error, .not. endpoint_reached(p_landscape_irc_term_limit_cycle, &
+      & .false., .false., 0.0_wp, rmsd_end), &
+      & "a truncated limit cycle endpoint was assigned to a minimum")
+   if (allocated(error)) return
+   ! with an endpoint relaxation that converged inside the RMSD window the
+   ! truncation is confirmed and counts
+   call check(error, endpoint_reached(p_landscape_irc_term_limit_cycle, &
+      & .true., .true., 1.0e-3_wp, rmsd_end), &
+      & "a limit cycle endpoint confirmed by its relaxation was rejected")
+   if (allocated(error)) return
+   ! ... but not when the relaxed minimum is further away than rmsd_end
+   call check(error, .not. endpoint_reached(p_landscape_irc_term_limit_cycle, &
+      & .true., .true., 2.0_wp*rmsd_end, rmsd_end), &
+      & "a limit cycle endpoint outside the RMSD window was assigned to a minimum")
    if (allocated(error)) return
    ! signal (b) with a converged relaxation and a close minimum
    call check(error, endpoint_reached(p_landscape_irc_term_grad, .true., &
@@ -2184,18 +2223,23 @@ subroutine test_hpc_predictor_accuracy(error)
       & "the HPC path deviates from the reference: its predictor is wrong")
    if (allocated(error)) return
    ! the endpoint contract is stated for the validated step sizes only.  At 0.40
-   ! the DWI/mBS corrector falls back to one Gonzalez-Schlegel step, and that
-   ! **macro** step alternates between the two Mueller-Brown basins - measured
-   ! with the old clamped micro step as well (old: (-0.28352, 0.49222) <->
-   ! (0.10872, 0.44407); the equality constrained Lagrange step of report 64
-   ! moves those points by 2.5e-4 and therefore only changes which phase of the
-   ! oscillation the endpoint lands on, measured endpoint distance 1.079 bohr to
-   ! min1 / 0.318 to min2 instead of 0.000).  Which basin it is is a known
-   ! limitation of the GS macro step at 0.40, **not** a predictor signal, so
-   ! the 0.40 endpoint is pinned to the basin scale (both basins are within
-   ! 1.1 bohr of min1) rather than to one basin: pinning a basin would turn red
-   ! for the next person who fixes the GS macro step, the bound holds either
-   ! way.
+   ! the DWI/mBS corrector falls back to one Gonzalez-Schlegel step and that
+   ! step is taken with a sphere wide enough to throw the path across the
+   ! ridge: the measured endpoint is (0.94117, 0.04050), in the **third** well
+   ! of the surface at (0.623, 0.028) (0.318 bohr away), **not** in either IRC
+   ! basin - it is 1.079 bohr from mb_min2 and 2.052 bohr from mb_min1, so the
+   ! reported `endd(4) = 1.07893` is the distance to the *nearest* minimum.
+   ! This comment used to read the 1.079/0.318 pair as "min1 / min2" and to
+   ! describe the 0.40 failure as an alternation "between the two
+   ! Mueller-Brown basins"; report 67 measured both to be wrong.  The jump is
+   ! a cross ridge one into the third well, while the GS **macro step**
+   ! oscillation itself is a stall around a *single* minimum (the two phases
+   ! of step 0.20 forward lie 0.235 and 0.162 bohr from mb_min2 and more than
+   ! 0.98 bohr from mb_min1; report 69 adds the limit cycle guard).  Which
+   ! well the 0.40 endpoint lands in is a known limitation of the GS macro
+   ! step, **not** a predictor signal, so the 0.40 endpoint is pinned to the
+   ! basin scale rather than to one basin: pinning a basin would turn red for
+   ! the next person who fixes the GS macro step, the bound holds either way.
    call check(error, maxval(endd(1:3)) < 0.02_wp, &
       & "the HPC endpoint left the analytic minimum")
    if (allocated(error)) return
@@ -2204,6 +2248,347 @@ subroutine test_hpc_predictor_accuracy(error)
    if (allocated(error)) return
 
 end subroutine test_hpc_predictor_accuracy
+
+!> The GS limit cycle guard truncates a stalled macro step walk and is inert on
+!> every validated path.
+!>
+!> Report 67 measured that the Gonzalez-Schlegel macro step stalls in a two
+!> cycle near a minimum: once the pivot sits on the basin floor (distance to
+!> the minimum below `step/2`) the sphere of radius `step/2` carries **two**
+!> local constrained minima and the micro cycle, whose initial guess is the
+!> point opposite the current one, alternates between them.  The running
+!> minimum is refreshed by ~1e-5 hartree per cycle, so termination signal (c)
+!> fires only after a very long crawl: on the analytic Mueller-Brown surface at
+!> step 0.20 forward the walk runs to 88 points (87 macro steps) over an arc
+!> length of 17.48899 before (c) stops it, and at 0.35 **backward** the macro
+!> steps keep cancelling until the whole step budget is exhausted (400 points,
+!> arc length 139.597491, `term = max_steps`), i.e. (c) does not fire there
+!> before the budget.  The returned endpoint sits 0.106 bohr from the minimum
+!> instead of 0.025 (report 69).
+!>
+!> The guard counts consecutive macro steps that cancel
+!> (`|u_k + u_{k-1}| < 0.1 step`, `u_k = q_new - q_cur`) and leaves the path
+!> with its **own** signal (d) `limit_cycle` after `osc_window` of them, so a
+!> truncated path stays distinguishable from a normal one in `irc.log` and
+!> `--ljson` (the round-2 review finding HIGH-1).  The assertions pin both
+!> halves of its contract:
+!>
+!>  * `osc_window = 0` reproduces the stalled walk bitwise (the escape hatch),
+!>  * the default window 8 truncates it to a short walk that ends closer to the
+!>    minimum than the stalled one, for 0.20 forward **and** for the worst case
+!>    0.35 backward (the direction that otherwise burns the whole budget),
+!>  * on the validated steps 0.05, 0.10 and 0.15 (the longest runs of >170
+!>    degree reversals there are 5, 7 and 4, so the cancelling run is shorter
+!>    than the window) and on the LEPS 0.05 path the result is **bitwise**
+!>    unchanged, i.e. the guard cannot move a validated number, and
+!>  * the opt-in `--lirc-adaptive` improves the endpoint of the stalled walk
+!>    (0.09402 -> 0.01855 bohr), is off by default and reports its reduction
+!>    sequence (three reductions, final effective step 0.025, floor not
+!>    reached).
+subroutine test_gs_limit_cycle_guard(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(landscape_muller_brown_model) :: model
+   type(landscape_leps_model) :: leps
+   type(landscape_irc_settings) :: settings
+   type(landscape_irc_path) :: stalled, guarded, plain(3), reference(3)
+   type(landscape_irc_path) :: leps_plain, leps_reference
+   type(landscape_irc_path) :: adaptive, default_off
+   type(landscape_irc_path) :: stalled_bwd, guarded_bwd
+   real(wp) :: mass(2), mass9(9), x0(2), x0_9(9), steps(3), d_stalled, d_guarded
+   real(wp) :: d_adaptive, last_step
+   logical :: fail
+   integer :: i, n_reduction
+
+   call new_muller_brown_model(model)
+   mass = 1.0_wp
+   x0 = mb_saddle
+   steps = [0.05_wp, 0.10_wp, 0.15_wp]
+
+   ! --- the stalled walk, guard disabled (the escape hatch) --------------
+   call default_settings(settings, 0.20_wp, 400, p_landscape_irc_gs)
+   settings%osc_window = 0
+   call walk_with(model, mass, x0, settings, 1.0_wp, stalled, fail)
+   call check(error, .not. fail)
+   if (allocated(error)) return
+
+   ! --- the same walk with the default guard -----------------------------
+   settings%osc_window = 8
+   call walk_with(model, mass, x0, settings, 1.0_wp, guarded, fail)
+   call check(error, .not. fail)
+   if (allocated(error)) return
+
+   d_stalled = min(dist_to(stalled%xyz(:, stalled%n), mb_min1), &
+      & dist_to(stalled%xyz(:, stalled%n), mb_min2))
+   d_guarded = min(dist_to(guarded%xyz(:, guarded%n), mb_min1), &
+      & dist_to(guarded%xyz(:, guarded%n), mb_min2))
+   write(stdout, '(1x,a,i0,a,f12.5,a,i0,a,f12.5)') "  GS MB 0.20 points ", &
+      & stalled%n, " s ", stalled%s(stalled%n), "  guarded ", guarded%n, &
+      & " s ", guarded%s(guarded%n)
+   write(stdout, '(1x,a,2f12.6,a,2f12.6)') "  GS MB 0.20 endpoint ", &
+      & stalled%xyz(:, stalled%n), "  guarded ", guarded%xyz(:, guarded%n)
+   write(stdout, '(1x,a,f10.5,a,f10.5,a,i0)') "  GS MB 0.20 endpoint distance ", &
+      & d_stalled, " -> ", d_guarded, "  term ", guarded%term
+
+   ! the walk really stalls without the guard (otherwise this test is vacuous);
+   ! the pinned numbers are the measurements of **this** build.  Report 67
+   ! section 6.2 reports the same structure with a baseline arc length of
+   ! 17.389 and the two phases (-0.15530, 0.47702) / (0.04295, 0.45231); the
+   ! prototype probe behind them carried extra diagnostics in `gs_step`, and
+   ! its baseline arc length is exactly one step length (0.100) below the value
+   ! measured here, so its `s` did not count the initial half step point.
+   ! The guarded arc length agrees to four digits (2.49688 vs 2.497).
+   call check(error, stalled%n == 88, &
+      & "the GS 0.20 walk no longer stalls: the guard test would be vacuous")
+   if (allocated(error)) return
+   call check(error, abs(stalled%s(stalled%n) - 17.48899_wp) < 1.0e-4_wp, &
+      & "the stalled GS 0.20 arc length changed")
+   if (allocated(error)) return
+   call check(error, stalled%term == p_landscape_irc_term_energy_rise)
+   if (allocated(error)) return
+
+   ! the guard truncates it, reports its **own** signal (d) `limit_cycle` (a
+   ! cut, not the energy rise of (c)) and ends no further from the minimum than
+   ! the stalled walk did
+   call check(error, guarded%n == 13, &
+      & "the limit cycle guard did not truncate the stalled walk to 13 points")
+   if (allocated(error)) return
+   call check(error, abs(guarded%s(guarded%n) - 2.49688_wp) < 1.0e-4_wp, &
+      & "the guarded GS 0.20 arc length changed")
+   if (allocated(error)) return
+   call check(error, guarded%term == p_landscape_irc_term_limit_cycle, &
+      & "the limit cycle guard did not report its own signal (d)")
+   if (allocated(error)) return
+   call check(error, d_guarded < d_stalled - 1.0e-3_wp, &
+      & "the guarded endpoint is no closer to the minimum than the stalled one")
+   if (allocated(error)) return
+   ! the endpoint is the phase of the oscillation the guard stopped on
+   call check(error, abs(guarded%xyz(1, guarded%n) - 0.042910_wp) < 1.0e-5_wp .and. &
+      & abs(guarded%xyz(2, guarded%n) - 0.452366_wp) < 1.0e-5_wp, &
+      & "the guarded GS 0.20 endpoint moved")
+   if (allocated(error)) return
+
+   ! --- the worst case: 0.35 backward burns the whole budget ------------
+   ! This direction never reaches an endpoint on its own: the macro steps keep
+   ! cancelling until `max_steps` is exhausted (measured: 400 points, arc
+   ! length 139.597491, `term = max_steps`), so it is the falsification entry
+   ! point for "the guard really solves the budget burn" and the only
+   ! backward coverage of the truncation side (the round-2 review MEDIUM-2).
+   call default_settings(settings, 0.35_wp, 400, p_landscape_irc_gs)
+   settings%osc_window = 0
+   call walk_with(model, mass, x0, settings, -1.0_wp, stalled_bwd, fail)
+   call check(error, .not. fail)
+   if (allocated(error)) return
+   call check(error, stalled_bwd%n == 400 .and. &
+      & stalled_bwd%term == p_landscape_irc_term_max_steps, &
+      & "the GS 0.35 backward walk no longer exhausts the step budget")
+   if (allocated(error)) return
+   call check(error, abs(stalled_bwd%s(stalled_bwd%n) - 139.597491_wp) < 1.0e-4_wp, &
+      & "the stalled GS 0.35 backward arc length changed")
+   if (allocated(error)) return
+   settings%osc_window = 8
+   call walk_with(model, mass, x0, settings, -1.0_wp, guarded_bwd, fail)
+   call check(error, .not. fail)
+   if (allocated(error)) return
+   write(stdout, '(1x,a,i0,a,f12.6,a,i0,a,f12.6,a,i0)') "  GS MB 0.35 bwd pts ", &
+      & stalled_bwd%n, " s ", stalled_bwd%s(stalled_bwd%n), " guarded ", &
+      & guarded_bwd%n, " s ", guarded_bwd%s(guarded_bwd%n), " term ", &
+      & guarded_bwd%term
+   call check(error, guarded_bwd%n == 12, &
+      & "the limit cycle guard did not truncate the 0.35 backward walk to 12 points")
+   if (allocated(error)) return
+   call check(error, guarded_bwd%term == p_landscape_irc_term_limit_cycle, &
+      & "the 0.35 backward truncation did not report signal (d)")
+   if (allocated(error)) return
+   call check(error, abs(guarded_bwd%s(guarded_bwd%n) - 3.959668_wp) < 1.0e-4_wp, &
+      & "the guarded GS 0.35 backward arc length changed")
+   if (allocated(error)) return
+
+   ! --- bitwise inert on the validated step sizes ------------------------
+   do i = 1, 3
+      call default_settings(settings, steps(i), 400, p_landscape_irc_gs)
+      settings%osc_window = 0
+      call walk_with(model, mass, x0, settings, 1.0_wp, reference(i), fail)
+      call check(error, .not. fail)
+      if (allocated(error)) return
+      settings%osc_window = 8
+      call walk_with(model, mass, x0, settings, 1.0_wp, plain(i), fail)
+      call check(error, .not. fail)
+      if (allocated(error)) return
+      call check(error, paths_identical(plain(i), reference(i)), &
+         & "the limit cycle guard changed a validated Gonzalez-Schlegel path")
+      if (allocated(error)) return
+      write(stdout, '(1x,a,f6.3,a,i0,a,f14.10,a,f12.6)') "  GS step ", steps(i), &
+         & " points ", plain(i)%n, " s ", plain(i)%s(plain(i)%n), &
+         & " (guard inert, bitwise)"
+   end do
+
+   ! --- LEPS 0.05: the cancellation test does not misfire on the forward ----
+   ! --- jitter of the flat H2 asymptote --------------------------------
+   ! The turn angle between consecutive macro steps exceeds 170 degrees 286
+   ! times on this path while the reaction coordinate advances monotonically
+   ! (report 67 section 4.2), so an angle criterion would truncate it; the
+   ! cancellation criterion is inert, which is why it was chosen.  This leg
+   ! is the client of the LEPS four method crosscheck, whose golden numbers
+   ! are produced at exactly this step.
+   call new_leps_model(leps)
+   mass9 = 1.0_wp
+   x0_9 = 0.0_wp
+   x0_9(4:6) = [leps_r_star, 0.0_wp, 0.0_wp]
+   x0_9(7:9) = [2.0_wp*leps_r_star, 0.0_wp, 0.0_wp]
+   call default_settings(settings, 0.05_wp, 400, p_landscape_irc_gs)
+   settings%osc_window = 0
+   call walk_with(leps, mass9, x0_9, settings, 1.0_wp, leps_reference, fail)
+   call check(error, .not. fail, "the LEPS GS reference walk failed")
+   if (allocated(error)) return
+   settings%osc_window = 8
+   call walk_with(leps, mass9, x0_9, settings, 1.0_wp, leps_plain, fail)
+   call check(error, .not. fail, "the LEPS GS guarded walk failed")
+   if (allocated(error)) return
+   write(stdout, '(1x,a,i0,a,f14.10)') "  LEPS GS 0.05 points ", leps_plain%n, &
+      & " s ", leps_plain%s(leps_plain%n)
+   call check(error, leps_plain%n > 100, &
+      & "the LEPS GS 0.05 walk is too short to test the guard")
+   if (allocated(error)) return
+   call check(error, paths_identical(leps_plain, leps_reference), &
+      & "the limit cycle guard truncated the LEPS 0.05 path (turn angle "//&
+      & "misfire: the reaction coordinate is advancing)")
+   if (allocated(error)) return
+
+   ! --- the opt-in adaptive step (`--lirc-adaptive`, default off) --------
+   ! It halves the effective step length at the first cancellation instead of
+   ! ending the walk, so a large step recovers accuracy; the default off state
+   ! has to reproduce the guarded walk bitwise.  The reduction sequence is
+   ! pinned as well (round-2 review LOW-3): measured three reductions
+   ! 0.20 -> 0.10 -> 0.05 -> 0.025, and the frozen floor `step/16 = 0.0125` is
+   ! **not** reached on this walk.  Injecting the floor as `step/2` collapses
+   ! the sequence to a single reduction, so the assertion is falsifiable.
+   call default_settings(settings, 0.20_wp, 400, p_landscape_irc_gs)
+   settings%osc_window = 8
+   settings%adaptive = .true.
+   call walk_capture_reductions(model, mass, x0, settings, 1.0_wp, adaptive, &
+      & n_reduction, last_step, fail)
+   call check(error, .not. fail)
+   if (allocated(error)) return
+   d_adaptive = min(dist_to(adaptive%xyz(:, adaptive%n), mb_min1), &
+      & dist_to(adaptive%xyz(:, adaptive%n), mb_min2))
+   write(stdout, '(1x,a,i0,a,f14.10,a,f10.5)') "  GS MB 0.20 adaptive points ", &
+      & adaptive%n, " s ", adaptive%s(adaptive%n), " endpoint distance ", d_adaptive
+   write(stdout, '(1x,a,i0,a,f10.6,a)') "  GS MB 0.20 adaptive reductions ", &
+      & n_reduction, " final effective step ", last_step, " bohr*amu^1/2"
+   ! measured: 12 points, arc length 1.5216 and an endpoint 0.01855 bohr from
+   ! the minimum (the guard alone returns 0.09402)
+   call check(error, adaptive%n == 12, &
+      & "--lirc-adaptive changed the number of macro steps")
+   if (allocated(error)) return
+   call check(error, n_reduction == 3, &
+      & "--lirc-adaptive changed the number of step reductions")
+   if (allocated(error)) return
+   call check(error, abs(last_step - 0.025_wp) < 1.0e-12_wp, &
+      & "--lirc-adaptive changed the final effective step length")
+   if (allocated(error)) return
+   call check(error, abs(adaptive%s(adaptive%n) - 1.521604_wp) < 1.0e-5_wp, &
+      & "--lirc-adaptive changed the adaptive arc length")
+   if (allocated(error)) return
+   call check(error, d_adaptive < d_guarded - 1.0e-3_wp, &
+      & "--lirc-adaptive did not improve the endpoint of the stalled walk")
+   if (allocated(error)) return
+   call check(error, d_adaptive < 2.0e-2_wp, &
+      & "--lirc-adaptive left the endpoint further from the minimum than 0.02 bohr")
+   if (allocated(error)) return
+   settings%adaptive = .false.
+   call walk_with(model, mass, x0, settings, 1.0_wp, default_off, fail)
+   call check(error, .not. fail)
+   if (allocated(error)) return
+   call check(error, paths_identical(default_off, guarded), &
+      & "--lirc-adaptive is not off by default")
+   if (allocated(error)) return
+
+end subroutine test_gs_limit_cycle_guard
+
+!> Run one walk with the environment unit redirected into a scratch file and
+!> read back the adaptive step reductions.
+!>
+!> `landscape_irc_gs_walk` reports every reduction of the opt-in adaptive step
+!> as `irc: the macro steps cancel - reducing the effective step length to
+!> <level> bohr*amu^1/2`.  The helper counts those lines and returns the level
+!> after the last one, so the reduction sequence of `--lirc-adaptive` is
+!> asserted instead of inferred from the endpoint (the frozen floor has no
+!> other observable).
+subroutine walk_capture_reductions(model, mass, x0, settings, sign, path, &
+      & n_reduction, last_step, fail)
+   !> Potential
+   class(landscape_energy_model), intent(inout) :: model
+   !> Masses (amu)
+   real(wp), intent(in) :: mass(:)
+   !> Starting point
+   real(wp), intent(in) :: x0(:)
+   !> Settings
+   type(landscape_irc_settings), intent(in) :: settings
+   !> Direction sign
+   real(wp), intent(in) :: sign
+   !> Resulting path
+   type(landscape_irc_path), intent(inout) :: path
+   !> Number of reductions reported by the walk
+   integer, intent(out) :: n_reduction
+   !> Effective step length after the last reduction (0 when none)
+   real(wp), intent(out) :: last_step
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   type(TEnvironment) :: env
+   character(len=512) :: line
+   integer :: unit, pos, ios
+   real(wp) :: value
+
+   call init(env)
+   n_reduction = 0
+   last_step = 0.0_wp
+   open(newunit=unit, status='scratch', iostat=ios)
+   env%unit = unit
+   call walk_with(model, mass, x0, settings, sign, path, fail, env)
+   if (ios == 0 .and. .not. fail) then
+      rewind(unit)
+      do
+         read(unit, '(a)', iostat=ios) line
+         if (ios /= 0) exit
+         if (index(line, 'reducing') > 0) then
+            n_reduction = n_reduction + 1
+            pos = index(line, 'to ')
+            read(line(pos + 3:), *) value
+            last_step = value
+         end if
+      end do
+   end if
+   close(unit)
+
+end subroutine walk_capture_reductions
+
+!> Bitwise equality of two paths (size, dimension, arc length, energy,
+!> geometry, gradient norm and maximum gradient component).
+!>
+!> Used as the "no effect" assertion of the GS limit cycle guard: an inert
+!> guard may not touch a single bit of a validated path.  `ndim` and `gmax`
+!> belong to the comparison as well (round-2 review LOW-2): `gs_walk` writes
+!> `gmax` for every point, so a path comparison that skips it is not the
+!> "bitwise" comparison its name claims.
+pure function paths_identical(a, b) result(same)
+   !> First path
+   type(landscape_irc_path), intent(in) :: a
+   !> Second path
+   type(landscape_irc_path), intent(in) :: b
+   !> True when every stored value is bitwise equal
+   logical :: same
+
+   same = a%n == b%n .and. a%term == b%term .and. a%n_pinned == b%n_pinned &
+      & .and. a%ndim == b%ndim
+   if (.not. same .or. a%n <= 0) return
+   same = all(a%s(1:a%n) == b%s(1:b%n)) .and. all(a%e(1:a%n) == b%e(1:b%n)) &
+      & .and. all(a%gnorm(1:a%n) == b%gnorm(1:b%n)) &
+      & .and. all(a%gmax(1:a%n) == b%gmax(1:b%n)) &
+      & .and. all(a%n_eval(1:a%n) == b%n_eval(1:b%n)) &
+      & .and. all(a%xyz(:, 1:a%n) == b%xyz(:, 1:b%n))
+
+end function paths_identical
 
 !> LEPS H + H2: all four integrators reach the H2 asymptote in both directions.
 !>

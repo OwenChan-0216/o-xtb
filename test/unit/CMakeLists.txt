@@ -2200,6 +2200,183 @@ add_test("xtb/landscape-irc-knobs"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-irc-knobs
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_knobs.cmake")
 
+# Landscape suite: the GS macro step limit cycle guard (`--lirc-osc-window`,
+# report 69).  The Gonzalez-Schlegel macro step stalls in a two cycle when the
+# pivot sits on the basin floor: the sphere of radius step/2 then carries two
+# local constrained minima and the walk alternates between them while the
+# running minimum is refreshed by ~1e-5 hartree per cycle, so the energy rise
+# criterion never fires.  Report 67 measured 87 macro steps and 17.49 arc
+# length at step 0.20 on the analytic Mueller-Brown surface, and the unit case
+# `gs-limit-cycle-guard` pins that walk and its truncation.
+#
+# At the command line the guard has to be live end to end, which the
+# HCN/HNC path shows from the other side: with the default window 8 the guard
+# is inert (the path has no run of cancelling steps) and `--lirc-osc-window 1`
+# fires at the first cancelling pair, truncating the path and printing the
+# explicit message.  `--lirc-osc-window 0` has to reproduce the default
+# bitwise (the documented escape hatch) and a negative window has to be
+# rejected by the task.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_osc.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+# converge the transition state (self-contained, see `xtb/landscape-irc-cli`)
+execute_process(
+  COMMAND "${EXE}" "${GUESS}" --gfn 2 --lts --lts-method prfo --norestart
+          --namespace ircosc0
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the preparation --lts run failed with status ${status}\n${output}")
+endif()
+function(run_case args suffix)
+  # `${args}` is one string, so it has to be split into a command line
+  # explicitly (an unquoted `${args}` in COMMAND would pass "--lirc-osc-window
+  # 0" as a single argument and the parser would not recognise it)
+  separate_arguments(arglist UNIX_COMMAND "${args}")
+  execute_process(
+    COMMAND "${EXE}" "${RUNDIR}/ircosc0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+            --lirc-grad-tol 0 --norestart --namespace ${suffix} ${arglist}
+    WORKING_DIRECTORY "${RUNDIR}"
+    RESULT_VARIABLE status
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE output
+  )
+  if(NOT status EQUAL 0)
+    message(FATAL_ERROR "xtb --lirc ${args} failed with status ${status}\n${output}")
+  endif()
+  string(REGEX MATCH "forward points: +([0-9]+)" _ "${output}")
+  set(${suffix}_fwd "${CMAKE_MATCH_1}" PARENT_SCOPE)
+  string(REGEX MATCH "backward points: +([0-9]+)" _ "${output}")
+  set(${suffix}_bwd "${CMAKE_MATCH_1}" PARENT_SCOPE)
+  string(REGEX MATCH "forward arc length: +([0-9.]+)" _ "${output}")
+  set(${suffix}_farc "${CMAKE_MATCH_1}" PARENT_SCOPE)
+  set(${suffix}_out "${output}" PARENT_SCOPE)
+endfunction()
+# the default window (8) must not fire on the HCN/HNC path
+run_case("" ircosc1)
+# window 0 is the escape hatch and has to reproduce the default
+run_case("--lirc-osc-window 0" ircosc2)
+# window 1 fires at the first cancelling pair
+run_case("--lirc-osc-window 1" ircosc3)
+if(ircosc1_out MATCHES "limit cycle")
+  message(FATAL_ERROR "the default GS limit cycle guard fired on the HCN path\n${ircosc1_out}")
+endif()
+if(NOT ircosc1_fwd EQUAL 45)
+  message(FATAL_ERROR "the default GS forward path has ${ircosc1_fwd} points, expected 45")
+endif()
+if(NOT ircosc1_bwd EQUAL 39)
+  message(FATAL_ERROR "the default GS backward path has ${ircosc1_bwd} points, expected 39")
+endif()
+if(ircosc2_out MATCHES "limit cycle")
+  message(FATAL_ERROR "--lirc-osc-window 0 still reports a limit cycle\n${ircosc2_out}")
+endif()
+if(NOT ircosc2_fwd EQUAL ircosc1_fwd OR NOT ircosc2_bwd EQUAL ircosc1_bwd)
+  message(FATAL_ERROR "--lirc-osc-window 0 changed the path: ${ircosc2_fwd}/${ircosc2_bwd} vs ${ircosc1_fwd}/${ircosc1_bwd}")
+endif()
+if(NOT ircosc3_out MATCHES "limit cycle detected [(]the last 1 macro steps cancel[)] - terminating")
+  message(FATAL_ERROR "--lirc-osc-window 1 did not fire\n${ircosc3_out}")
+endif()
+if(NOT ircosc3_fwd LESS ircosc1_fwd)
+  message(FATAL_ERROR "--lirc-osc-window 1 did not truncate the forward path: ${ircosc3_fwd} vs ${ircosc1_fwd}")
+endif()
+if(NOT ircosc3_bwd LESS ircosc1_bwd)
+  message(FATAL_ERROR "--lirc-osc-window 1 did not truncate the backward path: ${ircosc3_bwd} vs ${ircosc1_bwd}")
+endif()
+# the truncation is its own termination signal (d), not signal (c): `irc.log`
+# names it, the warning says the endpoint is not a path point, and `--ljson`
+# carries it as `term_fwd = 4` with a run that does not claim to have
+# converged.  Without an endpoint relaxation the truncated endpoint is not
+# assigned to a minimum (the round-2 review HIGH-1 / MEDIUM-2).
+file(READ "${RUNDIR}/ircosc3.irc.log" ircosc3_log)
+if(NOT ircosc3_log MATCHES "termination forward:  *limit_cycle")
+  message(FATAL_ERROR "irc.log does not name the limit cycle termination:\n${ircosc3_log}")
+endif()
+if(NOT ircosc3_out MATCHES "one phase of the oscillation, not a converged path point")
+  message(FATAL_ERROR "the limit cycle truncation warning is missing:\n${ircosc3_out}")
+endif()
+run_case("--lirc-osc-window 1 --lirc-no-endpoint-relax --ljson" ircosc6)
+file(READ "${RUNDIR}/ircosc6.landscape_irc.json" ircosc6_json)
+if(NOT ircosc6_json MATCHES "\"term_fwd\": 4")
+  message(FATAL_ERROR "--ljson does not report term_fwd = 4 (limit_cycle):\n${ircosc6_json}")
+endif()
+if(NOT ircosc6_json MATCHES "\"status_name\": \"incomplete\"")
+  message(FATAL_ERROR "a truncated IRC is not reported as incomplete:\n${ircosc6_json}")
+endif()
+if(NOT ircosc6_json MATCHES "\"converged\": false")
+  message(FATAL_ERROR "a truncated IRC still reports converged = true:\n${ircosc6_json}")
+endif()
+if(NOT ircosc6_json MATCHES "\"reached_min_fwd\": false")
+  message(FATAL_ERROR "the truncated forward endpoint was assigned to a minimum:\n${ircosc6_json}")
+endif()
+if(NOT ircosc6_json MATCHES "limit cycle guard")
+  message(FATAL_ERROR "the truncated run message does not name the guard:\n${ircosc6_json}")
+endif()
+# the opt-in adaptive step (`--lirc-adaptive`, default off) reduces the step at
+# the first cancelling pair instead of ending the walk: it has to report the
+# reduction, change the path and leave no limit cycle message
+run_case("--lirc-adaptive" ircosc5)
+if(NOT ircosc5_out MATCHES "reducing the effective step length")
+  message(FATAL_ERROR "--lirc-adaptive did not reduce the step length\n${ircosc5_out}")
+endif()
+if(ircosc5_out MATCHES "limit cycle")
+  message(FATAL_ERROR "--lirc-adaptive still reports a limit cycle\n${ircosc5_out}")
+endif()
+if(ircosc5_farc STREQUAL ircosc1_farc)
+  message(FATAL_ERROR "--lirc-adaptive did not change the forward arc length (${ircosc5_farc})")
+endif()
+# a negative window is rejected: the value really reaches the task
+# (`check_irc_settings`), it is not a parse-and-forget flag
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircosc0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --lirc-osc-window -1 --norestart --namespace ircosc4
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(status EQUAL 0)
+  message(FATAL_ERROR "a negative --lirc-osc-window was accepted\n${output}")
+endif()
+if(NOT output MATCHES "the IRC limit cycle window must not be negative")
+  message(FATAL_ERROR "the negative --lirc-osc-window error does not name the window\n${output}")
+endif()
+# a direction that stopped on the step budget is as unconverged as a truncated
+# one: `status` already reported it as `incomplete`, but `converged` still
+# claimed the run succeeded (the sibling of the limit cycle signal, found while
+# fixing round 2 HIGH-1).  `--lirc-max-steps 2` forces signal (a) on both
+# directions, so the assertion is falsifiable: it is red without the fix.
+execute_process(
+  COMMAND "${EXE}" "${RUNDIR}/ircosc0.xtbts.xyz" --gfn 2 --lirc --lirc-method gs
+          --lirc-grad-tol 0 --lirc-max-steps 2 --lirc-no-endpoint-relax --ljson
+          --norestart --namespace ircosc7
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the --ljson step budget run failed with status ${status}\n${output}")
+endif()
+file(READ "${RUNDIR}/ircosc7.landscape_irc.json" ircosc7_json)
+if(NOT ircosc7_json MATCHES "\"term_fwd\": 1")
+  message(FATAL_ERROR "--lirc-max-steps 2 did not terminate on the step budget:\n${ircosc7_json}")
+endif()
+if(NOT ircosc7_json MATCHES "\"status_name\": \"incomplete\"")
+  message(FATAL_ERROR "a step budget stop is not reported as incomplete:\n${ircosc7_json}")
+endif()
+if(NOT ircosc7_json MATCHES "\"converged\": false")
+  message(FATAL_ERROR "a step budget stop still reports converged = true:\n${ircosc7_json}")
+endif()
+]=])
+add_test("xtb/landscape-irc-osc-window"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DGUESS=${LANDSCAPE-HCN}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-irc-osc
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_irc_osc.cmake")
+
 # Landscape suite: `--lirc-swap` exchanges the two directions defined by the
 # phase convention.  The forward endpoint of the plain run is the backward
 # endpoint of the swapped run, so the two endpoint energies are exchanged.
@@ -3220,6 +3397,7 @@ set_tests_properties(
   "xtb/landscape-path-string"
   "xtb/landscape-irc-cli"
   "xtb/landscape-irc-knobs"
+  "xtb/landscape-irc-osc-window"
   "xtb/landscape-irc-swap"
   "xtb/landscape-irc-termination"
   "xtb/landscape-irc-pc"

@@ -78,7 +78,9 @@ module xtb_landscape_tasks_irc
       & p_landscape_irc_eulerpc, landscape_log_failed
    use xtb_landscape_results, only : landscape_result, landscape_irc_result, &
       & landscape_vib_result, p_landscape_irc_term_grad, &
-      & p_landscape_irc_term_energy_rise, landscape_irc_term_name
+      & p_landscape_irc_term_energy_rise, p_landscape_irc_term_limit_cycle, &
+      & p_landscape_irc_term_max_steps, &
+      & landscape_irc_term_name
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack, vec_rms, vec_norm, &
       & align_geometry
    use xtb_landscape_engine, only : landscape_engine, new_landscape_engine, &
@@ -417,7 +419,30 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
       call env%warning("an IRC direction was stopped by the step budget "//&
          & "before reaching a minimum", source)
    end if
-   result%message = "IRC integration completed"
+   ! signal (d): the GS limit cycle guard truncated a stalled walk.  A warning
+   ! is required (not optional): the endpoint is not a converged path point,
+   ! it is one phase of the oscillation, so `reached_min_fwd` below is false
+   ! unless an endpoint relaxation confirms the geometry independently.
+   if (result%term_fwd == p_landscape_irc_term_limit_cycle) then
+      call env%warning("the forward endpoint is one phase of the oscillation, "//&
+         & "not a converged path point (the GS macro step stalled in a limit "//&
+         & "cycle)", source)
+   end if
+   if (have_bwd .and. result%term_bwd == p_landscape_irc_term_limit_cycle) then
+      call env%warning("the backward endpoint is one phase of the oscillation, "//&
+         & "not a converged path point (the GS macro step stalled in a limit "//&
+         & "cycle)", source)
+   end if
+   ! the message is the human readable verdict of the run; a truncated path
+   ! must not claim completion (it reaches `--ljson` and `irc.log` through
+   ! `landscape_irc_result_write`)
+   if (result%term_fwd == p_landscape_irc_term_limit_cycle .or. &
+         & (have_bwd .and. result%term_bwd == p_landscape_irc_term_limit_cycle)) then
+      result%message = "IRC truncated by the limit cycle guard: the endpoint "//&
+         & "is one phase of the oscillation, not a converged path point"
+   else
+      result%message = "IRC integration completed"
+   end if
 
    if (settings%ljson) then
       call write_json(env, settings, result, have_bwd, n_scf_fail)
@@ -435,7 +460,11 @@ end subroutine landscape_irc
 !> point of each direction is the one the `reached_min_*` flag refers to.
 !>
 !> Status: an IRC of a first order saddle that produced both paths is `ok`
-!> (or `incomplete` when a direction only stopped on the step budget).  A
+!> (or `incomplete` when a direction only stopped on the step budget).  A run
+!> whose Gonzalez-Schlegel walk was truncated by the limit cycle guard
+!> (`--lirc-osc-window`) is `incomplete` as well and `converged` is false: the
+!> path was cut, the endpoint is one phase of the oscillation, so reporting
+!> the run as a completed integration would be wrong.  A
 !> run whose input is not a saddle, that could not build a direction or that
 !> had an unconverged SCC is `error` - the task reports it through `env` and
 !> the process exits non-zero.
@@ -452,7 +481,7 @@ subroutine write_json(env, settings, result, have_bwd, n_scf_fail)
    integer, intent(in) :: n_scf_fail
 
    type(landscape_json_document) :: doc = landscape_json_document()
-   logical :: ok, complete
+   logical :: ok, complete, truncated
    integer :: status, n_eval_fwd, n_eval_bwd
 
    n_eval_fwd = 0
@@ -460,7 +489,13 @@ subroutine write_json(env, settings, result, have_bwd, n_scf_fail)
    n_eval_bwd = 0
    if (allocated(result%n_eval_bwd)) n_eval_bwd = sum(result%n_eval_bwd)
 
-   complete = result%is_saddle .and. (result%term_fwd /= 1)
+   ! the limit cycle guard cuts a stalled walk: the endpoint is not a
+   ! converged path point, so the run is not `ok` and not `converged`
+   truncated = result%term_fwd == p_landscape_irc_term_limit_cycle
+   if (have_bwd) then
+      truncated = truncated .or. result%term_bwd == p_landscape_irc_term_limit_cycle
+   end if
+   complete = result%is_saddle .and. (result%term_fwd /= 1) .and. .not. truncated
    if (have_bwd) complete = complete .and. (result%term_bwd /= 1)
    status = landscape_json_status_ok
    if (complete .and. result%n_fwd > 0) status = landscape_json_status_ok
@@ -472,7 +507,14 @@ subroutine write_json(env, settings, result, have_bwd, n_scf_fail)
 
    call landscape_json_document_init(doc, 'irc')
    doc%status = status
-   doc%converged = result%is_saddle .and. result%n_fwd > 0
+   ! a direction that stopped on the step budget is as unconverged as a
+   ! truncated one: `status` already reports both as `incomplete`, and the
+   ! documented meaning of this key is the verdict of the run, so it must not
+   ! claim `converged` for a walk that ran out of budget (measured: a
+   ! `--lirc-max-steps` run reported `status = incomplete` with
+   ! `converged = true` before this line was extended)
+   doc%converged = result%is_saddle .and. result%n_fwd > 0 .and. .not. truncated &
+      & .and. result%term_fwd /= p_landscape_irc_term_max_steps
    if (allocated(result%message)) doc%message = result%message
    call landscape_json_add_counter(doc, 'method', settings%method)
    call landscape_json_add_counter(doc, 'n_fwd', result%n_fwd)
@@ -653,6 +695,11 @@ subroutine check_irc_settings(env, settings, ok)
       call env%error("the IRC energy rise criterion needs at least one step", source)
       ok = .false.
    end if
+   if (settings%osc_window < 0) then
+      call env%error("the IRC limit cycle window must not be negative "//&
+         & "(0 disables the guard)", source)
+      ok = .false.
+   end if
    if (settings%dwi_n < 2) then
       call env%error("the IRC DWI surface needs at least two sample points "//&
          & "(the current and the predicted point of a step)", source)
@@ -755,10 +802,14 @@ end subroutine relax_endpoint
 !>
 !> The path must have been stopped by signal (b) (a stationary point) or (c)
 !> (the energy rose again after the minimum); a direction cut off by the step
-!> budget is not assigned to a minimum.  When the endpoint relaxation was
-!> requested it additionally has to have converged **and** the Kabsch aligned
-!> RMSD between the endpoint and the relaxed minimum has to be below
-!> `rmsd_end`.  The RMSD criterion needs a relaxed minimum: with
+!> budget is not assigned to a minimum.  Signal (d), the limit cycle guard,
+!> is the **truncation** of a stalled walk: the endpoint is one phase of the
+!> oscillation and is `step` scale away from the minimum, so the guard alone
+!> does **not** assign it to a minimum.  It is accepted only when an endpoint
+!> relaxation independently confirms the geometry, i.e. when the relaxation
+!> was requested **and** converged **and** the Kabsch aligned RMSD to the
+!> relaxed minimum is below `rmsd_end` - the same distance check as for (b)
+!> and (c).  The RMSD criterion needs a relaxed minimum: with
 !> `relax_requested = .false.` there is none, the criterion is therefore not
 !> applied (the caller reports `rmsd = 0` and `irc.log` records that it was
 !> skipped instead of silently claiming a satisfied distance check).
@@ -780,6 +831,10 @@ pure function endpoint_reached(term, relax_requested, relaxed, rmsd, rmsd_end) &
 
    reached = (term == p_landscape_irc_term_grad .or. &
       & term == p_landscape_irc_term_energy_rise)
+   ! the limit cycle guard truncates a stalled walk: without an independent
+   ! confirmation of the geometry the endpoint is **not** a minimum, only the
+   ! relay above (the relaxation plus its RMSD) may accept it
+   if (term == p_landscape_irc_term_limit_cycle) reached = relax_requested
    if (relax_requested) then
       reached = reached .and. relaxed .and. rmsd <= rmsd_end
    end if

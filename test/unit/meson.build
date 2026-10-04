@@ -748,6 +748,13 @@ test('landscape irc pc', python, env: landscape_env, args: [
   landscape_cli_check, 'ircpc', xtb_exe, hcn_xyz,
   landscape_cli_dir / 'landscape-cli-irc-pc',
 ])
+# the GS macro step limit cycle guard (`--lirc-osc-window`, report 69): the
+# default window is inert on the HCN path, window 1 truncates it, window 0
+# reproduces the default and a negative window is rejected
+test('landscape irc osc window', python, env: landscape_env, args: [
+  landscape_cli_check, 'ircosc', xtb_exe, hcn_xyz,
+  landscape_cli_dir / 'landscape-cli-irc-osc',
+])
 test('landscape irc swap', python, env: landscape_env, args: [
   landscape_cli_check, 'ircswap', xtb_exe, hcn_xyz,
   landscape_cli_dir / 'landscape-cli-irc-swap',

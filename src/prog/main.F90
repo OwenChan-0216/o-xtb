@@ -4009,6 +4009,28 @@ contains
                call env%error("The --lirc-grad-tol flag requires a number", source)
             end if
 
+         case ('--lirc-osc-window')
+            ! Limit cycle guard of the GS macro step: leave the path after this
+            ! many consecutive macro steps that cancel each other (0 disables)
+            call select_runtyp(env, 'lirc', '--lirc-osc-window', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lircset%osc_window = idum2
+               else
+                  call env%error("The --lirc-osc-window flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lirc-osc-window flag requires an integer", source)
+            end if
+
+         case ('--lirc-adaptive')
+            ! Opt-in adaptive step of the GS macro step: halve the effective
+            ! step length when consecutive macro steps cancel (default off)
+            call select_runtyp(env, 'lirc', '--lirc-adaptive', selected_runtyp, selected_runtyp_flag)
+            lircset%adaptive = .true.
+
          case ('--lirc-recalc')
             ! Rebuild the exact Hessian every N macro steps (-1 disables)
             call select_runtyp(env, 'lirc', '--lirc-recalc', selected_runtyp, selected_runtyp_flag)
