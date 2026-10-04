@@ -169,7 +169,7 @@ OPTIONS
 *--cma* ::
     shifts molecule to center of mass and transforms cartesian coordinates
     into the coordinate system of the principle axis (not affected by
-    `isotopes'-file).
+    `isotopes`-file).
 
 *--pop*::
     requests printout of Mulliken population analysis
@@ -257,30 +257,33 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
 *--lopt*::
     minimise the geometry with the landscape task suite (`src/landscape`); the
     algorithm is selected with `--method` (alias `--lopt-engine`) and the
-    thresholds with `--lopt-level`
+    thresholds with `--lopt-level`.  The sub-options are in SUITE OPTIONS
 
 *--lscan*::
     scan an internal coordinate (distance, angle or dihedral) with the
     landscape task suite; the result is written to `xtbscan.log` with the
-    de-biased energy of every frame
+    de-biased energy of every frame.  The sub-options are in SUITE OPTIONS
 
 *--lts*::
     transition state search with the landscape task suite; the method is
     selected with `--method` (alias `--lts-method`), one of prfo (default),
     bprfo, dimer, neb, cineb, autoneb or string (alias gsm).  Writes `xtbts.xyz`
-    and `xtbts.log` and confirms the imaginary mode count
+    and `xtbts.log` and confirms the imaginary mode count.  The sub-options are
+    in SUITE OPTIONS
 
 *--lirc*::
     intrinsic reaction coordinate with the landscape task suite; the input
     geometry is the transition state and must have exactly one imaginary mode.
     The integrator is selected with `--method` (alias `--lirc-method`), one of
     hpc (default), lqa, eulerpc or gs.  Writes `irc_forward.xyz`,
-    `irc_backward.xyz`, `irc_path.xyz` and `irc.log`
+    `irc_backward.xyz`, `irc_path.xyz` and `irc.log`.  The sub-options are in
+    SUITE OPTIONS
 
 *--lvib*::
     harmonic frequencies, normal modes and thermochemistry with the landscape
     task suite; writes `vibspectrum`, `vib_normal_modes`, `g98.out` and
-    `hessian` with the names and formats of `--hess`
+    `hessian` with the names and formats of `--hess`.  The sub-options are in
+    SUITE OPTIONS
 
 *--ljson*::
     write the structured result `landscape_<task>.json` (status, counters and
@@ -343,6 +346,565 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     the dimer projection method for the calculation of electronic coupling integrals between two fragments.
     'REAL' sets the threshold for nearly degenerate orbitals to still be considered (default = 0.1 eV).
     
+
+SUITE OPTIONS
+-------------
+
+The landscape task suite (`src/landscape`) is selected by one of the run
+types `--lopt`, `--lscan`, `--lts`, `--lirc` or `--lvib` (see RUNTYPS
+above); the sub-options below configure the selected task. The common
+`--ljson` switch is listed with the run types. Unless noted otherwise an
+option is read only by the landscape run types and is ignored by the native
+xtb run types, which do not know it.
+
+The suite keeps every quantity in atomic units internally and converts at
+the input boundary. Unless an option says otherwise a length is in bohr, an
+energy in hartree, a gradient or force in hartree/bohr, a Hessian element in
+hartree/bohr^2 and a stiffness in hartree/bohr^2. The exceptions are
+spelled out at their options: a scanned coordinate uses angstrom (distance)
+or degree (angle and dihedral), the two dimer lengths and every trust radius
+are Cartesian bohr, the IRC arc lengths are in `bohr*amu^1/2` (mass weighted
+arc length, one atomic unit) and the frequency cutoffs are in `cm^-1`.
+
+`--method` (see OPTIONS) is the canonical spelling of `--lopt-engine`,
+`--lscan-method`, `--lts-method` and `--lirc-method`: the same value through
+two of the flags is idempotent, a different value aborts the run, and an
+unknown name or a name of another task is an error. Every name is matched
+case insensitively.
+
+MINIMISATION OPTIONS (--lopt)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*--lopt-engine* 'NAME'::
+    minimisation algorithm of the suite, one of `sd`, `cg`, `lbfgs` (default),
+    `bfgs`, `diis` or `rfo`. Alias of `--method`; the name is not case-sensitive.
+    Because the native `--opt` runs `ancopt(3)`, the active default engine is
+    echoed as a notice unless the flag is given.
+
+*--lopt-level* 'LEVEL'::
+    convergence level, one of `superloose`, `loose`, `normal` (default), `tight`
+    or `vtight`; not case-sensitive. One level drives four axes at once: the four
+    thresholds (maximum and RMS gradient in hartree/bohr, maximum and RMS
+    displacement in bohr), the energy tolerance `e_tol` (hartree), the SCC
+    accuracy of the engine and the multiplier of the step budget (3 steps per
+    atom at `normal`, clamped to 200..10000).
+
+*--lopt-hessian* 'SOURCE'::
+    Hessian backend, one of `numerical` (default; the suite's own central
+    differences of the electronic gradient), `model` (Lindh-D2 model Hessian from
+    `src/model_hessian`) or `file` (read the TURBOMOLE layout written by an
+    earlier run, see `--lopt-hessian-file`).
+
+*--lopt-max-steps* 'N'::
+    step budget of the minimisation. The default is derived from the convergence
+    level (3 steps per atom, clamped to 200..10000); `--cycles` and the level
+    change it. A budget given here wins over the level-derived value.
+
+*--lopt-hess-step* 'VALUE'::
+    finite difference step of the numerical Hessian in bohr (default 0.005). Only
+    `--lopt-engine rfo` builds a numerical Hessian; the other five engines
+    (including the default `lbfgs`) never do, and the value is ignored for
+    `--lopt-hessian model` or `file`. The run then echoes the effective value and
+    marks it as not used.
+
+*--lopt-sccacc* 'VALUE'::
+    SCC accuracy of the displaced single points of the numerical Hessian
+    (default 0.3). Consumed by the same engine and Hessian source as
+    `--lopt-hess-step`.
+
+*--lopt-restart* 'MODE'::
+    wavefunction restart policy of the engine, `off` (default), `pin` or `warm`.
+
+*--lopt-hessian-file* 'NAME'::
+    file read by `--lopt-hessian file` (TURBOMOLE `$hessian` layout, the
+    `hessian` file written by `--hess` and by `--lvib`). The name is used only by
+    the `file` source: with `numerical` or `model` it is silently discarded and
+    never echoed (a registered, deliberately unfixed honesty gap).
+
+SCAN OPTIONS (--lscan)
+~~~~~~~~~~~~~~~~~~~~~~
+
+*--lscan-coord* 'TYPE'::
+    type of the first scanned coordinate, one of `distance` (default), `angle` or
+    `dihedral`; not case-sensitive.
+
+*--lscan-atoms* 'LIST'::
+    1-based atom indices of the first coordinate, comma or blank separated (two
+    for a distance, three for an angle, four for a dihedral).
+
+*--lscan-step* 'VALUE'::
+    step size of the first coordinate in angstrom (distance) or degree (angle and
+    dihedral).
+
+*--lscan-nstep* 'N'::
+    number of steps of the first coordinate; a sweep visits the coordinate
+    values `q0 + k step` for `k = 0..nstep`, in both directions unless
+    `--lscan-oneway` is given.
+
+*--lscan-coord2, --lscan-atoms2, --lscan-step2, --lscan-nstep2*::
+    the same four options for a second scanned coordinate; any of them switches
+    the scan to a two-dimensional Cartesian product grid (as `--lscan-ndim 2`).
+
+*--lscan-mode* 'MODE'::
+    scan mode, `relaxed` (default; every point is minimised under a constraint
+    potential) or `rigid` (the geometry is constructed and a single point is
+    evaluated); not case-sensitive.
+
+*--lscan-method* 'NAME'::
+    inner minimiser of a relaxed scan, one of `sd`, `cg`, `lbfgs` (default),
+    `bfgs`, `diis` or `rfo`. Alias of `--method`; not case-sensitive.
+
+*--lscan-level* 'LEVEL'::
+    convergence level of the inner minimisation, one of `superloose`, `loose`,
+    `normal` (default), `tight` or `vtight`.
+
+*--lscan-ndim* 'N'::
+    number of scanned coordinates, 1 (default) or 2.
+
+*--lscan-restart* 'MODE'::
+    wavefunction policy of the engine at every scan point, `off` (default), `pin`
+    or `warm`. `warm` reuses only the geometry of the previous point, never its
+    wavefunction.
+
+*--lscan-oneway*::
+    scan the forward branch only; no reverse branch and no hysteresis report.
+
+*--lscan-cold-start*::
+    start every scan point from the input geometry instead of the geometry of the
+    previous point.
+
+*--lscan-fc* 'VALUE'::
+    force constant of the constraint bias potential (the coordinate deviation
+    raised to the power `--lscan-expo` and scaled by this value) in
+    hartree/bohr^2 (default 0.5). This is ten times the xtb scan force constant
+    `fcconstr = 0.05` of the `$scan` block, so the active default is echoed as a
+    notice unless the flag is given; use `--lscan-fc 0.05` when compatibility with
+    existing `xtbscan.log` tool chains matters.
+
+*--lscan-expo* 'VALUE'::
+    exponent of the constraint potential (default 2.0). Only distance constraints
+    use it: an angle is biased by the squared angular deviation and a dihedral
+    by `(1 - cos dphi)`, both scaled by the same force constant and bounded by
+    twice it, with a zero torque at 180 degree.
+
+*--lscan-max-steps* 'N'::
+    step budget of the inner relaxation of every scan point; derived from the
+    convergence level like `--lopt-max-steps`.
+
+*--lscan-hess-step* 'VALUE'::
+    finite difference step of the numerical Hessian of the scan points in bohr
+    (default 0.005). Only `--lscan-method rfo` builds one (the default `lbfgs`
+    never does), a rigid scan has no inner minimisation at all, and the value is
+    ignored for `--lscan-hessian model` or `file`.
+
+*--lscan-sccacc* 'VALUE'::
+    SCC accuracy of the displaced single points of the numerical Hessian
+    (default 0.3); consumed by the same inner minimiser and Hessian source as
+    `--lscan-hess-step`.
+
+*--lscan-hessian* 'SOURCE'::
+    Hessian backend of the scan points, one of `numerical` (default), `model` or
+    `file`.
+
+*--lscan-hessian-file* 'NAME'::
+    file read by `--lscan-hessian file` (TURBOMOLE layout); silently discarded
+    when the source is not `file`.
+
+TRANSITION STATE OPTIONS (--lts)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*--lts-method* 'NAME'::
+    search method, one of `prfo` (default), `bprfo` (restricted step), `dimer`
+    (first derivatives only, no Hessian), `neb`, `cineb` (climbing image NEB),
+    `autoneb` (incremental path building) or `string`/`gsm` (growing string).
+    Alias of `--method`; not case-sensitive. `neb`, `cineb`, `autoneb`, `string`
+    and `gsm` are chain-of-states methods and need `--lts-product`.
+
+*--lts-trust* 'VALUE'::
+    initial trust radius of the step in bohr (default 0.37795).
+
+*--lts-trust-max* 'VALUE'::
+    upper bound of the trust radius in bohr (default 1.8897).
+
+*--lts-hlow* 'VALUE'::
+    curvature floor of the downhill modes in hartree/bohr^2 (default 0.01).
+
+*--lts-max-steps* 'N'::
+    maximum number of macro iterations; derived from the convergence level (3
+    steps per atom, clamped to 200..10000).
+
+*--lts-level* 'LEVEL'::
+    convergence level (thresholds, energy tolerance, SCC accuracy and step
+    budget), one of `superloose`, `loose`, `normal` (default), `tight` or `vtight`.
+
+*--lts-mode-overlap-min* 'VALUE'::
+    mode following guard: reselect the transition vector below this overlap
+    (default 0.3). The value is the dimensionless `|V^T v|` overlap.
+
+*--lts-alpha* 'VALUE'::
+    fraction of the trust radius assigned to the uphill subspace by `bprfo`
+    (default 0.5).
+
+*--lts-micro-cycles* 'N'::
+    maximum number of restricted step micro iterations (default 50).
+
+*--lts-target-mode* 'N'::
+    which negative mode is followed, 1 = most negative (default 1).
+
+*--lts-init-mode* 'MODE'::
+    initial transition vector, `h0` (most negative Hessian mode, default) or
+    `force` (largest Cartesian gradient component direction).
+
+*--lts-escape-step* 'VALUE'::
+    displacement along the lowest internal mode in bohr (default 0.2), applied
+    when the start geometry is a minimum so that P-RFO has a direction to ascend
+    along; 0 disables the escape. The active default is echoed as a notice unless
+    the flag is given. The full walk budget is 3.0 bohr.
+
+*--lts-delta* 'VALUE'::
+    dimer separation, the distance of each image from the common midpoint in bohr
+    (default 0.018897, i.e. 0.01 angstrom; this is the pysisyphus convention, not
+    the VASP `DdR` that denotes twice the value).
+
+*--lts-dr* 'VALUE'::
+    finite difference step of the dimer translation probe in bohr (default
+    0.0018897).
+
+*--lts-rot-max-iter* 'N'::
+    maximum number of dimer rotations per macro iteration (default 5).
+
+*--lts-rot-alpha* 'VALUE'::
+    damping of the dimer rotation angle (default 0.5; 1 = undamped).
+
+*--lts-rot-frms* 'VALUE'::
+    RMS torque below which the dimer rotation has converged, in hartree/bohr
+    (default 2.65e-4).
+
+*--lts-ninit* 'MODE'::
+    initial dimer axis, `random` (default, seeded by `--lts-seed`) or `force`
+    (largest Cartesian gradient component direction).
+
+*--lts-seed* 'N'::
+    seed of the random initial dimer axis (default 42). The generator state is
+    reset from this seed before every draw, so a run is exactly reproducible.
+
+*--lts-step-max* 'VALUE'::
+    maximum dimer translation step in bohr (default 0.28346).
+
+*--lts-step0* 'VALUE'::
+    upper bound of the first dimer translation in bohr (default 0.37795); the
+    `dR` curvature probe can shorten the actual first displacement.
+
+*--lts-translate-max-iter* 'N'::
+    maximum number of quick-min displacement updates per dimer translation
+    (default 1).
+
+*--lts-recalc* 'N'::
+    recompute the exact Hessian every N macro steps, 0 disables (default 1).
+
+*--lts-no-verify*::
+    skip the frequency confirmation of the located stationary point.
+
+*--lts-no-rigid*::
+    keep the rigid body (translation and rotation) components in the Cartesian
+    step instead of projecting them out.
+
+*--lts-restart* 'MODE'::
+    wavefunction restart policy of the engine, `off` (default), `pin` or `warm`.
+
+*--lts-hessian* 'SOURCE'::
+    Hessian backend, one of `numerical` (default), `model` (Lindh-D2) or `file`.
+
+*--lts-hessian-file* 'NAME'::
+    file read by `--lts-hessian file` (TURBOMOLE layout); silently discarded when
+    the source is not `file`.
+
+*--lts-hess-step* 'VALUE'::
+    finite difference step of the numerical confirmation Hessian in bohr
+    (default 0.005); the canonical name of `--lts-step`.
+
+*--lts-step* 'VALUE'::
+    alias of `--lts-hess-step`. If the confirmed mode lies within
+    `0 +/- 3 cm^-1`, the curvature sign is re-decided with 0.002 bohr and SCC
+    accuracy 0.1.
+
+*--lts-sccacc* 'VALUE'::
+    SCC accuracy of the displaced single points of the confirmation Hessian
+    (default 0.3).
+
+*--lts-product* 'NAME'::
+    product endpoint of a chain-of-states search (`neb`, `cineb`, `autoneb`,
+    `string`, `gsm`): a single frame xyz with the same atoms in the same order;
+    the positional input file is the reactant.
+
+*--lts-images* 'N'::
+    number of images of a band, the two fixed endpoints included (default 9); for
+    `autoneb` it is the requested final number of images.
+
+*--lts-kmin, --lts-kmax* 'VALUE'::
+    lower and upper spring constant of the dynamic springs in hartree/bohr^2
+    (defaults 1e-2 and 1e-1, calibrated on the analytic LEPS surface).
+
+*--lts-kdecay* 'VALUE'::
+    decay factor of the dynamic spring formula (default 0.5).
+
+*--lts-no-dynamic-k*::
+    use the single spring constant `kmax` for every image.
+
+*--lts-climb*::
+    switch on the climbing image stage (CI-NEB); implied by `--lts-method cineb`,
+    `autoneb`, `string` and `gsm`.
+
+*--lts-climb-switch* 'VALUE'::
+    band force in hartree/bohr below which the climbing image is ignited (default
+    9.7234e-3, the standard 0.5 eV/angstrom).
+
+*--lts-no-idpp*::
+    straight linear interpolation instead of the IDPP initial path.
+
+*--lts-no-align*::
+    do not Kabsch align the images before every band evaluation.
+
+*--lts-relax-ends*::
+    relax the two endpoints with the minimiser before the search.
+
+*--lts-max-displ* 'VALUE'::
+    upper bound of one displacement component of a band step in bohr
+    (default 0.37795).
+
+*--lts-frms-avg, --lts-frms-max* 'VALUE'::
+    band convergence thresholds of the average and the largest per-image force
+    RMS in hartree/bohr (defaults 3e-4 and 1e-3).
+
+*--lts-autoneb-nstart* 'N'::
+    number of images of the coarse start path of an AutoNEB run (default 5).
+
+*--lts-autoneb-max-paths* 'N'::
+    hard upper bound of the number of images of an AutoNEB path (default 10); a
+    request above it is an error, never a silent truncation.
+
+*--lts-autoneb-max-depth* 'N'::
+    hard upper bound of the number of image insertion stages (default 5).
+
+*--lts-autoneb-restart* 'NAME'::
+    multi-frame xyz path of an earlier AutoNEB run (its `path_autoneb.xyz`),
+    adopted as the initial path so the completed stages are not repeated.
+
+*--lts-string-nnodes* 'N'::
+    target number of nodes of the growing string, endpoints included (default 9).
+    The string is configured here, not by `--lts-images`.
+
+*--lts-string-grow-tol* 'VALUE'::
+    norm threshold of the growth indicator in hartree/bohr (default 5e-3).
+
+*--lts-string-ds* 'VALUE'::
+    arc length increment of one growth step of the string in bohr (default 0.5).
+
+*--lts-string-nu2* 'VALUE'::
+    curvature floor for the node spacing condition, in hartree/bohr^2
+    (default 0.05).
+
+*--lts-string-grow-steps* 'N'::
+    maximum perpendicular relaxation iterations of one frontier node (default
+    200).
+
+*--lts-no-string-spline*::
+    central difference tangents of the string instead of the cubic spline
+    tangent.
+
+*--lts-string-history*::
+    print the growth history (position and perpendicular force of every node);
+    also honoured by the `gsm` task name.
+
+INTRINSIC REACTION COORDINATE OPTIONS (--lirc)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*--lirc-method* 'NAME'::
+    integration method, one of `hpc` (Hessian based predictor-corrector,
+    default), `lqa` (Page-McIver analytic quadratic propagation, the cheapest),
+    `eulerpc` (Euler predictor-corrector) or `gs` (Gonzalez-Schlegel sphere
+    relaxation). Alias of `--method`; not case-sensitive. The active default is
+    echoed as a notice unless the flag is given.
+
+*--lirc-step* 'VALUE'::
+    step length of one macro step in `bohr*amu^1/2` (mass weighted arc length,
+    default 0.10; use 0.05 for a tight path). The clean range is 0.05-0.15 for
+    `--lirc-method gs`, whose macro step stalls in a two cycle from 0.20 on;
+    `hpc` and `eulerpc` are correct at 0.20. The limit cycle guard only detects
+    the cancelling subclass of the stall: a large step can still end far from the
+    minimum (measured 0.236 bohr at 0.40 forward).
+
+*--lirc-max-steps* 'N'::
+    maximum number of macro steps of one direction; derived from the convergence
+    level (3 steps per atom, clamped to 200..10000).
+
+*--lirc-level* 'LEVEL'::
+    convergence level of the endpoint relaxation (thresholds, energy tolerance,
+    SCC accuracy and step budget), one of `superloose`, `loose`, `normal`
+    (default), `tight` or `vtight`. The IRC path itself is left by the termination
+    signals `--lirc-grad-tol` and `--lirc-e-rise`.
+
+*--lirc-swap*::
+    exchange the forward and the backward direction defined by the phase
+    convention.
+
+*--lirc-oneway*::
+    integrate the forward direction only.
+
+*--lirc-target-mode* 'N'::
+    which negative mode defines the initial direction, 1 = most negative
+    (default 1).
+
+*--lirc-micro-cycles* 'N'::
+    maximum number of Gonzalez-Schlegel micro cycles per macro step (default 20).
+
+*--lirc-micro-thresh* 'VALUE'::
+    convergence threshold of the sphere relaxation in `bohr*amu^1/2` (default
+    1e-3).
+
+*--lirc-euler-n* 'N'::
+    Euler/Simpson substeps of the analytic LQA propagation (default 5000).
+
+*--lirc-loose-cycles* 'N'::
+    EulerPC coarse phase: use the plain Euler prediction for the first N macro
+    steps, 0 disables the coarse phase (default 3).
+
+*--lirc-mbs-tol* 'VALUE'::
+    acceptance threshold of the modified Bulirsch-Stoer corrector in
+    `bohr*amu^1/2` (default 1e-5; the HPC paper uses 1e-6).
+
+*--lirc-mbs-max-k* 'N'::
+    maximum extrapolation level of the modified Bulirsch-Stoer corrector
+    (default 15).
+
+*--lirc-mbs-points* 'N'::
+    base number of Euler substeps of the modified Bulirsch-Stoer corrector
+    (default 20).
+
+*--lirc-dwi-n* 'N'::
+    capacity of the DWI surface fit (default 4). The implemented interpolant is
+    two point by construction, so every N >= 2 is behaviourally equivalent; N < 2
+    is rejected.
+
+*--lirc-e-rise* 'N'::
+    termination signal (c): stop after N consecutive rising energies (default 3).
+    A large N does not guarantee running to the step budget; the limit cycle guard
+    `--lirc-osc-window` is an independent signal.
+
+*--lirc-erise-steps* 'N'::
+    alias of `--lirc-e-rise`.
+
+*--lirc-grad-tol* 'VALUE'::
+    termination signal (b): stop when the RMS gradient per Cartesian component
+    falls below this value in hartree/bohr (default 1e-3).
+
+*--lirc-osc-window* 'N'::
+    limit cycle guard of the `gs` macro step: leave the path after N consecutive
+    macro steps that cancel each other (default 8; 0 disables the guard). The
+    guard is inert on every validated path and truncates the stalled walk; the
+    endpoint it returns is one phase of the oscillation, about one step length
+    away from the minimum, so the run is reported as incomplete. Only
+    `--lirc-method gs` is affected.
+
+*--lirc-adaptive*::
+    opt-in adaptive step length of the `gs` macro step (default off): halve the
+    effective step length (floor: a sixteenth of `--lirc-step`) at the first
+    cancelling macro step pair. It changes the validated small step paths and is
+    therefore a re-baseline; every reduction is printed. Only `--lirc-method gs`
+    honours it - every other method silently ignores it.
+
+*--lirc-recalc* 'N'::
+    rebuild the exact Hessian every N macro steps, -1 disables (default -1). Pure
+    Bofill updates are sufficient for short paths; long or strongly curved paths
+    drift and need an explicit `--lirc-recalc 5 .. 10`.
+
+*--lirc-no-endpoint-relax*::
+    do not relax the two endpoints to assign them to a minimum; the
+    `--lirc-rmsd-end` criterion is then skipped (and reported as skipped).
+
+*--lirc-endpoint-relax*::
+    relax the two endpoints to assign them to a minimum (default; the explicit
+    flag restores it after a `--lirc-no-endpoint-relax`).
+
+*--lirc-rmsd-end* 'VALUE'::
+    Kabsch aligned RMSD between an endpoint and its relaxed minimum below which
+    the endpoint counts as having reached a minimum, in bohr (default 0.18897).
+
+*--lirc-hessian* 'SOURCE'::
+    Hessian backend, one of `numerical` (default), `model` (Lindh-D2) or `file`.
+
+*--lirc-hessian-file* 'NAME'::
+    file read by `--lirc-hessian file` (TURBOMOLE layout); silently discarded
+    when the source is not `file`.
+
+*--lirc-hess-step* 'VALUE'::
+    finite difference step of the numerical Hessian in bohr (default 0.005); the
+    canonical name of `--lirc-step-hess`, not to be confused with `--lirc-step`
+    (the arc length of the reaction path).
+
+*--lirc-step-hess* 'VALUE'::
+    alias of `--lirc-hess-step`.
+
+*--lirc-sccacc* 'VALUE'::
+    SCC accuracy of the displaced single points of the Hessian (default 0.3).
+
+*--lirc-restart* 'MODE'::
+    wavefunction restart policy of the engine, `off` (default), `pin` or `warm`.
+
+FREQUENCY AND THERMOCHEMISTRY OPTIONS (--lvib)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*--lvib-hessian* 'SOURCE'::
+    Hessian backend of the frequency task, one of `numerical` (default), `model`
+    (Lindh-D2) or `file` (read the Hessian of an earlier run).
+
+*--lvib-hessian-file* 'NAME'::
+    file read by `--lvib-hessian file` (TURBOMOLE layout). Unlike the other
+    tasks, `--lvib` prints the name even when the source is not `file`, but it
+    still only reads it for `file`.
+
+*--lvib-hess-step* 'VALUE'::
+    finite difference step of the numerical Hessian in bohr (default 0.005); the
+    canonical name of `--lvib-step`.
+
+*--lvib-step* 'VALUE'::
+    alias of `--lvib-hess-step`.
+
+*--lvib-sccacc* 'VALUE'::
+    SCC accuracy of the displaced single points of the numerical Hessian
+    (default 0.3).
+
+*--lvib-restart* 'MODE'::
+    wavefunction restart policy of the engine, `off` (default), `pin` or `warm`.
+    The finite difference sequence resets the wavefunction to the state it entered
+    the Hessian with before every displacement, so `warm` and `pin` hand the
+    provider the same start and produce a byte identical `hessian` file; only
+    `off` is distinguishable.
+
+*--lvib-odlr*::
+    request the ODLR approximation. Not implemented: the run reports the request
+    and the dense provider refuses it - the Hessian is always built in full.
+
+*--lvib-no-project*::
+    do not project the translations and rotations out of the Hessian.
+
+*--lvib-temp* 'VALUE'::
+    temperature of the thermodynamic table in K (default 298.15). An explicit
+    value overrides the xcontrol `$thermo temp` key, which overrides the builtin
+    default.
+
+*--lvib-rotor-cutoff* 'VALUE'::
+    rotor cutoff of the quasi-RRHO entropy treatment in `cm^-1` (default 50.0;
+    the xcontrol `$thermo sthr` key).
+
+*--lvib-imag-cutoff* 'VALUE'::
+    imaginary frequency cutoff in `cm^-1` (default -20.0; the minus sign is
+    required). The value sets both the mode counting and, together with the
+    xcontrol `$thermo imagthr` key, the partition function of the thermochemistry.
+
+*--lvib-freq-scal* 'VALUE'::
+    frequency scaling factor of the thermochemistry (default 1.0; the xcontrol
+    `$thermo scale` key).
 
 GENERAL
 ~~~~~~~

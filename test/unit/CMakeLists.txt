@@ -3779,6 +3779,24 @@ add_test("xtb/landscape-help-coverage"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-help-coverage
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The man page must not drift away from the implementation.  The repository has
+# no rendering tool chain (no asciidoctor/a2x/pandoc/groff/man), so
+# `landscape_man_check.py` replaces the missing renderer with a structural
+# validation of `man/xtb.1.adoc` and a coverage gate: every implemented suite
+# spelling has to occur as a `*--flag*::` **entry** (prose mentions do not
+# count), the man page must promise no flag the parser does not implement, every
+# entry needs a description, every section underline has to match its title and
+# no suite flag may appear in two entries.  The spelling rules are imported
+# from `landscape_help_check.py`, so the two gates cannot drift apart.  The test
+# reads the sources, so it has no environment and no engine dependency.
+add_test("xtb/landscape-man-coverage"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/landscape_man_check.py
+  "-DARGS=${PROJECT_SOURCE_DIR}/src/prog/main.F90;${PROJECT_SOURCE_DIR}/src/xhelp.f90;${PROJECT_SOURCE_DIR}/man/xtb.1.adoc;${CMAKE_CURRENT_BINARY_DIR}/landscape-man-coverage"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-man-coverage
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # The dangerous builtin defaults are echoed as a `[NOTICE]` line, and the
 # explicit flag silences the notice (CLI redesign sections 8.3 and 17.3).
 # `landscape_cli_check.py` mode `echo` runs both routes of a case and asserts

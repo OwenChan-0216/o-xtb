@@ -377,7 +377,8 @@ subroutine help(iunit)
    "--lopt-hessian SOURCE",&
    "    Hessian backend of the landscape suite (minimisation and Hessian", &
    "    based steps), one of numerical (default, central differences of the", &
-   "    electronic gradient) or model (Lindh-D2 model Hessian)",&
+   "    electronic gradient), model (Lindh-D2 model Hessian) or file (read the", &
+   "    Hessian written by an earlier run, named by --lopt-hessian-file)",&
    "",&
    "--lopt-max-steps N",&
    "    step budget of the minimisation; the default is derived from the",&

@@ -518,6 +518,18 @@ test('landscape help coverage', python, args: [
   meson.project_source_root() / 'src' / 'xhelp.f90',
   landscape_cli_dir / 'landscape-help-coverage',
 ])
+# the man page must not drift away from the implementation (mirrors
+# `xtb/landscape-man-coverage`): coverage in both directions plus a structural
+# validation, because no rendering tool chain exists to check the page
+# (the spelling rules are imported from `landscape_help_check.py`)
+landscape_man_check = files('landscape_man_check.py')
+test('landscape man coverage', python, args: [
+  landscape_man_check,
+  meson.project_source_root() / 'src' / 'prog' / 'main.F90',
+  meson.project_source_root() / 'src' / 'xhelp.f90',
+  meson.project_source_root() / 'man' / 'xtb.1.adoc',
+  landscape_cli_dir / 'landscape-man-coverage',
+])
 # the CLI `--etemp` must reach the transition state engine (the `main.F90`
 # sync guard of M4 hard constraint 1; mirrors `xtb/landscape-ts-etemp`)
 test('landscape ts etemp', python, env: landscape_env, args: [
