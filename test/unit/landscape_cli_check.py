@@ -1680,20 +1680,25 @@ def check_irc(exe, inp, rundir):
     # one method outside the basin (eulerpc, 8.0e-4 Eh)
     check_basin("forward", fwd, -5.47225988, -5.47205988)
     check_basin("backward", bwd, -5.50416622, -5.50396622)
-    for pattern in [r"forward arc length: +4[.]051234",
-                    r"backward arc length: +3[.]695670",
-                    r"mean energy/gradient evaluations per point: +16[.]9",
-                    r"mean energy/gradient evaluations per point: +20[.]2",
+    for pattern in [r"forward arc length: +3[.]949160",
+                    r"backward arc length: +3[.]538733",
+                    r"mean energy/gradient evaluations per point: +1[.]88",
+                    r"mean energy/gradient evaluations per point: +2[.]14",
                     r"endpoint rmsd criterion: rmsd <= rmsd_end = 0[.]18897000"]:
         if not re.search(pattern, log):
             fail("missing %r in irc.log" % pattern, log)
-    # the GS defect is demonstrated, not only described
+    # the equality constrained Lagrange step of the sphere relaxation (report
+    # 64) has to show up as **zero** pinned points on both paths.  Before the
+    # fix 33 of 42 forward and 38 of 40 backward points were pinned and the
+    # check asserted `>= 1` on purpose; the golden arc lengths and E/g of the
+    # loop above were updated with the same fix (4.051234 -> 3.949160,
+    # 3.695670 -> 3.538733, 16.9/20.2 -> 1.88/2.14 E/g).
     match = re.search(r"pinned at the micro cycle budget: forward ([0-9]+) of", log)
-    if not match or int(match.group(1)) < 1:
-        fail("the GS sphere relaxation is no longer pinned on the forward path", log)
+    if not match or int(match.group(1)) != 0:
+        fail("the GS forward sphere relaxation is pinned again", log)
     match = re.search(r"backward ([0-9]+) of [0-9]+ points", log)
-    if not match or int(match.group(1)) < 1:
-        fail("the GS sphere relaxation is no longer pinned on the backward path", log)
+    if not match or int(match.group(1)) != 0:
+        fail("the GS backward sphere relaxation is pinned again", log)
     with open(os.path.join(rundir, "irc1.irc_forward.xyz")) as handle:
         first = handle.read()
     status, output = run(exe, ts, irc_args, rundir)

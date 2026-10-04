@@ -892,8 +892,10 @@ module xtb_landscape_settings
    !> (M6 validation round, report 44): the **default method is now `hpc`**.
    !> Measured on identical input the predictor-corrector is both **more
    !> accurate** (maximum deviation from the analytic Mueller-Brown minimum
-   !> energy path 0.0022 bohr versus 0.040 bohr for Gonzalez-Schlegel) and
-   !> **cheaper** (1.98 E/g per point versus 16.9/20.3).  `gs` is retained as
+   !> energy path 0.0022 bohr versus 0.0192/0.0344 bohr for Gonzalez-Schlegel)
+   !> and, since the equality constrained Lagrange step of the GS sphere
+   !> relaxation, **comparable in cost** (1.98 E/g per point versus 1.9-2.1;
+   !> the GS cost used to be 16.9/20.3).  `gs` is retained as
    !> the compatible/reference implementation and as the fallback of a failed
    !> predictor-corrector correction, `lqa` as the cheapest (1.00 E/g)
    !> reference; the GS cost is documented in its module header and in PLAN

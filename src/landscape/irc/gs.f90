@@ -31,12 +31,17 @@
 !>     the pivot passes exactly through `q_k`.
 !>  2. **constrained optimisation on the sphere.**  The next point is the
 !>     minimum of the energy on that sphere, found with micro cycles.  Each
-!>     micro step is a curvature shifted Newton step in the tangent space of
-!>     the sphere (the projected Hessian `P H P`, `P = I - e_r e_r^T`), with
-!>     the negative curvatures floored so the step stays a descent step; the
-!>     trial point is projected back onto the sphere after every step.  The
-!>     micro cycle converges when the step norm falls below
-!>     `micro_step_thresh`, or is stopped after `max_micro_cycles`.
+!>     micro step is the Newton step of the equality constrained problem
+!>     `min E(q)` subject to `|q - pivot|^2 = R^2` (`R = s/2`), i.e. the
+!>     solution of the linearised KKT system with the multiplier estimated at
+!>     the current point and the reduced Hessian level shifted to be positive
+!>     definite (see `landscape_irc_gs_lagrange_step`); the step is therefore
+!>     a descent direction on the sphere and the linearised constraint is
+!>     satisfied exactly.  The trial point is projected back onto the sphere
+!>     after every step, which only removes the second order drift `O(d^2/R)`
+!>     of the linearisation.  The micro cycle converges when the step norm
+!>     falls below `micro_step_thresh`, or is stopped after
+!>     `max_micro_cycles`.
 !>
 !> The first step leaves the transition state along the **transition vector**
 !> (`+/- v`, the mass weighted imaginary mode with the M4 phase convention),
@@ -57,47 +62,61 @@
 !> over `e_rise_steps` consecutive points.
 !>
 !> -------------------------------------------------------------------
-!> Cost of the sphere relaxation (measured, M6 validation report 44)
+!> Sphere relaxation (measured; the Lagrange step of report 64)
 !> -------------------------------------------------------------------
-!> The inner sphere relaxation is **the most expensive integrator of the
-!> suite and the least accurate one**, and `gs` is therefore **not the default
-!> method** any more (the default is `hpc`, M6 behaviour change recorded in
-!> PLAN section 12.15).  All four facts below are measured, not conjectured:
+!> `gs` is **not the default method** (the default is `hpc`, M6 behaviour
+!> change recorded in PLAN section 12.15).  It used to be both the most
+!> expensive and the least accurate integrator of the suite: the micro cycle
+!> was driven by a *clamped tangent space* Newton step and therefore never met
+!> its own convergence criterion.  The facts below are measured, not
+!> conjectured; rows 1 and 2 are the **before/after** pair of the equality
+!> constrained Lagrange step (report 64; the acceptance route is the PLAN
+!> section 6.5 GS open item).
 !>
-!>  1. **Cost.**  A GFN2 HCN/HNC run at step 0.10 costs **16.9 E/g per point
-!>     forward and 20.3 backward** (PLAN section 6.5 expected 3-5).  HPC needs
-!>     1.98, LQA 1.00: GS is 8.5 times more expensive than the default.
+!>  1. **Cost.**  A GFN2 HCN/HNC run at step 0.10 costs **1.88 E/g per point
+!>     forward and 2.14 backward** (before: 16.93 / 20.25, and the PLAN
+!>     section 6.5 estimate was 3-5).  HPC needs 1.98, LQA 1.00, so GS is now
+!>     in the same class as the predictor-corrector; the reduction is 9.0x
+!>     forward / 9.5x backward and comes from the micro cycle reaching its
+!>     criterion in one to three evaluations instead of exhausting
+!>     `max_micro_cycles` (measured `n_pinned`: 0 of 40 forward and 0 of 36
+!>     backward; before 33 of 42 / 38 of 40, printed in `irc.log`).
 !>  2. **Accuracy.**  On the analytic Mueller-Brown surface the maximum
-!>     deviation from the fine reference path is **0.040 bohr**, against
-!>     0.0066 (LQA), 0.0022 (HPC) and 0.026 (EulerPC) - the largest of the
-!>     four methods.  On GFN2 the endpoint error is non-monotonic in the step
-!>     length (5.1e-5 at 0.05, 2.4e-5 at 0.10, 8e-9 at 0.20 bohr*amu^1/2).
-!>  3. **Root cause.**  The micro cycle accepts a point when the tangent
-!>     Newton step falls below `micro_step_thresh` (1e-3), but the measured
-!>     Newton step is **1.8-2.4 bohr*amu^1/2**, i.e. 36-48 times the sphere
-!>     radius `step_length/2` (0.05); the trust region of `sphere_newton`
-!>     therefore clamps every micro step and the criterion is never met.  The
-!>     cycle ends in a **two cycle** (measured this round with an independent
-!>     spherical reference: the returned point is 3.4e-4 hartree above the
-!>     constrained minimum and the alternating point 1.3e-3 hartree, with
-!>     **identical values at micro cycle budgets 5, 20, 21 and 200**, so the
-!>     deviation is structural and not a budget question).  On a GFN2 path 33
-!>     of 42 forward and 38 of 40 backward points are stopped by
-!>     `max_micro_cycles` instead of the criterion (counted in
-!>     `landscape_irc_path%n_pinned`, printed in `irc.log`); the points of the
-!>     final approach to the minimum do converge, in two evaluations.  The
-!>     trust region is nevertheless required: removing it breaks the forward
-!>     path (measured: 25.27 instead of 4.05 bohr*amu^1/2, stopped by the step
-!>     budget, `noclamp` injection of `46-m6-fix-report.md`).
-!>  4. **Planned fix (open item, not implemented).**  Replace the clamped
-!>     tangent step by a properly constrained step - the equality constrained
-!>     Lagrange step of the MAPLE reference, whose Newton step lies on the
-!>     sphere by construction - and expect **3-4 times fewer evaluations**
-!>     (report 44 section 7.2).  PLAN section 6.5 lists this as an open item
-!>     with its acceptance route; it was deliberately **not** done in the M6
-!>     final round, because the GS behaviour baseline of report 42 had just
-!>     been verified bitwise and an algorithmic change on top of it could not
-!>     have been distinguished from a regression.
+!>     deviation from the fine reference path is **0.0192 bohr forward /
+!>     0.0344 backward** (before 0.040; HPC 0.0022, LQA 0.0066, EulerPC
+!>     0.026), and the returned point of the `gs-sphere-relaxation-quality`
+!>     unit case is **8.5e-14 hartree** above the independently computed
+!>     constrained minimum of the sphere (before 3.4e-4 / 1.3e-3 hartree,
+!>     alternating with the parity of the micro cycle budget), the micro steps
+!>     shrinking by an order of magnitude per cycle (measured 1.59e-2,
+!>     1.3e-3, 1.1e-5 bohr*amu^1/2).  The GFN2 HCN/HNC endpoints stay inside
+!>     their 1e-4 Eh basin windows (forward -5.4721229, backward -5.5040662 =
+!>     the HNC/HCN minima) while the forward path now terminates one macro
+!>     step earlier by the gradient criterion, so the reported forward arc
+!>     length is 3.949160 instead of 4.051234 (backward 3.538733 instead of
+!>     3.695670): the same path, one point shorter.
+!>  3. **Root cause (fixed).**  The old micro step solved the projected Newton
+!>     system `(P H P) d = -P g` with the negative curvatures floored
+!>     *individually*, and clamped the result to the sphere radius.  The
+!>     measured step was **1.8-2.4 bohr*amu^1/2**, 36-48 times the radius, so
+!>     every micro step was clamped, the direction was no longer the
+!>     constrained descent direction, the criterion `|d| <=
+!>     micro_step_thresh` was never met and the cycle ended in a two cycle
+!>     (measured: the accepted point alternated with the parity of the micro
+!>     cycle budget at 3.4e-4 / 1.3e-3 hartree above the sphere minimum,
+!>     identically at budgets 5, 20, 21 and 200).
+!>  4. **The fix.**  The step is now the Newton step of the **equality
+!>     constrained** problem (multiplier from the current KKT residual, reduced
+!>     Hessian level shifted to positive definite), which is a descent
+!>     direction on the sphere with an exactly satisfied linearised
+!>     constraint; two rows of the KKT system are verified to 1e-16 by the
+!>     `gs-kkt-system` unit case, including deliberately off-sphere points.
+!>     The trust region is **kept**: it is inert on every validated path, but
+!>     it is what bounds the level shift branch, where the smallest tangent
+!>     curvature is shifted to the floor and the step would otherwise be
+!>     unbounded.  The old `noclamp` injection (25.27 instead of 4.05 bohr*amu^1/2, `46-m6-fix-report.md`) clamped the
+!>     *wrong* direction, so it does not carry over as evidence about the new
+!>     one.
 !>
 !> Units: mass weighted coordinates and arc lengths in `bohr*amu^1/2`,
 !> Cartesian geometries in bohr, energies in hartree, gradients in
@@ -120,8 +139,9 @@ module xtb_landscape_irc_gs
    private
 
    public :: landscape_irc_gs_walk, landscape_irc_gs_step
+   public :: landscape_irc_gs_lagrange_step
 
-   !> Relative floor of the curvature shift of the tangent space Newton step
+   !> Relative floor of the reduced Hessian level shift of the KKT step
    real(wp), parameter :: tangent_curvature_floor = 1.0e-10_wp
    !> Guard below which the gradient is considered vanishing (hartree/bohr);
    !> the descent direction is undefined there (the same guard as `lqa`, `hpc`
@@ -319,6 +339,7 @@ subroutine landscape_irc_gs_step(env, model, settings, sqrt_mass, q_cur, g_cur, 
    logical, intent(out) :: fail
 
    real(wp), allocatable :: pivot(:), q_ref(:), g_ref(:), d(:), g_cart(:)
+   real(wp) :: dlambda, kkt_shift
    integer :: imicro, ndim
    logical :: moved, s_fail, ok
 
@@ -358,7 +379,8 @@ subroutine landscape_irc_gs_step(env, model, settings, sqrt_mass, q_cur, g_cur, 
       q_ref = q_new
       g_ref = g_new
 
-      call sphere_newton(env, q_new, pivot, 0.5_wp*step, hq, g_new, d, s_fail)
+      call landscape_irc_gs_lagrange_step(env, q_new, pivot, 0.5_wp*step, hq, &
+         & g_new, d, dlambda, kkt_shift, s_fail)
       if (s_fail) then
          fail = .true.
          return
@@ -429,18 +451,63 @@ subroutine rebuild_hessian(env, model, sqrt_mass, x, hq, fail)
 
 end subroutine rebuild_hessian
 
-!> Curvature shifted Newton step in the tangent space of the IRC sphere.
+!> Newton step of the equality constrained sphere relaxation (KKT step).
 !>
-!> The tangent space of the sphere `|q - pivot| = R` at `q` is spanned by the
-!> two directions orthogonal to the radial unit vector `e_r`.  The step solves
-!> the projected Newton system `(P H P) d = -P g` with the negative (and the
-!> numerically vanishing) tangent curvatures floored at a positive shift, so
-!> that the step is a descent step even when the Hessian is indefinite.
-!> `P H P` is diagonalised (`mctc_syev`, eigenvalues ascending) and the radial
-!> eigenvector (the one with the largest overlap with `e_r`, eigenvalue 0 by
-!> construction) is dropped from the sum.
-subroutine sphere_newton(env, q, pivot, radius, hess, grad, d, fail)
-   character(len=*), parameter :: source = 'landscape_irc_gs_sphere_newton'
+!> The micro step advances the point `q` towards the minimum of the energy on
+!> the sphere `|q - pivot| = R` by one Newton step of the equality constrained
+!> problem
+!>
+!>     min E(q)   subject to   c(q) = -(|r|^2 - R^2) = 0,   r = q - pivot,
+!>
+!> i.e. the solution `(d, dlambda)` of the linearised KKT system of the
+!> Lagrangian `L = E + lambda (|r|^2 - R^2)`,
+!>
+!>     [ H + 2 lambda I    2 r ] [ d  ]   [ -( g + 2 lambda r ) ]
+!>     [ 2 r^T             0   ] [ dL ] = [ -( |r|^2 - R^2 )    ] .
+!>
+!> **Choice of the multiplier.**  `2 lambda = -( r^T g )/|r|^2` is the
+!> multiplier of the current KKT residual: it is the value that makes the
+!> residual `g + 2 lambda r` orthogonal to `r`, and it is the exact multiplier
+!> of a constrained stationary point.  Using it (instead of a one dimensional
+!> secant search for the constraint, whose residual is zero here by
+!> construction, see below) is what makes the step a Newton step: it annihilates
+!> the radial residual, so only the tangential residual `P g` is left to drive
+!> the iteration, and the fixed point `d = 0` is exactly the tangent
+!> stationarity `P g = 0` of the constrained minimum.
+!>
+!> **Level shift.**  The constrained Hessian is the *reduced* Hessian
+!> `P (H + 2 lambda I) P` (`P = I - e_r e_r^T`), which may be indefinite.  When
+!> its smallest tangent eigenvalue plus `2 lambda` is not positive, the step
+!> from that multiplier would not be a descent direction, so `2 lambda` is
+!> raised to the level shift `-eval_min + floor` that makes the reduced Hessian
+!> positive definite (classical modified Newton / level shift of constrained
+!> optimisation).  `floor` is `tangent_curvature_floor` relative to the largest
+!> curvature.  `kkt_shift = 2 lambda` is returned so that a test can rebuild
+!> the system.
+!>
+!> **Solution.**  Decompose `d = d_t + alpha e_r` with `d_t` tangential.  The
+!> constraint row gives `alpha` directly, `2 |r| alpha = -(|r|^2 - R^2)` (zero
+!> for a point on the sphere, and the only reason the routine has to be exact
+!> off it); the tangential part of the first row is
+!> `(P H P + 2 lambda P) d_t = -P g - alpha P H e_r`.  `P H P` is
+!> diagonalised (`mctc_syev`, ascending) and the radial eigenvector (the one
+!> with the largest overlap with `e_r`, eigenvalue 0 by construction) is dropped
+!> from the sum.  `dlambda` follows from the radial part of the first row,
+!> `dlambda = [ -(r^T g + 2 lambda |r|^2) - r^T (H + 2 lambda I) d ] / (2 |r|^2)`.
+!>
+!> **Trust region.**  The step is clamped to the sphere radius.  With the
+!> correct (descent) direction the clamp is **inert** on every validated path
+!> (measured on the GFN2 HCN/HNC and the Mueller-Brown baselines), but it is
+!> retained as the guard against a nearly singular reduced Hessian, where
+!> `2 lambda` is only the small floor and the step reverts to a huge
+!> `-(P g)/(2 lambda)`.  Note that the historical evidence for the clamp -
+!> "without it the forward path breaks down (25.27 instead of 4.05
+!> bohr*amu^1/2)" - was measured on the *clamped tangent* step it replaced; a
+!> clamped step is still tangential and the trial point is still projected onto
+!> the sphere, so the constraint itself never depended on it.
+subroutine landscape_irc_gs_lagrange_step(env, q, pivot, radius, hess, grad, &
+      & d, dlambda, kkt_shift, fail)
+   character(len=*), parameter :: source = 'landscape_irc_gs_lagrange_step'
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
    !> Current point on the sphere (bohr*amu^1/2)
@@ -453,22 +520,36 @@ subroutine sphere_newton(env, q, pivot, radius, hess, grad, d, fail)
    real(wp), intent(in) :: hess(:, :)
    !> Mass weighted gradient at `q` (hartree/(bohr*amu^1/2))
    real(wp), intent(in) :: grad(:)
-   !> Tangent step (bohr*amu^1/2)
+   !> KKT Newton step (bohr*amu^1/2); its tangential part is the descent step
    real(wp), intent(out) :: d(:)
+   !> Multiplier increment `dlambda` of the KKT system
+   real(wp), intent(out) :: dlambda
+   !> Level shift used, `kkt_shift = 2 lambda`
+   real(wp), intent(out) :: kkt_shift
    !> Failure flag (the eigensolve failed)
    logical, intent(out) :: fail
 
    real(wp), allocatable :: er(:), he(:), proj(:, :), gt(:), evals(:), overlap(:)
-   real(wp) :: rr, c, shift, denom, nd
+   real(wp) :: rr, r2, rc, alpha, c, shift, denom, nd, lam_res, deficit, gfloor
+   real(wp) :: r(size(q))
+   real(wp) :: hd(size(grad))
    integer :: i, j, n, irad, nlog
 
    fail = .false.
    d = 0.0_wp
+   dlambda = 0.0_wp
+   kkt_shift = 0.0_wp
    n = size(q)
-   rr = vec_norm(q - pivot)
+   r = q - pivot
+   r2 = dot_product(r, r)
+   rr = sqrt(r2)
    if (rr <= tiny(1.0_wp)) return
    allocate(er(n), he(n), gt(n))
-   er = (q - pivot)/rr
+   er = r/rr
+   ! radial part of the step from the linearised constraint row, and the
+   ! tangential residual of the KKT system
+   rc = r2 - radius*radius
+   alpha = -0.5_wp*rc/rr
    gt = grad - dot_product(grad, er)*er
 
    he = matmul(hess, er)
@@ -497,36 +578,46 @@ subroutine sphere_newton(env, q, pivot, radius, hess, grad, d, fail)
    end do
    irad = maxloc(overlap, dim=1)
 
-   ! curvature shift: floor every tangent curvature at a small positive value
-   shift = 0.0_wp
-   do i = 1, n
-      if (i == irad) cycle
-      shift = max(shift, -evals(i))
-   end do
-   shift = shift + max(tangent_curvature_floor, &
+   ! multiplier of the current KKT residual, and the level shift that makes the
+   ! reduced Hessian positive definite
+   gfloor = max(tangent_curvature_floor, &
       & tangent_curvature_floor*max(1.0_wp, maxval(abs(evals))))
+   lam_res = -0.5_wp*dot_product(r, grad)/r2
+   shift = 2.0_wp*lam_res
+   deficit = 0.0_wp
+   if (n > 1) then
+      deficit = huge(1.0_wp)
+      do i = 1, n
+         if (i == irad) cycle
+         deficit = min(deficit, -evals(i) + gfloor)
+      end do
+   end if
+   if (shift < deficit) shift = deficit
+   kkt_shift = shift
 
-   ! accumulate the Newton step over the tangent eigenvectors
+   ! tangential part: (P H P + 2 lambda P) d_t = -P g - alpha P H e_r
+   gt = -gt - alpha*(he - c*er)
    do i = 1, n
       if (i == irad) cycle
-      denom = max(evals(i), shift)
-      d = d - proj(:, i)*(dot_product(proj(:, i), gt)/denom)
+      denom = evals(i) + shift
+      if (denom <= 0.0_wp) denom = gfloor
+      d = d + proj(:, i)*(dot_product(proj(:, i), gt)/denom)
    end do
-   ! Trust region of the micro step: the tangent step is limited to the sphere
-   ! radius.  **Measured on the GFN2 HCN/HNC transition state** (this round, the
-   ! injection experiment of `46-m6-fix-report.md`): without the limit the GS
-   ! forward path breaks down - it wanders 25.27 bohr*amu^1/2 (256 macro steps,
-   ! stopped by the budget) instead of reaching the HNC minimum after 4.05,
-   ! because the unconstrained step (1.8-2.4) is projected to the far side of
-   ! the sphere.  With the limit the path is correct.  The limit does **not**
-   ! make the micro cycle converge: it still ends in a two cycle whose two
-   ! points are 3.4e-4 / 1.3e-3 hartree above the constrained minimum (the same
-   ! values at micro cycle budgets 5, 20, 21 and 200), which is the cost
-   ! documented in the module header.
+   d = d + alpha*er
+
+   ! multiplier increment from the radial row of the KKT system
+   hd = matmul(hess, d) + shift*d
+   dlambda = (-(dot_product(r, grad) + shift*r2) - dot_product(r, hd))/ &
+      & (2.0_wp*r2)
+
+   ! Trust region of the micro step: the step is limited to the sphere radius.
+   ! Inert with the constrained (descent) step of this routine - it only
+   ! triggers for a nearly singular reduced Hessian, where the level shift is
+   ! the tiny floor and the step would otherwise diverge.
    nd = vec_norm(d)
    if (nd > radius .and. nd > tiny(1.0_wp)) d = d*(radius/nd)
 
-end subroutine sphere_newton
+end subroutine landscape_irc_gs_lagrange_step
 
 !> Project a point back onto the sphere about `pivot`.
 pure function project_sphere(q, pivot, radius) result(qp)

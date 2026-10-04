@@ -180,9 +180,10 @@ module xtb_landscape_results
       integer :: n_relax_bwd = 0
       !> Number of forward points whose Gonzalez-Schlegel sphere relaxation was
       !> stopped by the micro cycle budget instead of its own convergence
-      !> criterion.  Measured: on a GFN2 path this is every GS point (16.9 /
-      !> 20.3 E/g per point instead of the 3-5 of PLAN section 6.5); the
-      !> predictor-corrector methods report 0
+      !> criterion.  Measured: 0 on the GFN2 path since the equality constrained
+      !> Lagrange step of the sphere relaxation (it was every GS point before,
+      !> at 16.9/20.3 E/g per point); the predictor-corrector methods report 0
+      !> as well
       integer :: n_pinned_fwd = 0
       !> Number of backward points whose sphere relaxation was pinned
       integer :: n_pinned_bwd = 0

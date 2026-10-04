@@ -1948,33 +1948,43 @@ function(check_basin label value lower upper)
 endfunction()
 check_basin("forward" E_FWD "-5.47225988" "-5.47205988")
 check_basin("backward" E_BWD "-5.50416622" "-5.50396622")
-if(NOT irclog MATCHES "forward arc length: +4[.]051234")
-  message(FATAL_ERROR "the GS forward arc length is no longer 4.051234\n${irclog}")
+if(NOT irclog MATCHES "forward arc length: +3[.]949160")
+  message(FATAL_ERROR "the GS forward arc length is no longer 3.949160\n${irclog}")
 endif()
-if(NOT irclog MATCHES "backward arc length: +3[.]695670")
-  message(FATAL_ERROR "the GS backward arc length is no longer 3.695670\n${irclog}")
+if(NOT irclog MATCHES "backward arc length: +3[.]538733")
+  message(FATAL_ERROR "the GS backward arc length is no longer 3.538733\n${irclog}")
 endif()
-if(NOT irclog MATCHES "mean energy/gradient evaluations per point: +16[.]9")
-  message(FATAL_ERROR "the GS forward E/g is no longer 16.9\n${irclog}")
+# The two arc lengths and the two E/g values below were updated together with
+# the equality constrained Lagrange step of the sphere relaxation (report 64):
+# the micro cycle now converges, which ends the forward path one macro step
+# earlier (40 points instead of 42, the gradient criterion fires at the same
+# place) and removes the pinned evaluations.  The old values were 4.051234 /
+# 3.695670 and 16.9 / 20.2 E/g; the endpoints stayed inside their basin
+# windows (forward -5.472122944, 1.3e-5 from the HNC minimum; backward
+# -5.504066224, the HCN minimum itself), so the paths are the same ones.
+if(NOT irclog MATCHES "mean energy/gradient evaluations per point: +1[.]88")
+  message(FATAL_ERROR "the GS forward E/g is no longer 1.88\n${irclog}")
 endif()
-if(NOT irclog MATCHES "mean energy/gradient evaluations per point: +20[.]2")
-  message(FATAL_ERROR "the GS backward E/g is no longer 20.2\n${irclog}")
+if(NOT irclog MATCHES "mean energy/gradient evaluations per point: +2[.]14")
+  message(FATAL_ERROR "the GS backward E/g is no longer 2.14\n${irclog}")
 endif()
-# the GS defect is demonstrated, not only described: the sphere relaxation is
-# pinned at the micro cycle budget on the forward **and** the backward path
+# The fix is demonstrated, not only described: **no** point of the GS sphere
+# relaxation may be pinned at the micro cycle budget any more.  Before the fix
+# 33 of 42 forward and 38 of 40 backward points were pinned (the old check
+# asserted `>= 1` here on purpose); this is the flipped negative control.
 if(NOT irclog MATCHES "pinned at the micro cycle budget: forward ([0-9]+) of")
   message(FATAL_ERROR "irc.log does not report the pinned micro cycles\n${irclog}")
 endif()
 set(PINNED_FWD "${CMAKE_MATCH_1}")
-if(PINNED_FWD LESS 1)
-  message(FATAL_ERROR "the GS forward sphere relaxation is no longer pinned (${PINNED_FWD} of the points); the recorded cost of GS has to be updated")
+if(NOT PINNED_FWD EQUAL 0)
+  message(FATAL_ERROR "the GS forward sphere relaxation is pinned again (${PINNED_FWD} of the points)")
 endif()
 if(NOT irclog MATCHES "backward ([0-9]+) of [0-9]+ points")
   message(FATAL_ERROR "irc.log does not report the pinned backward micro cycles\n${irclog}")
 endif()
 set(PINNED_BWD "${CMAKE_MATCH_1}")
-if(PINNED_BWD LESS 1)
-  message(FATAL_ERROR "the GS backward sphere relaxation is no longer pinned (${PINNED_BWD})")
+if(NOT PINNED_BWD EQUAL 0)
+  message(FATAL_ERROR "the GS backward sphere relaxation is pinned again (${PINNED_BWD})")
 endif()
 # determinism: the same input twice has to give a bitwise identical forward path
 file(READ "${RUNDIR}/irc1.irc_forward.xyz" first_run)
@@ -2376,8 +2386,8 @@ foreach(method "hpc" "eulerpc")
     message(FATAL_ERROR "${method}: the log reports no mean E/g\n${log}")
   endif()
   # the predictor-corrector costs a small integer number of E/g per point; the
-  # upper bound guards against a regression towards the 16.9-20.3 of the GS
-  # micro-cycle relaxer
+  # upper bound guards against a regression towards the 16.9-20.3 the GS
+  # micro-cycle relaxer cost before its Lagrange step
   if(mean_ev GREATER 6.0)
     message(FATAL_ERROR "${method}: the mean E/g per point is ${mean_ev}, far above the predictor-corrector level\n${log}")
   endif()

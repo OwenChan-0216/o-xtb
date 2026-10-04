@@ -687,7 +687,7 @@ subroutine help(iunit)
    "    most accurate and 1.98 E/g per point), lqa (Page-McIver analytic quadratic", &
    "    propagation, cheapest at 1.00 E/g), eulerpc (Euler predictor-corrector, use a", &
    "    step of 0.20 or less) or gs (Gonzalez-Schlegel sphere relaxation, compatible", &
-   "    reference; 16.9-20.3 E/g per point and the largest path deviation).", &
+   "    reference; 1.9-2.1 E/g per point and the largest path deviation).", &
    "    Alias of --method.  The method name is not case-sensitive", &
    "",&
    "--lirc-step VALUE",&
