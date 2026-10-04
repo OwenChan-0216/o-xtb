@@ -1,6 +1,0 @@
-# Injection B: 'result%message = auto%message' removed from the cap branch of
-# landscape_ts_band; the suite has to turn red.
-CMake Error at landscape_cli_autoneb_cap.cmake:19 (message):
-  the cap did not reach the result message
-   landscape task terminated: converged
-0% tests passed, 1 tests failed out of 1

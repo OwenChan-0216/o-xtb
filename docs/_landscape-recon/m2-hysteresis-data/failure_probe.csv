@@ -1,8 +1,0 @@
-# deliberately failing scan points (mechanism of a point with no value)
-case,target_or_point,energy_Eh,residual,steps,converged,run_exit
-huge_distance_step5A,1,-5.070544208690,1.0234E-05,5,T,1
-huge_distance_step5A,2,0.000000000000,5.4806E+00,18,F,1
-huge_distance_step5A,3,0.000000000000,0.0000E+00,29,T,1
-negative_distance_target,1,-5.070544208690,1.0234E-05,5,T,0
-negative_distance_target,2,-4.990609646452,5.5110E-05,10,T,0
-negative_distance_target,3,-4.827374525858,6.5582E-05,14,T,0

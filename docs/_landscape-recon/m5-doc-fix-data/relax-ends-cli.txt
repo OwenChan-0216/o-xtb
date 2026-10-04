@@ -1,7 +1,0 @@
-# --lts-relax-ends on the NH3 inversion (the assertion added in this round)
- band: endpoint relaxation (reactant) before: E      -4.426199541332 Eh, |g|  3.82012E-03
- band: endpoint relaxation (reactant) after:  E      -4.426244036780 Eh, |g|  1.13954E-05
- band: endpoint relaxation (product) before: E      -4.426199541332 Eh, |g|  3.82013E-03
- band: endpoint relaxation (product) after:  E      -4.426244036780 Eh, |g|  1.14059E-05
- landscape: converged
- saddle confirmation - imaginary modes: 1

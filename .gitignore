@@ -75,3 +75,7 @@ ext/
 
 # agent session notes (local only)
 AGENTS.md
+
+# Development and review material (reconnaissance, plans, per-stage reports,
+# validation evidence).  Kept on disk for review, deliberately not versioned.
+docs/

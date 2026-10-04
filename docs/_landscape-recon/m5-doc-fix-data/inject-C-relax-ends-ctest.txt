@@ -1,9 +1,0 @@
-# Injection C: relax_one_endpoint unpacks x0 instead of xfinal, so the M1
-# minimiser result is dropped (a no-op relaxation).  The new before/after
-# comparison of --lts-relax-ends has to turn red.
-CMake Error at landscape_cli_path.cmake:115 (message):
-  the reactant relaxation did not lower the gradient norm: 3.82012E-03 ->
-  3.82012E-03
-   band: endpoint relaxation (reactant) before: E      -4.426199541332 Eh, |g|  3.82012E-03
-   band: endpoint relaxation (reactant) after:  E      -4.426199541332 Eh, |g|  3.82012E-03
-0% tests passed, 1 tests failed out of 1
