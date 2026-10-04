@@ -829,3 +829,60 @@ test('landscape e2e maple', python, env: landscape_env, args: [
   landscape_e2e_check, 'maple', xtb_exe, hcn_xyz,
   landscape_cli_dir / 'landscape-e2e-maple',
 ])
+
+# ---------------------------------------------------------------------------
+# CLI redesign stage 3: `--opt`/`--ohess` are executed by the landscape suite
+# ---------------------------------------------------------------------------
+#
+# Mirrors the `xtb/landscape-opt-*` and `xtb/landscape-ohess-*` registrations
+# of the CMake build one to one; every assertion uses a token of the *other*
+# path, so "the wrong path ran" and "both paths ran" are both failures
+# (`docs/_simplify-recon/42-stage3a-impl.md`).
+test('landscape opt alias once', python, env: landscape_env, args: [
+  landscape_cli_check, 'optalias', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-opt-alias-once',
+])
+test('landscape opt native exit', python, env: landscape_env, args: [
+  landscape_cli_check, 'optnative', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-opt-native-exit',
+])
+test('landscape opt scanblock', python, env: landscape_env, args: [
+  landscape_cli_check, 'optguard', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-opt-scanblock', 'scanblock',
+])
+# the periodic guard uses the same fixture as the `Info` smoke test above
+test('landscape opt pbc', python, env: landscape_env, args: [
+  landscape_cli_check, 'optguard', xtb_exe,
+  files('../../assets/inputs/coord/quartz.3d.coord'),
+  landscape_cli_dir / 'landscape-opt-pbc', 'pbc',
+])
+test('landscape opt xcontrol', python, env: landscape_env, args: [
+  landscape_cli_check, 'optguard', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-opt-xcontrol', 'xcontrol',
+])
+test('landscape opt xtbopt once', python, env: landscape_env, args: [
+  landscape_cli_check, 'optxtbopt', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-opt-xtbopt-once',
+])
+test('landscape ohess suite once', python, env: landscape_env, args: [
+  landscape_cli_check, 'ohesssuite', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-ohess-suite-once',
+])
+test('landscape ohess native hess', python, env: landscape_env, args: [
+  landscape_cli_check, 'ohessnative', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-ohess-native-hess',
+])
+test('landscape ohess fres bridge', python, env: landscape_env, args: [
+  landscape_cli_check, 'ohessbridge', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-ohess-fres-bridge',
+])
+# stage 3a fix round: the `--opt <LEVEL>` and `--cycles N` bridge, the F3
+# refusal and the timing label (redesign sections 3.5/3.10b)
+test('landscape opt level bridge', python, env: landscape_env, args: [
+  landscape_cli_check, 'optlevel', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-opt-level-bridge',
+])
+test('landscape cycles map', python, env: landscape_env, args: [
+  landscape_cli_check, 'cycles', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cycles-map',
+])

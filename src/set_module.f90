@@ -717,7 +717,18 @@ subroutine close_set(ictrl)
 end subroutine close_set
 
 !> Read xcontrol file
-subroutine rdcontrol(fname,env,copy_file)
+!> Read a detailed input file (`xcontrol`) into the global parameter state.
+!>
+!> `from_input` marks the **source** of the call: `.true.` (the default) for the
+!> file the caller selected - the `--input` argument or the positional file -
+!> and `.false.` for the global fallback `.xtbrc` of `src/prog/main.F90`.  The
+!> landscape suite refuses an `$opt` block of the selected input file
+!> (`set%xcontrol_supplied`, CLI redesign section 3.8(c)), but the fallback rc
+!> file is not a per-run request: the repository itself ships an `.xtbrc`
+!> containing `$opt`, and the test environment points `XTBPATH` at the
+!> repository root, so treating it as a request would fail every run of every
+!> suite test (`docs/_simplify-recon/42-stage3a-impl.md`).
+subroutine rdcontrol(fname,env,copy_file,from_input)
    
    use xtb_readin, only : find_new_name
    use xtb_splitparam,  only : maxfrag
@@ -729,6 +740,7 @@ subroutine rdcontrol(fname,env,copy_file)
    character(len=*),intent(in)  :: fname
    type(TEnvironment), intent(inout) :: env
    logical,intent(in),optional  :: copy_file
+   logical,intent(in),optional  :: from_input
    
    character(len=:),allocatable :: line
    character(len=:),allocatable :: key
@@ -743,6 +755,8 @@ subroutine rdcontrol(fname,env,copy_file)
    integer :: err
    logical :: exist
    logical :: do_copy
+   logical :: do_mark
+   logical :: lsupplied
    logical :: exitRun
 
    if (present(copy_file)) then
@@ -751,6 +765,11 @@ subroutine rdcontrol(fname,env,copy_file)
    else
       do_copy=.false.
    endif
+
+   !! `$opt` blocks mark the parameter state only when they come from the file
+   !! the caller selected; see the routine documentation.
+   do_mark = .true.
+   if (present(from_input)) do_mark = from_input
 
    call open_file(id,fname,'r')
    if (id.eq.-1) then
@@ -794,7 +813,16 @@ subroutine rdcontrol(fname,env,copy_file)
             call rdblock(env,set_ffnb,    line,id,copy,err,ncount)
          case('scc'      ); call rdblock(env,set_scc,     line,id,copy,err,ncount)
          case('oniom'    ); call rdblock(env,set_oniom,   line,id,copy,err,ncount)
-         case('opt'      ); call rdblock(env,set_opt,     line,id,copy,err,ncount)
+         case('opt'      )
+            ! The block was supplied by the file the caller selected, whatever
+            ! the keys are (an `$opt` block with a single key counts).  The
+            ! landscape run types never read `optset`, so `src/prog/main.F90`
+            ! refuses the block for them instead of ignoring it silently (CLI
+            ! redesign section 3.8(c), C7).  The CLI flags
+            ! `--opt`/`--ohess`/`--cycles` reach `set_opt` through the argument
+            ! parser and therefore do not set this flag either.
+            if (do_mark) set%xcontrol_supplied = .true.
+            call rdblock(env,set_opt,     line,id,copy,err,ncount)
          case('hess'     ); call rdblock(env,set_hess,    line,id,copy,err,ncount)
          case('md'       ); call rdblock(env,set_md,      line,id,copy,err,ncount)
          case('siman'    ); call rdblock(env,set_siman,   line,id,copy,err,ncount)
@@ -821,7 +849,18 @@ subroutine rdcontrol(fname,env,copy_file)
          case('split'    ); call rdblock(env,set_split,   line,id,copy,err,ncount)
                             maxfrag = maxfrag + ncount
          !> legacy
-         case('set'      ); call rdsetbl(env,set_legacy,line,id,copy,err)
+         case('set'      )
+            ! `set_legacy` writes the flag for the six ANCopt keys it routes
+            ! to `set_opt`; a `$set` block of the fallback rc file must not
+            ! mark the parameter state either, so its contribution is undone
+            ! here (the file the caller selected keeps its mark).
+            if (do_mark) then
+               call rdsetbl(env,set_legacy,line,id,copy,err)
+            else
+               lsupplied = set%xcontrol_supplied
+               call rdsetbl(env,set_legacy,line,id,copy,err)
+               set%xcontrol_supplied = lsupplied
+            end if
          
          ! unknown keyword -> ignore, we don't raise them !
          ! except for chrg and spin which you actually can set here !
@@ -2865,7 +2904,8 @@ subroutine set_legacy(env,key,val)
 !   case('constrain');
 !   case('scan');
    case('fit');         call set_fit
-   case('optlev');      call set_opt(env,'optlevel',val)
+   case('optlev');      set%xcontrol_supplied = .true.
+                        call set_opt(env,'optlevel',val)
    case('gfnver');      call set_gfn(env,'method',val)
    case('ellips');      continue ! used later in read_userdata
                         maxwalls = maxwalls + 1
@@ -2876,11 +2916,20 @@ subroutine set_legacy(env,key,val)
    case('fixfc');       call set_fix(env,'force constant',val)
    case('springexp');   call set_fix(env,'spring exponent',val)
    case('constrfc');    call set_constr(env,'force constant',val)
-   case('hlowopt');     call set_opt(env,'hlow',val)
-   case('s6opt');       call set_opt(env,'s6',val)
-   case('microopt');    call set_opt(env,'microcycle',val)
-   case('maxopt');      call set_opt(env,'maxcycle',val)
-   case('maxdispl');    call set_opt(env,'maxdispl',val)
+   ! The legacy `$set` block reaches the ANCopt keys through this table; the
+   ! six keys below are the ones that write `set%optset`, so they mark the
+   ! parameter state as "supplied by the input file" exactly like the `$opt`
+   ! branch of `rdcontrol` (CLI redesign section 3.8(c)).
+   case('hlowopt');     set%xcontrol_supplied = .true.
+                        call set_opt(env,'hlow',val)
+   case('s6opt');       set%xcontrol_supplied = .true.
+                        call set_opt(env,'s6',val)
+   case('microopt');    set%xcontrol_supplied = .true.
+                        call set_opt(env,'microcycle',val)
+   case('maxopt');      set%xcontrol_supplied = .true.
+                        call set_opt(env,'maxcycle',val)
+   case('maxdispl');    set%xcontrol_supplied = .true.
+                        call set_opt(env,'maxdispl',val)
    case('mdtime');      call set_md(env,'time',val)
    case('mdtemp');      call set_md(env,'temp',val)
    case('etemp');       call set_scc(env,'temp',val)

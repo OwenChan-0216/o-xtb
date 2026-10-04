@@ -3654,6 +3654,126 @@ add_test("xtb/native-opt-lbfgs-symbols"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/native-opt-lbfgs-symbols
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# ---------------------------------------------------------------------------
+# CLI redesign stage 3: `--opt`/`--ohess` are executed by the landscape suite
+# ---------------------------------------------------------------------------
+#
+# `--opt`/`--ohess` keep their run types but are dispatched to the suite, and
+# the native ANCopt family is reachable through `--method
+# ancopt|lancopt|fire|pbc_lbfgs` only.  Every check below asserts against a
+# token of the *other* path, so "the wrong path ran" and "both paths ran" are
+# both failures (`docs/_simplify-recon/42-stage3a-impl.md`).
+#
+# `--opt` runs the suite optimiser once, and the native ANCopt block next to it
+# is suppressed (R24/M-3); the two milestone tokens (`landscape: lbfgs
+# minimisation` versus `ANC micro-cycles`) and the `landscape_opt.json` of
+# `--ljson` are the assertion.
+add_test("xtb/landscape-opt-alias-once"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optalias;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-alias-once"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-alias-once
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The reverse direction: the four native engines keep `--opt` native (guards,
+# suppression and the `--ljson` criterion all read the same flag).
+add_test("xtb/landscape-opt-native-exit"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optnative;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-native-exit"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-native-exit
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The three guards of section 3.8.  The PBC case needs a periodic input, the
+# other two build their own xcontrol file (the periodic fixture is the one the
+# `xtb/Info` smoke test and the meson build use).
+add_test("xtb/landscape-opt-scanblock"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optguard;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-scanblock;scanblock"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-scanblock
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-opt-pbc"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optguard;${LANDSCAPE-E2E-XTB};${PROJECT_SOURCE_DIR}/assets/inputs/coord/quartz.3d.coord;${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-pbc;pbc"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-pbc
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-opt-xcontrol"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optguard;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-xcontrol;xcontrol"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-xcontrol
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `--opt` writes `xtbopt.xyz` once, names the landscape timer and honours
+# `--namespace` (read points 13/14 of section 3.11).
+add_test("xtb/landscape-opt-xtbopt-once"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optxtbopt;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-xtbopt-once"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-xtbopt-once
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `--ohess` is the suite minimisation followed by the suite frequencies
+# (section 3.11.1, T1/T2), its native counterpart keeps the native Hessian
+# (the reverse direction), and the `fres` bridge reproduces the native console
+# contract (T3) - the last one compares the totals with `--lvib` on the
+# minimised geometry.
+add_test("xtb/landscape-ohess-suite-once"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=ohesssuite;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-suite-once"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-suite-once
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-ohess-native-hess"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=ohessnative;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-native-hess"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-native-hess
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-ohess-fres-bridge"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=ohessbridge;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-fres-bridge"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-fres-bridge
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The stage 3a fix round: the upstream `--opt <LEVEL>` keyword and `--cycles N`
+# reach the suite through an explicit bridge (redesign sections 3.5/3.10b,
+# findings B/C), an unknown level is refused (F3), and every timing label names
+# the timer that really ran (finding A).
+add_test("xtb/landscape-opt-level-bridge"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optlevel;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-level-bridge"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-opt-level-bridge
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The water fixture needs five steps by default, so a four step budget binds
+# and becomes observable in `landscape_opt.json`.
+add_test("xtb/landscape-cycles-map"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=cycles;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cycles-map"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cycles-map
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # 340x OpenMP anti-scaling of many small single points out of the picture
 # (AGENTS.md section 6.8).  The stage 1 CLI checks of the same family
@@ -3698,6 +3818,17 @@ set_tests_properties(
   "xtb/landscape-lts-escape-echo"
   "xtb/landscape-strict-unknown"
   "xtb/native-opt-lbfgs-symbols"
+  "xtb/landscape-opt-alias-once"
+  "xtb/landscape-opt-native-exit"
+  "xtb/landscape-opt-scanblock"
+  "xtb/landscape-opt-pbc"
+  "xtb/landscape-opt-xcontrol"
+  "xtb/landscape-opt-xtbopt-once"
+  "xtb/landscape-ohess-suite-once"
+  "xtb/landscape-ohess-native-hess"
+  "xtb/landscape-ohess-fres-bridge"
+  "xtb/landscape-opt-level-bridge"
+  "xtb/landscape-cycles-map"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

@@ -74,6 +74,14 @@ module xtb_landscape_results
       integer :: n_imag = 0
       !> True if the geometry was detected as linear (`linear_tol`)
       logical :: linear = .false.
+      !> Electronic energy of the analysed geometry (hartree).  The Hessian
+      !> provider evaluates it together with the gradient, and the caller needs
+      !> it to report the run: `main.F90` writes it back into the scc result and
+      !> the `--ohess` frequency bridge subtracts it from `enthalpy`/`gibbs`
+      !> (`write_energy` prints the totals as `etot + htot`).  It must be set by
+      !> the task; a zero would make the printed totals differ from the
+      !> electronic energy by a whole molecular energy.
+      real(wp) :: energy = 0.0_wp
       !> Zero point energy (hartree) as reported by the thermochemistry
       !> wrapper (`print_thermo`), zero until that wrapper has run
       real(wp) :: zpe = 0.0_wp
@@ -316,6 +324,13 @@ module xtb_landscape_results
       type(landscape_step), allocatable :: steps(:)
       !> Convergence history
       type(landscape_convergence_report) :: conv
+      !> Frequency analysis of the `vib` task (all components have a default
+      !> value, so the component is safe in an intrinsic derived type
+      !> assignment; it carries no deferred-length character array, the
+      !> gfortran 12.2.0 defect of AGENTS.md section 6.5 does not apply).  The
+      !> `--ohess` chain of `main.F90` reads it to fill the native frequency
+      !> container; the other tasks never touch it.
+      type(landscape_vib_result) :: vib
    contains
       !> Print a summary of the optimisation
       procedure :: write_log => landscape_result_write

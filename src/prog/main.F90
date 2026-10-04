@@ -403,7 +403,12 @@ contains
       ! read the xtbrc if you can find it (use rdpath directly instead of xfind)
       call rdpath(env%xtbpath, p_fname_rc, xrc, exist)
       if (exist) then
-         call rdcontrol(xrc, env, copy_file=.false.)
+         ! The fallback rc file is not the file the caller selected, so its
+         ! `$opt` block must not mark the parameter state as a user request:
+         ! the repository ships an `.xtbrc` containing `$opt`, and every suite
+         ! test runs with `XTBPATH` pointing at the repository root (CLI
+         ! redesign section 3.8(c), `docs/_simplify-recon/42-stage3a-impl.md`).
+         call rdcontrol(xrc, env, copy_file=.false., from_input=.false.)
 
          call env%checkpoint("Reading '"//xrc//"' failed")
       end if
@@ -483,38 +488,76 @@ contains
       call read_userdata(xcontrol, env, mol)
 
       ! ------------------------------------------------------------------------
-      ! the xcontrol `$scan` block belongs to the ANCopt family
+      ! the xcontrol blocks the landscape suite does not execute
       !
-      ! `relaxed_scan` executes it only on the `anyopt` path of this program
-      ! (the `if (nscan > 0)` guard inside the `if (anyopt)` branch below,
-      ! reached by `--opt` and friends; the line number of the initial report
-      ! went stale with this very guard, so it is not repeated here).  No
-      ! landscape run type executes it, and before this check a run such as
-      ! `--lopt --input <file with $scan>` returned status 0 after a plain
-      ! minimisation, wrote no `xtbscan.log` and printed no diagnostic: the
-      ! caller asked for a scan and silently got a different task.  The error
-      ! names both replacements, because a mistyped run type is the only way to
-      ! get here.
-      lruntyp_flag = ''
-      select case (set%runtyp)
-      case (p_run_lopt)
-         lruntyp_flag = '--lopt'
-      case (p_run_lscan)
-         lruntyp_flag = '--lscan'
-      case (p_run_lts)
-         lruntyp_flag = '--lts'
-      case (p_run_lirc)
-         lruntyp_flag = '--lirc'
-      case (p_run_lvib)
-         lruntyp_flag = '--lvib'
-      end select
-      if (nscan > 0 .and. len_trim(lruntyp_flag) > 0) then
-         call env%error(trim(lruntyp_flag)//" does not execute the xcontrol "//&
-            & "$scan block: use --opt to run it, or --lscan with "//&
-            & "--lscan-coord/--lscan-atoms for a scan of the landscape suite", &
-            & source)
+      ! One drop point for the three guards of the CLI redesign (section 3.8).
+      ! All three read `landscape_is_suite_run`, the single criterion that
+      ! separates a suite run from a native one, so a native exit is never
+      ! refused by mistake: `--opt --method ancopt|lancopt|fire|pbc_lbfgs` and
+      ! `--ohess --method ancopt|...` keep the native xcontrol handling.  The
+      ! block sits after `readMolecule` (`mol%npbc` is known), `rdcontrol`
+      ! (`set%xcontrol_supplied` is known) and `read_userdata` (`nscan` is
+      ! known), and before the native optimisation block, so no run is stopped
+      ! after it has started working.
+      !
+      ! (a) `$scan` belongs to the ANCopt family: `relaxed_scan` executes it
+      ! only on the `anyopt` path of this program (the `if (nscan > 0)` guard
+      ! inside the `if (anyopt)` branch below).  No landscape run type executes
+      ! it, and before this check a run such as `--lopt --input <file with
+      ! $scan>` returned status 0 after a plain minimisation, wrote no
+      ! `xtbscan.log` and printed no diagnostic: the caller asked for a scan
+      ! and silently got a different task.  Since stage 3 the redeployed `--opt`
+      ! is such a run type too, so the message points at the native exit
+      ! (`--opt --method ancopt`) and not at `--opt` itself.
+      !
+      ! (b) the suite rejects periodic boundary conditions
+      ! (`src/landscape/landscape_driver.f90`), but its message does not name
+      ! the native exit; this guard is the one that does.
+      !
+      ! (c) the suite never reads the xcontrol `$opt` parameters, so a supplied
+      ! `$opt` block is a dead knob for every run type that goes to the suite -
+      ! refused instead of ignored (C7 of the redesign).
+      if (landscape_is_suite_run(set%runtyp, landscape_native_engine)) then
+         lruntyp_flag = ''
+         select case (set%runtyp)
+         case (p_run_opt)
+            lruntyp_flag = '--opt'
+         case (p_run_ohess)
+            lruntyp_flag = '--ohess'
+         case (p_run_lopt)
+            lruntyp_flag = '--lopt'
+         case (p_run_lscan)
+            lruntyp_flag = '--lscan'
+         case (p_run_lts)
+            lruntyp_flag = '--lts'
+         case (p_run_lirc)
+            lruntyp_flag = '--lirc'
+         case (p_run_lvib)
+            lruntyp_flag = '--lvib'
+         case default
+            lruntyp_flag = ''
+         end select
+         if (nscan > 0) then
+            call env%error(trim(lruntyp_flag)//" does not execute the xcontrol "//&
+               & "$scan block: use --opt --method ancopt to run the native ANCopt "//&
+               & "that performs it, or --lscan with --lscan-coord/--lscan-atoms "//&
+               & "for a scan of the landscape suite", source)
+         end if
+         if (mol%npbc > 0) then
+            call env%error(trim(lruntyp_flag)//" runs the landscape suite, which "//&
+               & "does not support periodic boundary conditions: use --opt --method "//&
+               & "ancopt for the native ANCopt (pbc_lbfgs / GFN-FF periodic) "//&
+               & "optimisation", source)
+         end if
+         if (set%xcontrol_supplied) then
+            call env%error("the xcontrol $opt block does nothing for "//&
+               & trim(lruntyp_flag)//": the landscape suite does not read the "//&
+               & "ANCopt parameters; remove the block, or use --opt --method "//&
+               & "ancopt to run the native ANCopt (rf) that honours "//&
+               & "engine=/optlevel=/hessian=/maxcycle=...", source)
+         end if
       end if
-      call env%checkpoint("the run type does not execute the xcontrol $scan block")
+      call env%checkpoint("the run type does not execute this xcontrol block")
       ! ------------------------------------------------------------------------
       ! get some memory
       allocate (cn(mol%n), sat(mol%n), g(3, mol%n), source=0.0_wp)
@@ -742,7 +785,7 @@ contains
          endif 
 
          ! stop calculation !
-         call finalize_xtb(env)
+         call finalize_xtb(env, landscape_native_engine)
       end if
 
       ! ------------------------------------------------------------------------
@@ -935,7 +978,13 @@ contains
 !---------------------------------------------!
 ! Geometry optimization(ANCopt,L_ANCopt,FIRE) !
 !---------------------------------------------!
-      if (anyopt) then
+      ! Native exit of the `anyopt` family only: the redeployed `--opt`/`--ohess`
+      ! keep their run type (`p_run_opt`/`p_run_ohess`), so `anyopt` is still
+      ! true for them and this block would run a second, native optimisation
+      ! next to the suite task (CLI redesign R24).  The two `anyopt`
+      ! `env%terminate` guards above (CPCM-X, PTB) keep their behaviour on
+      ! purpose: a native workaround is not available for those two either way.
+      if (anyopt .and. landscape_native_engine /= 0) then
 
          if (mol%npbc > 0 .and. (set%mode_extrun == p_ext_gfnff &
                  & .or. set%mode_extrun == p_ext_mcgfnff)) then  ! if(npbc)
@@ -979,21 +1028,45 @@ contains
       ! ------------------------------------------------------------------------
       ! landscape suite (minimisation with the algorithms of src/landscape)
       !
+      ! Since stage 3 the redeployed `--opt` and `--ohess` run the suite as
+      ! well; `effective_landscape_task` is the single place that says so, the
+      ! run types themselves stay `p_run_opt`/`p_run_ohess` (CLI redesign
+      ! section 3.11).
+      !
       ! `--ljson` is an output switch of the landscape tasks, not a run type: a
       ! run type that does not know it writes nothing, which used to happen
       ! without any message and is a silent no-op for a caller who expected a
       ! document (finding L-9 of
       ! `docs/_landscape-recon/50-m7-independent-review.md`).  The check is here
       ! and not in the parser, because the flag and the run type may be given in
-      ! either order.
-      if (lset%ljson .and. set%runtyp /= p_run_lopt .and. &
-         & set%runtyp /= p_run_lscan .and. set%runtyp /= p_run_lvib .and. &
-         & set%runtyp /= p_run_lts .and. set%runtyp /= p_run_lirc) then
+      ! either order.  It reads the *effective* task, so the redeployed
+      ! `--opt`/`--ohess` write their documents and a native exit such as
+      ! `--opt --method ancopt --ljson` is still reported.
+      if (lset%ljson .and. .not. landscape_is_suite_run(set%runtyp, landscape_native_engine)) then
          call env%warning("--ljson writes nothing without a landscape run "//&
-            & "type: add --lopt, --lscan, --lvib, --lts or --lirc", source)
+            & "type: add --lopt, --lscan, --lvib, --lts, --lirc or --opt", source)
       end if
 
-      if (set%runtyp == p_run_lopt) then
+      ! BC-5 of the CLI redesign: `--opt`/`--ohess` change their meaning, and
+      ! that is announced on every run.  The notice goes to `env%unit` (stdout,
+      ! like `[WARNING]`), is printed once per run and is not suppressed by
+      ! `--silent`.  It deliberately does not name an algorithm: `--opt --method
+      ! bfgs` is the suite with `bfgs`, so "lbfgs" would be wrong there.
+      if (landscape_is_suite_run(set%runtyp, landscape_native_engine) .and. &
+         & (set%runtyp == p_run_opt .or. set%runtyp == p_run_ohess)) then
+         select case (set%runtyp)
+         case (p_run_ohess)
+            write(env%unit, '(a)') "[NOTICE] --ohess now runs the landscape "//&
+               & "suite (optimisation followed by harmonic frequencies); pass "//&
+               & "--method ancopt for the legacy ANCopt optimiser."
+         case default
+            write(env%unit, '(a)') "[NOTICE] --opt now runs the landscape "//&
+               & "suite optimiser; pass --method ancopt for the legacy "//&
+               & "ANCopt optimiser."
+         end select
+      end if
+
+      if (effective_landscape_task(set%runtyp, landscape_native_engine) == p_run_lopt) then
          ! The CLI electronic-structure settings reach the engine only through
          ! its own control object: `xtb_single::singlepoint` forwards `acc` as
          ! an argument but drops it, and the engine writes both values into the
@@ -1011,12 +1084,61 @@ contains
          ! reported energy is the one of the starting geometry.
          res%e_total = lres%energy
          res%gnorm = lres%gnorm
+
+         ! The redeployed `--ohess` is the minimisation followed by the
+         ! frequency analysis of the minimised geometry, i.e. the two calls the
+         ! native `--ohess` makes (`main_geometry` + `main_freq`,
+         ! `src/prog/main.F90`).  The native Hessian and frequency blocks are
+         ! suppressed for it through `landscape_native_hessian_path`, so this
+         ! chain is the only one that runs (CLI redesign section 3.11.1).
+         if (landscape_ohess_chain(set%runtyp, landscape_native_engine)) then
+            lvset%engine%acc = set%acc
+            lvset%engine%etemp = set%etemp
+            call run_landscape(env, mol, chk, calc, lvset, lres)
+            call env%checkpoint("Landscape task terminated")
+            ! Bridge the suite frequencies into the native frequency container.
+            ! `anyhess` stays the criterion of the three readers (the property
+            ! file, `xtbout.json` and the stdout `write_energy`), because the
+            ! container is what they print - not the path that filled it.  The
+            ! alternative, setting `anyhess` to false for the suite branch,
+            ! would silently drop the `TOTAL ENTHALPY`/`TOTAL FREE ENERGY`
+            ! lines and the thermochemistry keys of `xtbout.json`, and a half
+            ! fix (container printed, not filled) would print
+            ! `TOTAL ENERGY 0.000000000000` instead of failing.  Filling it
+            ! structurally removes that state.
+            call fres%deallocate()
+            call fres%allocate(mol%n)
+            fres%n3true = 3*mol%n
+            fres%linear = lres%vib%linear
+            fres%freq = lres%vib%freq
+            fres%rmass = lres%vib%rmass
+            fres%hess = lres%vib%modes
+            ! no dipole or polarisability derivatives come from a Hessian
+            ! provider, so the intensity columns are zero, exactly like
+            ! `--lvib` (see `src/landscape/vib/thermo.f90`)
+            fres%dipt = 0.0_wp
+            fres%polt = 0.0_wp
+            fres%etot = lres%vib%energy
+            fres%gnorm = lres%gnorm
+            ! `write_energy` prints `etot + htot`, and the suite fields hold
+            ! the totals H(T)/G(T), so the thermal contribution is the
+            ! difference (`src/main/property.F90`)
+            fres%htot = lres%vib%enthalpy - lres%vib%energy
+            fres%gtot = lres%vib%gibbs - lres%vib%energy
+            fres%zp = lres%vib%zpe
+            fres%temp = lres%vib%temperature
+            fres%nimag = lres%vib%n_imag
+            ! The frequency analysis evaluates the same geometry, so the
+            ! reported energy must stay the converged one.
+            res%e_total = lres%energy
+            res%gnorm = lres%gnorm
+         end if
          call env%checkpoint("Landscape task terminated")
       end if
 
       ! ------------------------------------------------------------------------
       ! landscape suite (scan with the algorithms of src/landscape)
-      if (set%runtyp == p_run_lscan) then
+      if (effective_landscape_task(set%runtyp, landscape_native_engine) == p_run_lscan) then
          lsset%engine%acc = set%acc
          lsset%engine%etemp = set%etemp
          call start_timing(3)
@@ -1032,7 +1154,7 @@ contains
 
       ! ------------------------------------------------------------------------
       ! landscape suite (transition state search with src/landscape)
-      if (set%runtyp == p_run_lts) then
+      if (effective_landscape_task(set%runtyp, landscape_native_engine) == p_run_lts) then
          ! M4 hard constraint 1: the electronic temperature is frozen for the
          ! whole run and recorded.  The settings carry it explicitly (rather
          ! than reading the inherited engine control) because the task copies
@@ -1062,7 +1184,7 @@ contains
 
       ! ------------------------------------------------------------------------
       ! landscape suite (intrinsic reaction coordinate of src/landscape)
-      if (set%runtyp == p_run_lirc) then
+      if (effective_landscape_task(set%runtyp, landscape_native_engine) == p_run_lirc) then
          ! M4/M6 hard constraint: the electronic temperature is frozen for the
          ! whole run and recorded.  The task copies it into the engine control
          ! it hands to the engine.
@@ -1081,7 +1203,7 @@ contains
 
       ! ------------------------------------------------------------------------
       ! landscape suite (harmonic frequencies and thermochemistry of src/landscape)
-      if (set%runtyp == p_run_lvib) then
+      if (effective_landscape_task(set%runtyp, landscape_native_engine) == p_run_lvib) then
          lvset%engine%acc = set%acc
          lvset%engine%etemp = set%etemp
          call start_timing(3)
@@ -1160,7 +1282,13 @@ contains
 
       ! ------------------------------------------------------------------------
       ! numerical hessian calculation
-      if ((set%runtyp == p_run_hess) .or. (set%runtyp == p_run_ohess) .or. (set%runtyp == p_run_bhess)) then
+      !
+      ! `--hess`/`--bhess` always take this path; `--ohess` takes it only in its
+      ! native half (`--ohess --method ancopt|lancopt|fire|pbc_lbfgs`).  The
+      ! redeployed `--ohess` gets its Hessian from the suite frequency chain,
+      ! and running both would write `hessian`/`vibspectrum`/`g98.out` twice
+      ! (CLI redesign section 3.11.1, T1).
+      if (landscape_native_hessian_path(set%runtyp, landscape_native_engine)) then
          if (set%runtyp == p_run_bhess .and. set%mode_extrun /= p_ext_turbomole) then
             call generic_header(env%unit, "Biased Numerical Hessian", 49, 10)
          else if (set%runtyp == p_run_bhess .and. set%mode_extrun == p_ext_turbomole) then
@@ -1286,7 +1414,11 @@ contains
          call main_geometry(iprop, mol)
       end if
 
-      if ((set%runtyp == p_run_hess) .or. (set%runtyp == p_run_ohess) .or. (set%runtyp == p_run_bhess)) then
+      ! The frequency printout of the native Hessian path; the redeployed
+      ! `--ohess` prints and stores its frequencies through the suite chain, so
+      ! a second `main_freq` would repeat the whole thermodynamic table and
+      ! overwrite the five files (CLI redesign section 3.11.1, T2).
+      if (landscape_native_hessian_path(set%runtyp, landscape_native_engine)) then
          call generic_header(iprop, 'Frequency Printout', 49, 10)
          call main_freq(iprop, mol, chk%wfn, fres)
       end if
@@ -1314,9 +1446,15 @@ contains
          end if
       end if
 
-      if ((set%runtyp == p_run_opt) .or. (set%runtyp == p_run_ohess) .or. &
+      ! The second geometry writer of the native optimisers.  The run types
+      ! that go to the landscape suite write `xtbopt.xyz` themselves
+      ! (`xtb_landscape_log::landscape_write_files`), so for them this block
+      ! would write the same file twice and print a second, contradictory
+      ! `optimized geometry written to:` line (CLI rewrite read point 13).
+      if (((set%runtyp == p_run_opt) .or. (set%runtyp == p_run_ohess) .or. &
           (set%runtyp == p_run_omd) .or. (set%runtyp == p_run_screen) .or. &
-          (set%runtyp == p_run_metaopt) .or. (set%runtyp == p_run_bhess)) then
+          (set%runtyp == p_run_metaopt) .or. (set%runtyp == p_run_bhess)) &
+          .and. .not. landscape_is_suite_run(set%runtyp, landscape_native_engine)) then
          call generateFileName(tmpname, 'xtbopt', extension, mol%ftype)
          if (mol%ftype == 0) mol%ftype = getFileType(tmpname)
          write (env%unit, '(/,a,1x,a,/)') &
@@ -1476,7 +1614,7 @@ contains
 
       ! ------------------------------------------------------------------------
       !  make some post processing afterward, show some timings and stuff
-      call finalize_xtb(env) 
+      call finalize_xtb(env, landscape_native_engine) 
 
    end subroutine xtbMain
 
@@ -1568,6 +1706,27 @@ contains
       !> parsing, it is resolved after the loop (CLI redesign section 4.7)
       character(len=:), allocatable :: landscape_method_name
 
+      !> Raw level keyword of `--opt`/`--ohess`, e.g. `tight`; empty when the
+      !> flag was given without a level.  The keyword is kept because the
+      !> integer `set%optset%optlev` cannot tell an unknown keyword from
+      !> `normal` and cannot carry the suite-only `superloose` (CLI redesign
+      !> section 3.5, finding F3 of the stage 3a fix round)
+      character(len=:), allocatable :: landscape_opt_level_name
+
+      !> Effective suite convergence level the `--opt`/`--ohess` keyword maps
+      !> to, printed on the banner of the redeployed run
+      character(len=:), allocatable :: landscape_opt_conv_level
+
+      !> `--cycles N` was given with a value the native parser accepted
+      logical :: cycles_given
+
+      !> Step budget value of `--cycles`
+      integer :: cycles_value
+
+      !> The task-specific step budget flags were given (CLI redesign 3.10b)
+      logical :: lopt_max_steps_given, lscan_max_steps_given
+      logical :: lts_max_steps_given, lirc_max_steps_given
+
       !> First run type requested on the command line and the flag that
       !> requested it; both are filled by `select_runtyp`, which reports a
       !> second, different run type as an error (CLI redesign section 17.1).
@@ -1604,6 +1763,17 @@ contains
       ! 4.7, step 0).  The flag loop is the first statement sequence that can
       ! leave the subroutine through `env%error`, so the value is written here.
       landscape_native_engine = 0
+
+      ! Local parse state of the `--opt <LEVEL>` and `--cycles N` bridges of
+      ! the tail (CLI redesign sections 3.5 and 3.10b); a local of a subroutine
+      ! without `save` is undefined on entry, so every flag is initialised
+      ! here, before the loop can reach a `case`.
+      cycles_given = .false.
+      cycles_value = 0
+      lopt_max_steps_given = .false.
+      lscan_max_steps_given = .false.
+      lts_max_steps_given = .false.
+      lirc_max_steps_given = .false.
 
       nFlags = args%countFlags()
       call args%nextFlag(flag)
@@ -1999,6 +2169,14 @@ contains
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'maxcycle', sec)
+               ! Keep the value for the suite bridge of the tail; `set_opt`
+               ! rejects a negative or non-numeric value, so only an accepted
+               ! value marks the flag as given (CLI redesign section 3.10b)
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0 .and. idum2 >= 0) then
+                  cycles_given = .true.
+                  cycles_value = idum2
+               end if
             else
                call env%error("Integer argument for --cycles is missing", source)
             end if
@@ -2204,6 +2382,10 @@ contains
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
+               ! Keep the raw keyword for the suite bridge of the tail; the
+               ! integer above cannot tell `banana` from `normal` and cannot
+               ! carry the suite-only `superloose` (section 3.5, F3)
+               landscape_opt_level_name = sec
             end if
 
          case ('--hess')
@@ -2217,6 +2399,8 @@ contains
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
+               ! Same bridge input as `--opt` (CLI redesign section 3.5)
+               landscape_opt_level_name = sec
             end if
 
          case ('--bhess')
@@ -2368,6 +2552,7 @@ contains
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
                   lset%max_steps = idum2
+                  lopt_max_steps_given = .true.
                else
                   call env%error("The --lopt-max-steps flag requires an integer", source)
                end if
@@ -2675,6 +2860,7 @@ contains
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
                   lsset%max_steps = idum2
+                  lscan_max_steps_given = .true.
                else
                   call env%error("The --lscan-max-steps flag requires an integer", source)
                end if
@@ -2815,6 +3001,7 @@ contains
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
                   ltset%max_steps = idum2
+                  lts_max_steps_given = .true.
                else
                   call env%error("The --lts-max-steps flag requires an integer", source)
                end if
@@ -3544,6 +3731,7 @@ contains
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
                   lircset%max_steps = idum2
+                  lirc_max_steps_given = .true.
                else
                   call env%error("The --lirc-max-steps flag requires an integer", source)
                end if
@@ -4189,7 +4377,13 @@ contains
             ! step 2).  A name of another task is an error that names the flag
             ! of that task (section 4.4), an unknown name is an error as well.
             select case (set%runtyp)
-            case (p_run_lopt)
+            case (p_run_lopt, p_run_opt, p_run_ohess)
+               ! `p_run_opt`/`p_run_ohess` are here since stage 3 redeployed them
+               ! to the suite: a landscape method name on `--opt`/`--ohess` now
+               ! reaches the suite settings object the run really reads
+               ! (`lset`), so the stage 2 refusal of this branch (R39 of the
+               ! redesign) is gone.  `--method` never selects the run type, so
+               ! `--opt` keeps its identity and `--opt --lopt` stays a conflict.
                if (landscape_method_task(landscape_method_name) /= 'opt') then
                   call landscape_method_mismatch(env, landscape_method_name, source)
                else
@@ -4222,24 +4416,79 @@ contains
                   & " cannot be used with --lvib: the frequency task has no "//&
                   & "method selector (use --lvib-hessian for its Hessian "//&
                   & "backend)", source)
-            case (p_run_opt, p_run_ohess)
-               ! Stage 2/3 boundary of the CLI redesign: `--opt` and `--ohess`
-               ! still run the native ANCopt here, and the landscape tasks read
-               ! their own settings objects, so a landscape method name would
-               ! be accepted and then silently ignored.  The flag is refused
-               ! with the working alternative instead.  Stage 3 removes this
-               ! branch when `--opt`/`--ohess` are dispatched to the suite.
-               call env%error("--method "//landscape_method_name//&
-                  & " is a landscape method, but --opt and --ohess still run "//&
-                  & "the native ANCopt in this build, so the name would have "//&
-                  & "no effect: use --lopt (or the native engines --method "//&
-                  & "ancopt|lancopt|fire|pbc_lbfgs with --opt)", source)
             case default
                call env%error("--method needs a landscape run type: add "//&
-                  & "--lopt, --lscan, --lts or --lirc (or use --method "//&
-                  & "ancopt with --opt)", source)
+                  & "--lopt, --lscan, --lts, --lirc or --opt (or use "//&
+                  & "--method ancopt with --opt)", source)
             end select
          end if
+      end if
+
+      ! ------------------------------------------------------------------------
+      ! The upstream `--opt <LEVEL>` keyword and `--cycles N` are bridged onto
+      ! the suite settings of the *redeployed* run types here
+      ! (CLI redesign sections 3.5 and 3.10b; stage 3a fix round, findings B/C).
+      !
+      ! The suite reads neither `set%optset%optlev` nor
+      ! `set%optset%maxoptcycle`, so without the bridge both flags are dead
+      ! knobs for `--opt`/`--ohess` although they did reach the native ANCopt
+      ! these run types used before stage 3.  The bridge sits in the run-type
+      ! dispatch of the parse tail, where the run type and
+      ! `landscape_native_engine` (resolved just above) are both known.  The
+      ! priority rule of section 3.5 ("an explicit --lopt-level wins over
+      ! --opt <LEVEL>") needs no code: `--lopt-level` selects the `lopt` run
+      ! type and `--opt` the `opt` one, so `select_runtyp` already reports the
+      ! two together as a conflict that names both flags.
+
+      ! T2: `--opt <LEVEL>`/`--ohess <LEVEL>` set the level through the same
+      ! field `--lopt-level` writes (`set_conv_level`), so
+      ! `--opt tight` and `--lopt --lopt-level tight` are the same run.  The
+      ! banner names the effective level, so the many-to-one map of the
+      ! upstream names (and the `banana` refusal, F3) is never invisible.
+      if ((set%runtyp == p_run_opt .or. set%runtyp == p_run_ohess) .and. &
+         & landscape_native_engine == 0) then
+         landscape_opt_conv_level = 'normal'
+         if (allocated(landscape_opt_level_name)) then
+            landscape_opt_conv_level = &
+               & landscape_opt_level_to_conv_level(landscape_opt_level_name)
+            if (len(landscape_opt_conv_level) == 0) then
+               call env%error("Unknown --opt level '"// &
+                  & landscape_opt_level_name//"': use crude, sloppy, loose, "//&
+                  & "lax, normal, tight, verytight, extreme, superloose or "//&
+                  & "vtight", source)
+               landscape_opt_conv_level = 'normal'
+            else
+               call lset%set_conv_level(landscape_opt_conv_level)
+            end if
+         end if
+         write(env%unit, '(a)') "[NOTICE] landscape convergence level: "// &
+            & landscape_opt_conv_level
+      end if
+
+      ! T3: `--cycles N` is the step budget of the run type that owns one.  The
+      ! native run types, and `--opt`/`--ohess --method <native>`, keep the
+      ! native semantics (`set%optset%maxoptcycle`, read in
+      ! `src/optimizer.f90`), so they are the `case default`.
+      if (cycles_given) then
+         select case (effective_landscape_task(set%runtyp, landscape_native_engine))
+         case (p_run_lopt)
+            call landscape_bridge_step_budget(env, cycles_value, &
+               & lopt_max_steps_given, lset%max_steps, '--lopt-max-steps', source)
+         case (p_run_lscan)
+            call landscape_bridge_step_budget(env, cycles_value, &
+               & lscan_max_steps_given, lsset%max_steps, '--lscan-max-steps', source)
+         case (p_run_lts)
+            call landscape_bridge_step_budget(env, cycles_value, &
+               & lts_max_steps_given, ltset%max_steps, '--lts-max-steps', source)
+         case (p_run_lirc)
+            call landscape_bridge_step_budget(env, cycles_value, &
+               & lirc_max_steps_given, lircset%max_steps, '--lirc-max-steps', source)
+         case (p_run_lvib)
+            call env%error("--cycles has no meaning for --lvib: the "//&
+               & "frequency task has no step budget", source)
+         case default
+            continue
+         end select
       end if
 
       ! Some saddle methods imply the climbing image stage of the band
@@ -4365,6 +4614,185 @@ pure function landscape_native_engine_from_name(name) result(engine)
    end select
 
 end function landscape_native_engine_from_name
+
+!> Suite convergence level an upstream `--opt <LEVEL>` keyword maps to.
+!>
+!> The upstream ANCopt level and the suite level are the same axis with eight
+!> respectively five values, so the bridge is many-to-one (CLI redesign section
+!> 3.5).  The keyword is matched case insensitively; an **empty** result marks a
+!> keyword the suite does not know and the caller reports it instead of falling
+!> back to `normal` (upstream `optlevel2int` drops an unknown keyword to
+!> `normal`, finding F3 of the stage 3a fix round).  The function lives here and
+!> not in `set_module.f90`, so the shared `optlevel2int` keeps its behaviour for
+!> the native run types and its xcontrol users.
+!>
+!> The keywords are the eight upstream names, their numeric aliases (`-3`..`3`)
+!> and the suite-only `superloose`; `vtight` is the second spelling of
+!> `verytight`.
+pure function landscape_opt_level_to_conv_level(name) result(level)
+   !> Upstream `--opt` level keyword
+   character(len=*), intent(in) :: name
+   !> Suite convergence level name, empty for an unknown keyword
+   character(len=:), allocatable :: level
+
+   select case (landscape_lowercase(name))
+   case ('crude', 'sloppy', 'superloose', '-3', '-2')
+      level = 'superloose'
+   case ('loose', 'lax', '-1')
+      level = 'loose'
+   case ('normal', '0')
+      level = 'normal'
+   case ('tight', '1')
+      level = 'tight'
+   case ('verytight', 'vtight', 'extreme', '2', '3')
+      level = 'vtight'
+   case default
+      level = ''
+   end select
+
+end function landscape_opt_level_to_conv_level
+
+!> Apply the `--cycles N` step budget of one landscape task.
+!>
+!> `--cycles` is the lowest-priority spelling (CLI redesign section 3.10b): it
+!> sets the budget when the task-specific flag (`--lopt-max-steps`, ...) is
+!> absent, and a **different** value through both flags is refused instead of
+!> one silently overriding the other.  The same value through both is
+!> idempotent.
+subroutine landscape_bridge_step_budget(env, cycles, flag_given, budget, flag, source)
+   !> Computational environment for the conflict report
+   type(TEnvironment), intent(inout) :: env
+   !> Value of `--cycles`
+   integer, intent(in) :: cycles
+   !> The task-specific step budget flag was given
+   logical, intent(in) :: flag_given
+   !> Step budget of the task settings, overwritten when `--cycles` wins
+   integer, intent(inout) :: budget
+   !> Name of the task-specific flag
+   character(len=*), intent(in) :: flag
+   !> Name of error producer
+   character(len=*), intent(in) :: source
+   character(len=160) :: message
+
+   if (.not. flag_given) then
+      budget = cycles
+   else if (budget /= cycles) then
+      write(message, '(a,i0,a,a,a,i0,a)') "--cycles ", cycles, &
+         & " conflicts with ", flag, " ", budget, &
+         & ": give only one step budget"
+      call env%error(trim(message), source)
+   end if
+
+end subroutine landscape_bridge_step_budget
+
+!> Landscape task executed by a run type, i.e. the answer to "which task does
+!> this process run on the landscape side?".
+!>
+!> The run types stay what they are: a redeployment changes **who** executes a
+!> run, not what it is (CLI redesign section 3.11, decision 1).  `--opt` and
+!> `--ohess` without a `--method` are the suite's minimisation; with a native
+!> engine they keep the native path and are returned unchanged here.  Every
+!> other run type is returned unchanged as well, so the function is the single
+!> place that knows about the redeployment and the callers can only ask about
+!> one task at a time (`effective_landscape_task(...) == p_run_lopt`, ...).
+!>
+!> `landscape_is_suite_run` is the derived predicate that tells a suite run
+!> from a native one; together they are the **only** criterion of the guards,
+!> the suppression of the native blocks, the dispatch and `--cycles`/`--ljson`.
+!> A second criterion such as `native_engine == p_engine_rf` (the H-2 mistake
+!> of the redesign review) would classify native L-ANCopt and FIRE as suite
+!> runs and report the three guards against them.
+!>
+!> `runtyp` is `set%runtyp`, `native_engine` is `landscape_native_engine`
+!> (0 = the suite).
+pure function effective_landscape_task(runtyp, native_engine) result(task)
+   !> Run type of the process
+   integer, intent(in) :: runtyp
+   !> Native engine selected by `--method`, 0 for the suite
+   integer, intent(in) :: native_engine
+   !> Landscape task of the run
+   integer :: task
+
+   if ((runtyp == p_run_opt .or. runtyp == p_run_ohess) .and. native_engine == 0) then
+      ! `--ohess` runs the minimisation first; its frequency analysis is the
+      ! second stage of the same task (`landscape_ohess_chain`), not a task of
+      ! its own.
+      task = p_run_lopt
+   else
+      task = runtyp
+   end if
+
+end function effective_landscape_task
+
+!> TRUE if the landscape suite executes this run type.
+!>
+!> This is the single criterion of the three xcontrol guards of
+!> `src/prog/main.F90` (the `$scan` block, periodic systems and the `$opt`
+!> block), of the `--ljson` message and of the suppressions of the native
+!> geometry writer and the timing label.
+pure function landscape_is_suite_run(runtyp, native_engine) result(yes)
+   !> Run type of the process
+   integer, intent(in) :: runtyp
+   !> Native engine selected by `--method`, 0 for the suite
+   integer, intent(in) :: native_engine
+   !> TRUE if a landscape task runs
+   logical :: yes
+
+   select case (effective_landscape_task(runtyp, native_engine))
+   case (p_run_lopt, p_run_lscan, p_run_lts, p_run_lirc, p_run_lvib)
+      yes = .true.
+   case default
+      yes = .false.
+   end select
+
+end function landscape_is_suite_run
+
+!> TRUE for the redeployed `--ohess`, the minimisation **followed by** the
+!> frequency analysis.
+!>
+!> The native `--ohess` makes the same two calls (`main_geometry` +
+!> `main_freq`); the suite chain is the counterpart of them for the redeployed
+!> run type, and the condition of the `fres` bridge that keeps the console
+!> output of `--ohess` unchanged.
+pure function landscape_ohess_chain(runtyp, native_engine) result(yes)
+   !> Run type of the process
+   integer, intent(in) :: runtyp
+   !> Native engine selected by `--method`, 0 for the suite
+   integer, intent(in) :: native_engine
+   !> TRUE if the suite runs the minimisation and the frequency analysis
+   logical :: yes
+
+   yes = runtyp == p_run_ohess .and. native_engine == 0
+
+end function landscape_ohess_chain
+
+!> TRUE if the **native** numerical Hessian and frequency path of this run
+!> executes.
+!>
+!> `--hess` and `--bhess` are native, and `--ohess` is native in its redeployed
+!> half only (`--ohess --method ancopt|lancopt|fire|pbc_lbfgs`); the redeployed
+!> `--ohess` gets its Hessian from the suite frequency chain instead.  Without
+!> this distinction the same run would produce the Hessian twice and write
+!> `hessian`/`vibspectrum`/`g98.out` twice (CLI redesign section 3.11.1, T1/T2).
+!> Every branch assigns, including `case default`.
+pure function landscape_native_hessian_path(runtyp, native_engine) result(yes)
+   !> Run type of the process
+   integer, intent(in) :: runtyp
+   !> Native engine selected by `--method`, 0 for the suite
+   integer, intent(in) :: native_engine
+   !> TRUE if the native Hessian/frequency block runs
+   logical :: yes
+
+   select case (runtyp)
+   case (p_run_hess, p_run_bhess)
+      yes = .true.
+   case (p_run_ohess)
+      yes = native_engine /= 0
+   case default
+      yes = .false.
+   end select
+
+end function landscape_native_hessian_path
 
 !> Task a landscape method name belongs to.
 !>
@@ -4783,10 +5211,18 @@ end subroutine set_landscape_hess_step
    end subroutine ptb_feature_not_implemented
 
    !>  make some post processing afterward, show some timings and stuff
-   subroutine finalize_xtb(env)
+   !>
+   !> `native_engine` is the `--method` selector of the run (`xtbMain`); the
+   !> timing label of slot 3 depends on whether the landscape suite or the
+   !> native ANCopt family ran, and `landscape_native_engine` is a local of
+   !> `xtbMain`, so it has to be passed in (CLI redesign read point 14).
+   subroutine finalize_xtb(env, native_engine)
     
       !> Calculation environment
       type(TEnvironment), intent(in) :: env
+
+      !> Native engine selected by `--method`, 0 for the landscape suite
+      integer, intent(in) :: native_engine
 
       write (env%unit, '(a)')
       write (env%unit, '(72("-"))')
@@ -4797,11 +5233,15 @@ end subroutine set_landscape_hess_step
       call prtiming(1, 'total')
       if (.not. set%runtyp == p_run_prescc) &
          call prtiming(2, 'SCF')
-      if ((set%runtyp == p_run_opt) .or. (set%runtyp == p_run_ohess) .or. &
-         &   (set%runtyp == p_run_omd) .or. (set%runtyp == p_run_metaopt)) then
+      ! The label names the timer that actually ran: the redeployed
+      ! `--opt`/`--ohess` go through the landscape optimiser, so their timer slot
+      ! 3 must not be announced as `ANC optimizer` (CLI redesign read point 14).
+      if (((set%runtyp == p_run_opt) .or. (set%runtyp == p_run_ohess) .or. &
+         &   (set%runtyp == p_run_omd) .or. (set%runtyp == p_run_metaopt)) .and. &
+         &   .not. landscape_is_suite_run(set%runtyp, native_engine)) then
          call prtiming(3, 'ANC optimizer')
       end if
-      if (set%runtyp == p_run_lopt) then
+      if (effective_landscape_task(set%runtyp, native_engine) == p_run_lopt) then
          call prtiming(3, 'landscape optimizer')
       end if
       if (set%runtyp == p_run_lscan) then
@@ -4816,7 +5256,13 @@ end subroutine set_landscape_hess_step
       if (set%runtyp == p_run_path) then
          call prtiming(4, 'path finder')
       end if
-      if (((set%runtyp == p_run_hess) .or. (set%runtyp == p_run_ohess) .or. (set%runtyp == p_run_bhess))) then
+      ! The same criterion as the suppression of the native Hessian block
+      ! (`landscape_native_hessian_path`): the redeployed `--ohess` takes its
+      ! Hessian from the suite frequency chain, so slot 5 never runs for it and
+      ! the label must not claim an `analytical hessian` that did not run (the
+      ! raw run-type test left the label behind with a bogus `0.000 sec` - fix
+      ! round T1 of `docs/_simplify-recon/45-stage3a-fix.md`).
+      if (landscape_native_hessian_path(set%runtyp, native_engine)) then
          if (set%mode_extrun /= p_ext_turbomole) then
             call prtiming(5, 'analytical hessian')
          else

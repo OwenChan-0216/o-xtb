@@ -524,6 +524,13 @@ module xtb_setparam
 !  user-facing scalar and its initialization state for the Fortran RNG
    integer  :: randseed = 0
    logical  :: randseed_set = .false.
+!  an xcontrol `$opt` block (or a legacy `$set` opt key) was read; the landscape
+!  suite never reads `optset`, so the run types that go to the suite refuse the
+!  block instead of ignoring it silently (CLI redesign section 3.8(c)).  The
+!  field lives here rather than in `ancopt_setvar` (`src/type/setvar.f90`)
+!  because the core layers stay untouched; `randseed_set` above is the same
+!  kind of "a key was supplied" flag outside any sub-type.
+   logical  :: xcontrol_supplied = .false.
 !  just check the input, don't do calculations
    logical  :: define = .false.
 !  printlevel for the main program

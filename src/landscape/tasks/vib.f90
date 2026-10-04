@@ -158,6 +158,15 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
       result%message = "frequency analysis failed"
       return
    end if
+   ! The electronic energy of the analysed geometry is part of the frequency
+   ! result: the `--ohess` chain of `main.F90` fills the native frequency
+   ! container from `result%vib` and `write_energy` prints the thermodynamic
+   ! totals as `etot + htot`, so the electronic part has to travel with the
+   ! thermal one (`landscape_vib_result%energy`).  It is filled together with
+   ! the rest of `vib` below and not here: `landscape_vib_analysis` declares
+   ! its result `intent(out)`, which resets **every** component to its default
+   ! when it is called (measured: an assignment at this place produced an empty
+   ! `fres` bridge and a `TOTAL ENERGY 0.000000000000` line).
 
    call landscape_vib_analysis(env, mol, hess, settings, vib, fail)
    if (fail) then
@@ -252,6 +261,16 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
       write(env%unit, '(1x,a)') "!! INCOMPLETELY OPTIMIZED GEOMETRY !!"
       call env%warning("Hessian on incompletely optimized geometry!", source)
    end if
+
+   ! The frequency analysis leaves the task through `result%vib` as well as
+   ! through the shared result block: the `--ohess` chain of `main.F90` is a
+   ! caller that needs the frequencies, the thermochemical totals and the
+   ! electronic energy together (the result fields alone would not be enough).
+   ! The energy comes from the single evaluation the Hessian provider made;
+   ! recomputing it would shift the last digits (SCF restart, AGENTS.md section
+   ! 6.2).  It is assigned here, after both calls with an `intent(out)` result.
+   vib%energy = energy
+   result%vib = vib
 
    if (settings%ljson) call write_json(env, settings, result, vib)
 

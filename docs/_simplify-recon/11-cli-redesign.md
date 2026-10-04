@@ -72,6 +72,7 @@
 | **R41** | **阶段 2 修复轮登记（复核 27 的 M1/L1..L5/INFO-1 处置，`28-stage2-fix-report.md`）**：(a) M1 → 新增 `xtb/landscape-method-table`（**全部 18 个套件名 + 4 个 `auto` 运行**，逐名断言里程碑 + `<ns>.xtbts.log`/`<ns>.irc.log` 的方法行；一次相反的“名字表整体错位”突变同时打红 18 行 + 3 行 scan 回显）；(b) L1 → 4 个被改写的旧旗标补 BC-4 基线（10 次运行，全部输出文件 raw `cmp` 逐位同）；(c) L2 → `--lscan` 的**生效内层最小化器**回显（仅 relaxed；rigid 无内层器）+ “两个内层器必须改变 `xtbscan.log`”断言；(d) L3 → climbing 副作用从共享 setter 移到解析尾（对**最终值**只施加一次），`--lts-method cineb --lts-method neb` 与 `--method cineb --method neb` 等价；(e) L4 → **U15 落地**（`set_module.f90` 的 `.not.allocated` **else 分支**打 `[WARNING]`，即 R34 指定的实现点）；(f) L5 → `main.F90` 的别名表注释订正（`lancopt` 是**新增**拼写，不是 xcontrol 键；`set_module.f90:1889` 的旧引证作废）；(g) INFO-1 → 登记 `landscape_native_engine` 的**可测/不可测边界**（§9.2、§4.7.1）。(c)(d)(e) 各有反向突变证据；5 处刻意行为变更已在正文逐条登记 | 复核 27；`28-stage2-fix-report.md`（T3/T5/T8/T9/T10） | §4.7.1、§6.3、§6.4、§9.1、§9.2、`25-stage2-impl.md §1` |
 | **R42** | **上游 `relaxation_engine` 内在赋值缺陷修复（独立 bug 修复，`30-upstream-relaxation-fix.md`）**：`src/relaxation_engine.f90` 的 L-ANCopt 引擎用**内在派生类型赋值**拷贝几何（`:615 molopt = mol` / `:779 mol = molopt`），gfortran 12.2.0 会破坏 `TMolecule%sym(2:)`（`character(len=:), allocatable` 的 stride 缺陷，AGENTS.md §6 第 5 条；`rf`/FIRE 引擎本来就写 `call molopt%copy(mol)`/`call mol%copy(molopt)`）⇒ 本机构建下原生 `--opt` 走 L-BFGS（`$opt engine=lbfgs`，或 >500 原子的默认引擎）时 `xtbopt.xyz`/`xtbopt.log`/`xtbtopo.mol` 与 stdout 的 `final structure:`/性质表**写垃圾字节**（NUL/随机字节），数值全对。**修法 = 2 行**改成显式 `%copy`（与 `rf` 路径同写法、同签名 `copyMolecule(self,mol0)`）；**数值逐位不变**（`xtbopt.xyz` 12 / `xtbopt.log` 60 / `xtbtopo.mol` 10 / 归一化 stdout 389 个数值 token 序列完全相同），只有符号列由垃圾 → 正确。**计数口径：不属于 18 条 CLI 破坏性变更**（§10 汇总行 A3+B0+C8+D1+E1+F4+G1=**18** 不动），它是**独立的上游 bug 修复**；新增可证伪回归 `xtb/native-opt-lbfgs-symbols`（字节级：严格 UTF-8 + 控制字节扫描 + 符号列与输入比对；注入还原两行 ⇒ 红，还原 ⇒ 绿） | 父会话与阶段 2 修复轮定位；`30-upstream-relaxation-fix.md`（diff / 注入证据 / BC-4 逐文件 `cmp` / 数值不变证明） | §10 汇总行、`30-upstream-relaxation-fix.md`、AGENTS.md §6 第 5 条 |
 | **R43** | **阶段 2b 修复轮登记（5 项，`35-stage2b-fix.md`）**：(a) **T1 生效性回显**——四个拥有 `--l*-hess-step`/`--l*-sccacc` 的任务（opt/scan/ts/irc）现在回显**生效值**（从设置对象读、带单位），并在该（任务, 算法, Hessian 源）组合**不消费**该值时紧跟一行 `(not used: …)`；谓词是**实测**的（§6.3 的事实表：只有 RFO 建数值 Hessian，`--lts --lts-method prfo --lts-no-verify` 仍消费，非 `numerical` 源一律不消费）。**订正（复核 `38-stage2b-fix2-review.md` LOW-2）**：其中 **`--lts`/`--lvib` 的“按方法名枚举”谓词已被取代**——这两个任务改为与引擎 Hessian 计数**同源**的运行级陈述 `engine%report_unused_hess_step`（报告 `37-stage2b-fix2.md` §T1/T2），其触发旗标族也覆盖同族的 `--l*-sccacc`（报告 `39-stage2b-closeout.md` §T1）；`--lopt`/`--lscan`/`--lirc` 的前置谓词不变，新增可证伪测试 `xtb/landscape-hess-step-used`（每任务一个 used + 一个 unused 组合；3 个注入：回显改常量 → 红、谓词取反 → 红、把 ts 谓词写成 `--lts-no-verify ⇒ unused` 的诱人错向 → 红）；(b) **T2** `--lvib-restart warm` ≡ `pin` 的**已知等价**登记到 §6.3 与 `--help`（机制：FD 序列每次位移前把波函数重置为**进入态**），并由 `xtb/landscape-lvib-restart-warm` 钉住（off≠pin，pin 与 warm 的 `hessian` 逐位同；注入 warm 行为改成 off → 红）；(c) **T3** `--help` 的 `(rfo, bfgs)` 不实文案改为与 `optimize/driver.f90:183` 一致（只有 rfo；`--lscan` 写“仅内层 rfo”）；(d) **T4** 报告 32 §5 的三处事实错误（F1/F2/F4）在 32 号内加订正块（原文保留）；(e) **T5** 两个 INFO 登记在下两行 | 用户 5 项裁定；`33-stage2b-validation.md`（F1/F2/F4/F5）、`35-stage2b-fix.md`（事实表 + 注入原文） | §6.3、`35-stage2b-fix.md`、`32-stage2b-impl.md §5` |
+| **R44** | **阶段 3a 实施订正（本轮，`42-stage3a-impl.md`）**：① 状态位 `set%optset%xcontrol_supplied` → **`set%xcontrol_supplied`**（`optset` 的类型 `ancopt_setvar` 在 `src/type/setvar.f90`，属**核心层，本轮硬约束禁止改动**；字段改放允许范围的 `TSet`（`src/setparam.f90:533`），先例 `set%randseed_set`；置位条件与"不进 `write_set_opt`"不变）；② C7 的"爆炸半径**实测** = 0（`grep -rn '\$opt' test/unit/` = 0 命中）"**被证伪**：真实命中 10 处，且真正的通道是**环境**——`XTBPATH=${PROJECT_SOURCE_DIR}` → 仓库根**被 git 跟踪的 `.xtbrc`**（上游 `ef197a9`）→ `$opt` 块；实测 **143/216** 个注册测试带 `XTBPATH`（`ctest --show-only=json-v1` 的 `ENVIRONMENT` 属性），按原设计（全量作用域）实现会让它们**全部硬失败**；③ C7 的 rc 通道作用域**裁定 = (A)**（判据 = **该次 `rdcontrol` 不是 `.xtbrc` 那次**，按来源不按文件名；`--input .xtbrc` 这种显式调用仍被守卫），理由：上游 release 自带 `.xtbrc`，且套件同样忽略 rc 里的 `$md`/`$siman`/`$hess`/`$modef`/`$cube`/`$symmetry`，单挑 `$opt` 致命是武断的；**登记为"待重新评估"**（等有真实用户后再评估 rc 通道是否也该响亮报错）；④ `[NOTICE]` 文案**不写死算法名**（设计 §3.4 建议的 "(lbfgs)" 在 `--opt --method bfgs` 下会错）；⑤ 设计的 PBC 基线句"`--lopt` 报 `landscape_driver.f90:74` 的通用文案"与 §3.8(b) 的触发条件**自相矛盾**：实测守卫先触发（`--lopt` 也拿 `--method ancopt` 文案），driver 拒绝作为**双保险**保留（对直接调 `run_landscape` 的层有效） | 阶段 3a 实测（`42-stage3a-impl.md` §2/§4/§5） | §18（新）、§3.4、§3.8(b)(c)、§3.11、§3.11.2、§4.7 |
 
 > **R43 登记的已知项（INFO，本轮不修代码）**：
 > 1. **死参 `sccacc=`**：`src/landscape/engine/engine.f90:254` 的 `hp%sccacc = self%ctrl%hess_acc` **覆盖**任务层传进 provider 工厂的 `sccacc=` 实参
@@ -803,6 +804,8 @@ CLI 的 `--opt/--ohess/--cycles` 也调 `set_opt`，**它们不置位**——因
 > `--lopt --input <$opt optlevel=tight>` → exit 0、`grep -ci 'warning\|ignore\|opt block'` = 0。
 > 保留这条静默路径与 §1.1 目标 4（绝不静默）直接冲突，而登记的代价是：
 > **爆炸半径实测 = 0**：`grep -rn '\$opt' test/unit/` = **0 命中**（所有 CLI fixture 用的是 `$scan`/`$scc`/`$fix`，不是 `$opt`）。
+>
+> **[订正 R44 —— 本行被证伪，原文保留留痕]** 真实命中 **10 处**（`landscape_cli_check.py` 9 + `CMakeLists.txt` 1），而真正的爆炸半径来自**环境通道**：`XTBPATH=${PROJECT_SOURCE_DIR}` → 仓库根**被 git 跟踪的 `.xtbrc`**（上游提交 `ef197a9`，其 `$opt` 块在文件第 12 行）→ `$opt`。实测 **143/216** 个注册测试带 `XTBPATH`（方法：`ctest --show-only=json-v1` 的 `ENVIRONMENT` 属性逐条统计）。⇒ 按原设计（全量作用域）实现，这 143 个测试**全部硬失败**。见 §18.2。
 > ⇒ **选择：全量守卫 + 登记为 C7 + 计数 15→16**（§10 C7）。
 
 ### 3.9 【R4 新增】套件写全 4 个遗留文件（B 类清零）
@@ -986,6 +989,8 @@ end function
 | 1 | `$scan` 守卫 | `main.F90:491-510`（`select case (set%runtyp)` 加 `p_run_opt`/`p_run_ohess` 分支） | `landscape_is_suite_run` |
 | 2 | 周期守卫 | `main.F90:491-510`（与 #1 同一块；L-4 措辞统一） | `landscape_is_suite_run` + `mol%npbc > 0` |
 | 3 | xcontrol `$opt` 守卫 | 同上（#1/#2 同一块） | `landscape_is_suite_run` + `set%optset%xcontrol_supplied`（§3.8c） |
+
+> **[订正 R44]** 实际字段路径 = **`set%xcontrol_supplied`**（`TSet`，`src/setparam.f90:533`），不是 `set%optset%xcontrol_supplied` —— `optset` 的类型 `ancopt_setvar` 定义在**核心层** `src/type/setvar.f90`，本轮禁止改动。写点/读点/作用域/"不进 `write_set_opt`" 均不变。理由与先例见 §18.1。
 | 4 | **原生优化块抑制（M-3）** | `main.F90:931`：`if (anyopt)` → `if (anyopt .and. landscape_native_engine /= 0)` | `native_engine` |
 | 5 | 套件任务分派（ 5 处） | `main.F90:989`（lopt）、`:1012`（lscan）、`:1028`（lts）、`:1058`（lirc）、`:1077`（lvib） | `effective_landscape_task` |
 | 6 | `--ohess` 的 vib 链 + `fres` 桥 | `main.F90:989-1008` 的 `p_run_lopt` 分派块内、`res%e_total = lres%energy`（`:1003-1005`）写回**之后**、`end if`（`:1008`）**之前**（该块的进入条件改为 `effective_landscape_task(...) == p_run_lopt`） | `landscape_ohess_chain` |
@@ -3012,3 +3017,163 @@ grep -rn "两个逻辑标志" docs/_simplify-recon/11-cli-redesign.md docs/_simp
 | IRC 生效 Hessian source 的回显 | `tasks/irc.f90` 的启动 banner 新增 `Hessian source:`（与 scan/opt/ts/vib 同一行式）；它是**生效值**而非 §17.3 的“危险默认”，所以**默认打、显式也给**（与 §17.3 的抑制规则不同，这是有意的）。它同时把 `--lirc-hessian` 的存储点归一从“不可观测”变成可观测：`xtb/landscape-enum-case` 的 `lirchessian` 组与 `xtb/landscape-lirc-default-echo` 的 `hessian` 路线分别钉住存储值与打印值 |
 | 报告 | `docs/_simplify-recon/22-stage1-final-report.md`（含更新后的零覆盖清单与 BC-4 结论） |
 
+
+---
+
+## 18. 【R44 新增】阶段 3a 实施订正（实施中实测得到的、与正文不符的事实）
+
+> 本节是**订正块**：正文原文一律保留（留痕纪律），订正只在此处与正文的 **[订正 R44]** 指针内。
+> 全部数字来自 `docs/_simplify-recon/42-stage3a-impl.md` 的实测，构建 `/tmp/xtb-3a/build`（-O2，HEAD `2b49ef8`）。
+
+### 18.1 状态位的实际路径：`set%xcontrol_supplied`，不是 `set%optset%xcontrol_supplied`
+
+| 项 | 设计原文 | 实际 |
+|---|---|---|
+| 字段路径 | `set%optset%xcontrol_supplied`（§3.8c、§3.11 读点表 #3、§3.11.2、§4.7） | **`set%xcontrol_supplied`** |
+| 声明处 | `setparam.f90:262-270`（§3.11.2） | `src/setparam.f90:533`（`type :: TSet` 内，紧邻先例 `randseed_set`） |
+| 置位处 | `set_module.f90:797` 的 `case('opt')` 前一行 + `set_legacy` 的 6 个 opt 键 | 同左（`src/set_module.f90:824`、`:2907/2923-2931`），另受 `do_mark` 约束（§18.3） |
+| 不进 `write_set_opt` | 要求 | 自动满足（`write_set_opt` 序列化的是 `optset` 组件；`TSet` 标量本就不在其中，`randseed_set` 是活证据） |
+
+**依据（两条，父会话裁定 (B)）**：
+
+1. **设计原文自相矛盾**：它写"类型 `ancopt_setvar`，`setparam.f90:262-270` 加一字段"，但 `setparam.f90:262-270`
+   是 `TSet` 里 `optset` **组件**的声明与初始化（`type(ancopt_setvar) :: optset = ancopt_setvar(...)`），那里**加不了字段**；
+   字段要加进 `ancopt_setvar` 的**定义**（`src/type/setvar.f90:74-99`），那是**核心层**。⇒ 设计引用的行号其实指向 `TSet`。
+2. **仓库内同型先例**：`set%randseed_set` —— `src/setparam.f90:526` 声明（**在 `TSet` 里**）、
+   `src/set_module.f90:1169` 置位、`:129`/`:568`/`:577` 读取。语义完全同类（"某个键被用户给过"），且不在任何子类型里。
+
+**核心层 0 改动的可核项**（本阶段的硬约束）：
+`git diff --name-only | grep -cE '^src/(type|xtb|mctc|param|io|disp|coulomb)/'` → **0**。
+
+### 18.2 C7 的"爆炸半径实测 = 0"被证伪：真实通道是**环境**，不是测试文件
+
+| 项 | 设计原文 | 实测 |
+|---|---|---|
+| `grep -rn '\$opt' test/unit/` | "**0 命中**" | **10 命中**（`landscape_cli_check.py` 9 + `CMakeLists.txt` 1） |
+| 受影响测试数 | "0 条既有测试会变红" | **143 / 216** 个注册测试带 `XTBPATH=${PROJECT_SOURCE_DIR}` |
+| 机制 | （未提） | `XTBPATH` → 仓库根**被 git 跟踪的 `.xtbrc`**（上游提交 `ef197a9`，`$opt` 块在第 12 行）→ `$opt` 被读入 |
+
+- **测量方法**：`ctest --show-only=json-v1`，逐条读 `properties` 里的 `ENVIRONMENT` 数组，统计含 `XTBPATH` 的测试名。
+  （`test/unit/CMakeLists.txt` 里 `set_tests_properties` 提及 `XTBPATH` 的**块**是 **10 个**——其中 1 个是
+  `foreach(t IN LISTS tests)` 展开成 46 个单元测试；其余块里逐个点名的 `xtb/...` 是 97 个 ⇒ 10 + 46×? 的算法不可靠，
+  以 `ctest` 的 JSON 计数为准：**143**。）
+- **可复现**：`XTBPATH=<repo root> xtb water.xyz --gfn2 --lopt` 在按原设计实现的构建里 **exit 1**，
+  报 `the xcontrol $opt block does nothing for --lopt`；`env -u XTBPATH` 同一命令 exit 0。
+- **⇒ 结论**：原设计的"爆炸半径 0"只在"只看测试文件是否写 `$opt`"的口径下成立，而 C7 的触发条件是
+  "**参数状态里出现过 `$opt`**"，它被 `.xtbrc` 满足。这条订正**不改变 C7 的破坏性计数**（仍是 1 条）。
+
+### 18.3 C7 的 rc 通道作用域：裁定 **(A)**（按来源），并登记为**待重新评估**
+
+**判据（已实施）**：状态位的置位条件 = **该次 `rdcontrol` 调用不是 `.xtbrc` 那一次**。
+
+- `rdcontrol` 新增可选 `logical, intent(in) :: from_input`（缺省 `.true.`）；`src/prog/main.F90:411` 的
+  `.xtbrc` 调用传 `from_input=.false.`；`set_module.f90:824` 的 `case('opt')` 与 `:855-863` 的 `$set` 分支
+  只在 `do_mark` 为真时置位（`$set` 分支用 save/restore 抵消 `set_legacy` 的写入）。
+- **不按文件名豁免**（那是方案 (C)）：`--input .xtbrc` 这种**显式**调用仍被守卫。
+
+**裁定理由（用户/父会话，登记原文）**：
+
+1. 在还没有完整用户群之前先按 (A) 进行 —— **对用户敌对性最小**；
+2. 上游 release 自带 `.xtbrc`，其 `$opt` 块若致命会让**所有**此类用户硬失败；
+3. 套件**同样忽略** rc 里的 `$md`/`$siman`/`$hess`/`$modef`/`$cube`/`$symmetry`（`grep -rn 'set%optset|set%mdset|...' src/landscape/` = **1 命中，且是注释**），
+   单挑 `$opt` 致命是**武断的**；
+4. ⇒ 当前取"**静默 + 登记为已知限制**"。
+
+**登记为"待重新评估"**：等有真实用户使用后，重新评估 rc 通道（`XTBPATH` 指向含 `.xtbrc` 的目录）是否也该响亮报错。
+
+**实测：套件到底消费哪些 rc 块**（`XTBPATH=<probe dir>`，probe 目录放 symlink 的参数文件 + 一个 `.xtbrc`）：
+
+| rc 块 | 套件是否消费 | 实测 |
+|---|---|---|
+| `$scc` | **是** | `$scc temp=5000` → `--lopt` 的 `landscape engine: etemp 5000.000 K`（无 rc 时 300.000 K） |
+| `$thermo` | **是** | `$thermo temp=500.0` → `--lvib` 的 `total enthalpy H(T)` 由 −5.046468590444 → −5.043834691373 Eh |
+| `$fix` | **否**（但**非套件特有**） | rc 的 `$fix atoms: 1`：套件 `--lopt` 与原生 `--opt --method ancopt` 都**不动**冻结（O 分别移到 0.01012 / 0.01024）；而**输入文件**里的 `$fix` 被套件正确尊重（`--lopt` 与 `--opt` 的 O 都停在 (0,0,0)）——原因是 `read_userdata` 读的是**被选中的输入文件**，与套件无关 |
+| `$opt` | **否** | 套件无 `set%optset` 读者（§18.3 第 3 条）；C7 的守卫按 (A) 只对输入文件生效 |
+| `$md`/`$siman`/`$hess`/`$modef`/`$cube`/`$symmetry` | **否**（静态事实） | `grep -rn` 上述 `set%*set` 在 `src/landscape/` 的命中数 = 1（注释） |
+
+⇒ 残留应作为**一整类**登记：**"rc 通道里套件不消费的块"**（`$opt`/`$md`/`$siman`/`$hess`/`$modef`/`$cube`/`$symmetry`），
+而不是只把 `$opt` 当特例。前两类（`$scc`/`$thermo`）经全局参数状态**被消费**，所以"rc 一律被忽略"也是错的。
+
+### 18.4 `[NOTICE]` 文案不写死算法名
+
+设计 §3.4 建议 `[NOTICE] --opt now runs the landscape suite optimiser (lbfgs); ...`。
+实施后 `--opt --method bfgs` **合法**（R39 已移除，§4.7 第 2 段的 `case (p_run_lopt, p_run_opt, p_run_ohess)`），
+此时 "(lbfgs)" 是错的 ⇒ 实际文案：
+
+```
+[NOTICE] --opt now runs the landscape suite optimiser; pass --method ancopt for the legacy ANCopt optimiser.
+[NOTICE] --ohess now runs the landscape suite (optimisation followed by harmonic frequencies); pass --method ancopt for the legacy ANCopt optimiser.
+```
+
+（一行，写 `env%unit` = stdout，每次运行一次，`--silent` 不抑制——与 §3.4 的其余要求一致。）
+
+### 18.5 设计的 PBC 基线句与 §3.8(b) 的触发条件自相矛盾
+
+§3.8(b) 的测试行写"基线：`--lopt` → 报 `landscape tasks do not support periodic boundary conditions yet`（`landscape_driver.f90:74`）"，
+但同一张表的**触发条件**是 `mol%npbc > 0` **且** `landscape_is_suite_run(...)`——后者对 `--lopt` 为真，
+而守卫块（`main.F90:498-557`）在套件分派**之前** ⇒ 实测 `--lopt` + 周期体系拿到的是**守卫**文案
+（含 `--method ancopt`），driver 的通用拒绝**不可达**（保留作**双保险**：直接调 `run_landscape` 的单元测试/API 层仍受它保护）。
+按任务书（"三条触发条件都是 `landscape_is_suite_run`"）实施；本订正记录该矛盾与实测。
+
+### 18.6 `--ohess --ljson` 写**两个**文档
+
+设计 §3.11 写"`--ohess --ljson` 写 `landscape_opt.json`（opt 阶段）"。实测：`--ohess` 是 opt 链 + vib 链，
+两条链都拿到 `--ljson`（`main.F90` 的 `--ljson` 同时置 `lset/lsset/lvset/ltset/lircset`），所以写出
+`landscape_opt.json` **和** `landscape_vib.json`。这是**新增**（BC-3 只要求文件集合不缩小），已登记为有意行为。
+
+---
+
+## 19. 【R45 新增】阶段 3a 修复轮的登记（T1-T3 桥 + BC-4 有意差异穷尽清单）
+
+来源：`45-stage3a-fix.md`。本轮只修任务书 5 项，**未动**档位四轴（§3.5 的 `e_tol`/`acc`/`max_steps`）= 3b。
+
+### 19.1 `--opt <LEVEL>` 桥（§3.5 落地）
+
+- 实现：`--opt`/`--ohess <LEVEL>` 的**原始关键字**（不是 `set%optset%optlev` 的整数——
+  它无法区分 `banana` 与 `normal`，也无法表达套件独有的 `superloose`）经纯函数
+  `landscape_opt_level_to_conv_level` 映射，写进 `lset%set_conv_level`（**与 `--lopt-level` 同一字段**）。
+  映射表照 §3.5；`banana` 等未知 ⇒ `env%error`（破坏性变更 **F3** 落实）。
+  桥在**解析尾**（紧随 `--method` 归一的 runtype 分派）应用，理由见 `45` §1.1。
+- **§3.5 的"显式 `--lopt-level` 高于 `--opt <LEVEL>`（异值 ⇒ error）在 CLI 不可达**：
+  `--lopt-level` 自身调 `select_runtyp(env,'lopt',…)`，与 `--opt` 的 `opt` runtype 冲突，
+  在桥之前就 exit 1，消息本就点名两旗标。故**不实现**该优先级（避免死代码）。
+- 回显：改派 run 打 `[NOTICE] landscape convergence level: <level>`（消除"看不到发生了什么"）。
+
+### 19.2 `--cycles N` 桥（§3.10b 落地）
+
+- 逐 runtype 映射 `*_settings%max_steps`（`--lopt`/`--opt`/`--ohess`→lopt，`--lscan`/`--lts`/`--lirc`→各自）；
+  `--lvib --cycles` ⇒ `env%error`；原生 runtype（含 `--*-method <native>`）保持
+  `set%optset%maxoptcycle`。
+- 冲突：显式 `--cycles N` **低于**任务专有旗标（`--lopt-max-steps` 等）；异值 ⇒ `env%error` 点名两旗标，
+  同值幂等。（"高于档位派生的预算"在 3a 无档位派生预算，留待 3b 与档位四轴一起。）
+
+### 19.3 T1 计时标签
+
+`finalize_xtb` 的 slot 5 标签改读 `landscape_native_hessian_path`（与 T1/T2 抑制**同一判据**）。
+全表审计（`45` §6）：**slot 5 是唯一按裸 runtyp 判定、套件路径下必然为 0 的标签**。
+
+### 19.4 BC-4 有意差异**穷尽清单**（取代"唯一有意例外 = C7"的说法）
+
+**stdout**：`[NOTICE] --opt/--ohess now runs …`；`[NOTICE] landscape convergence level:`（R45）；
+slot 3 `landscape optimizer`（替代 `ANC optimizer`）；套件 `--ohess` 不再打
+`analytical hessian`（R45）；`--ljson` 对改派 `--opt` 不再打 "writes nothing …"；
+F3 的 `Unknown --opt level '<x>'`；T3 的 `--cycles has no meaning for --lvib` /
+`--cycles N conflicts with --lopt-max-steps M`；三条护栏文案（`$scan`/周期/`$opt`）。
+**文件集合**：`--opt --ljson` 写 `landscape_opt.json`；`--ohess --ljson` 加写 `landscape_vib.json`；
+`--ohess` 套件链写 `hessian`/`vibspectrum`/`g98.out`/`vib_normal_modes`（名同原生）。
+**退出码**：C7 `--lopt --input <$opt>` 0→1；三条护栏 ≠0；F3 ≠0；T3 ≠0。
+**数值**：改派 `--opt` 现在真的响应 `--opt <LEVEL>`/`--cycles`，结果 = `--lopt --lopt-level <mapped>`。
+**明确不变**：`--sp/--hess/--bhess/--md/--lscan/--lts/--lirc/--lvib`（无新旗标）、
+原生 `--opt --method ancopt`、`--ohess --method ancopt`、未给 `--cycles` 的 `--lopt` —— 文件逐位不变。
+
+### 19.5 BC-4 的**正确判据**（订正 §13 的"stdout 也逐行相同"）
+
+BC-4 = **输出文件逐位相同** + stdout 的差异**只有**已登记的非确定性
+（版本串 `(<hash>|unknown-commit)`、日期、随机种子、`program call`、回溯地址、
+**无百分号的计时行** `SCC setup/iterations … 0 min, X sec`）。不再声称"stdout 逐行相同"。
+
+### 19.6 `--help` 文本订正（T5）
+
+`src/xhelp.f90` 4 处与 3a 行为矛盾的文案已修（`--opt` 仍写 `ancopt(3)`；`--method` 仍写
+"landscape name refused until --opt dispatched"；`--lopt` 仍写 "use --opt for that block"；
+`--ohess` 仍写 "ancopt(3) optimized geometry"）。自指引导全文清理仍属 3b。

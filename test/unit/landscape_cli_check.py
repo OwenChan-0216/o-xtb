@@ -75,6 +75,20 @@ precedent is `landscape_e2e_check.py`, which CMake runs through
                                      -> xtb/landscape-hess-step-used
   lvibrestart <exe> <input> <rundir> -> xtb/landscape-lvib-restart-warm
 
+The stage 3 checks of the CLI redesign run `--opt`/`--ohess` as landscape
+suite tasks and are implemented here once for both builds; their modes are
+
+  optalias <exe> <input> <rundir>    -> xtb/landscape-opt-alias-once
+  optnative <exe> <input> <rundir>   -> xtb/landscape-opt-native-exit
+  ohesssuite <exe> <input> <rundir>  -> xtb/landscape-ohess-suite-once
+  ohessnative <exe> <input> <rundir> -> xtb/landscape-ohess-native-hess
+  ohessbridge <exe> <input> <rundir> -> xtb/landscape-ohess-fres-bridge
+  optguard <exe> <input> <rundir> <scanblock|pbc|xcontrol>
+                                     -> xtb/landscape-opt-scanblock,
+                                        xtb/landscape-opt-pbc,
+                                        xtb/landscape-opt-xcontrol
+  optxtbopt <exe> <input> <rundir>   -> xtb/landscape-opt-xtbopt-once
+
 The environment (XTBPATH) is inherited from the meson test environment, exactly
 like in the CMake build.
 """
@@ -499,13 +513,15 @@ def check_scanblock(exe, inp, rundir):
     """A landscape run type must reject the xcontrol `$scan` block.
 
     Mirrors `xtb/landscape-scan-xcontrol`.  `$scan` belongs to the ANCopt
-    family - `relaxed_scan` runs it only on the `anyopt` path
-    (`src/prog/main.F90:914-916`) - and no landscape run type executes it.
-    Before the guard, `--lopt --input <file with $scan>` returned status 0 after
-    a plain minimisation and wrote no `xtbscan.log`: the caller asked for a scan
+    family - `relaxed_scan` runs it only on the `anyopt` path, and since stage
+    3 of the CLI redesign the redeployed `--opt` is a landscape run type and no
+    longer walks that path - and no landscape run type executes it.  Before
+    the guard, `--lopt --input <file with $scan>` returned status 0 after a
+    plain minimisation and wrote no `xtbscan.log`: the caller asked for a scan
     and silently got a different task.  The check pins the non-zero status, the
     actionable message and the absence of the scan log for all five run types,
-    and that `--opt` still runs the block.
+    and that `--opt` now refuses the block as loudly as they do while the
+    native exit (`--opt --method ancopt`) still executes it.
     """
     os.makedirs(rundir, exist_ok=True)
     rundir = os.path.abspath(rundir)
@@ -540,18 +556,39 @@ def check_scanblock(exe, inp, rundir):
                  % task, output)
         print("scan block: --%s rejected the $scan block with status %d"
               % (task, status))
-    # the ANCopt path still executes the block
+    # the redeployed `--opt` refuses the block as well (CLI redesign section
+    # 3.8(a)); it is no longer the flag that executes it
     optdir = os.path.join(rundir, "opt")
+    if os.path.exists(os.path.join(optdir, "xtbscan.log")):
+        os.remove(os.path.join(optdir, "xtbscan.log"))
     status, output = run(
         exe, inp, ["--gfn", "2", "--opt", "--input", xcontrol, "--norestart"],
         optdir,
     )
+    if status == 0:
+        fail("xtb --opt accepted the xcontrol $scan block", output)
+    # the guard message itself: the `[NOTICE]` line of the same run mentions
+    # the native exit as well, so the bare substring proves nothing
+    if "does not execute the xcontrol $scan block: use --opt --method ancopt" \
+            not in output:
+        fail("--opt did not refuse the $scan block through the guard", output)
+    if os.path.exists(os.path.join(optdir, "xtbscan.log")):
+        fail("--opt wrote xtbscan.log although it refused the $scan block", output)
+    # ... and the native exit still executes it
+    nativedir = os.path.join(rundir, "opt-native")
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--opt", "--method", "ancopt", "--input", xcontrol,
+         "--norestart"],
+        nativedir,
+    )
     if status != 0:
-        fail("xtb --opt with a $scan block terminated with status %d" % status, output)
+        fail("xtb --opt --method ancopt with a $scan block terminated with "
+             "status %d" % status, output)
     if "RELAXED SCAN" not in output:
-        fail("--opt did not run the $scan block", output)
-    if not os.path.exists(os.path.join(optdir, "xtbscan.log")):
-        fail("--opt did not write xtbscan.log", output)
+        fail("--opt --method ancopt did not run the $scan block", output)
+    if not os.path.exists(os.path.join(nativedir, "xtbscan.log")):
+        fail("--opt --method ancopt did not write xtbscan.log", output)
 
 
 def check_strict_unknown(exe, inp, rundir):
@@ -1878,9 +1915,10 @@ def check_opt_namespace(exe, inp, rundir):
     Mirrors the CMake script of `xtb/landscape-opt-namespace` (defect N-1 of
     the final fix round): `xtb_landscape_log::landscape_write_files` used the
     bare names `xtbopt.xyz`/`xtb.trj` although every other landscape writer and
-    the pre-existing `--opt` pass their names through `get_namespace`, so two
-    minimisations with different namespaces in one directory overwrote each
-    other.  Without `--namespace` the names must stay `xtbopt.xyz`/`xtb.trj`.
+    the native geometry writer (the `open_file` path of `--opt --method
+    ancopt`) pass their names through `get_namespace`, so two minimisations
+    with different namespaces in one directory overwrote each other.  Without
+    `--namespace` the names must stay `xtbopt.xyz`/`xtb.trj`.
 
     `inp` is ignored: the check writes its own *stretched* water, because two
     runs of a geometry that is already at the minimum could produce identical
@@ -2312,16 +2350,19 @@ def check_method_native(exe, inp, rundir, big):
     system the default is `rf` as well).
 
     Scope note for `landscape_native_engine` (stage 2 review INFO-1, fix
-    report T7): the value **is** read at runtime - `src/prog/main.F90:3977`
-    writes it into `set%opt_engine`, and the 501 atom fixture below is
-    falsifiable against that assignment (without it the run reports
-    `L-ANC optimizer` instead of `ANC micro-cycles`).  What is *not* testable
-    yet is the stage 3 effect (dispatching `--opt`/`--ohess` to the suite):
-    that read does not exist in this build, and no test here claims it.
-    The declaration default itself (the `landscape_native_engine = 0` line
-    before the flag loop) stays a **static** check - `intent(out)` makes a
-    missing initialisation read undefined memory that `-O2` usually happens
-    to see as 0, which is what the design section 4.7.1 records.
+    report T7): the value **is** read at runtime - the parser tail writes it
+    into `set%opt_engine`, and the 501 atom fixture below is falsifiable
+    against that assignment (without it the run reports `L-ANC optimizer`
+    instead of `ANC micro-cycles`).  Since stage 3 it is also the dispatch
+    flag of `--opt`/`--ohess`: the redeployed paths are asserted in
+    `xtb/landscape-opt-alias-once`, `xtb/landscape-opt-native-exit` and the
+    four `--ohess` tests of the same round, so this check keeps its stage 2
+    scope (the four native exits) and no longer claims that the redeployment
+    is untested.  The declaration default itself (the
+    `landscape_native_engine = 0` line before the flag loop) stays a
+    **static** check - `intent(out)` makes a missing initialisation read
+    undefined memory that `-O2` usually happens to see as 0, which is what the
+    design section 4.7.1 records.
     """
 
     def invoke(label, input_file, args):
@@ -2398,43 +2439,51 @@ def check_method_native(exe, inp, rundir, big):
         fail("--ohess --method ancopt did not reach the native engine", output)
     if "landscape: " in output:
         fail("--ohess --method ancopt ran the landscape suite", output)
+    if "Numerical Hessian" not in output:
+        fail("--ohess --method ancopt lost the native Hessian block", output)
+    # the plain `--ohess` is the redeployed one: it runs the suite chain and
+    # its files are asserted in `xtb/landscape-ohess-suite-once`; here only
+    # the dispatch (native side versus suite side) is pinned
     status, output, ohess_plain = invoke(
         "native-ohess-plain", inp,
         ["--gfn", "2", "--ohess", "--norestart"],
     )
     if status != 0:
         fail("the plain --ohess run exited %d" % status, output)
-    for name in ("hessian", "vibspectrum", "xtbopt.xyz", "xtbopt.log",
-                 "compliance.dat"):
-        with open(os.path.join(ohess_native, name), "rb") as handle:
-            left = handle.read()
-        with open(os.path.join(ohess_plain, name), "rb") as handle:
-            right = handle.read()
-        if left != right:
-            fail("--ohess --method ancopt changed %s" % name)
+    if "landscape: harmonic frequencies" not in output:
+        fail("the plain --ohess run did not reach the landscape suite", output)
+    if "ANC micro-cycles" in output:
+        fail("the plain --ohess run also ran the native ANCopt", output)
+    for name in ("hessian", "vibspectrum"):
+        if not os.path.exists(os.path.join(ohess_plain, name)):
+            fail("the plain --ohess run did not write %s" % name)
 
-    # a landscape method name under `--opt`/`--ohess` is refused with the
-    # working alternative instead of being a silent no-op (stage 2 boundary
-    # of the CLI redesign, section 4.7)
-    for label, args, pattern in (
-        ("native-reject-opt", ["--gfn", "2", "--opt", "--method", "bfgs"],
-         r"would have no effect"),
-        ("native-reject-ohess", ["--gfn", "2", "--ohess", "--method", "bfgs"],
-         r"would have no effect"),
+    # a landscape method name under `--opt`/`--ohess` reaches the suite
+    # settings object the run reads; the stage 2 refusal (R39 of the redesign)
+    # is gone with the redeployment
+    for label, args, milestone in (
+        ("stage3-opt-suite-method", ["--gfn", "2", "--opt", "--method", "bfgs"],
+         "landscape: bfgs minimisation"),
+        ("stage3-ohess-suite-method", ["--gfn", "2", "--ohess", "--method", "bfgs"],
+         "landscape: bfgs minimisation"),
     ):
         status, output, _ = invoke(label, inp, args)
-        if status == 0:
-            fail("%s: expected a non-zero exit" % label, output)
-        if "--lopt" not in output:
-            fail("%s: the message does not name --lopt" % label, output)
-        if not re.search(pattern, output):
-            fail("%s: missing %r" % (label, pattern), output)
+        if status != 0:
+            fail("%s: exit status %d" % (label, status), output)
+        if milestone not in output:
+            fail("%s: the landscape method name did not reach the suite" % label,
+                 output)
 
     # --- U15: the command line wins over the xcontrol, but not silently ----
     # (CLI redesign section 4.7.1, fix report T10)  `$opt engine=` is ignored
     # as soon as `--method <native>` pinned the engine; the conflicting
     # request has to be reported instead of disappearing, and a request that
-    # agrees with the command line must stay quiet.
+    # agrees with the command line must stay quiet.  Since stage 3 the block
+    # has to arrive with a native exit, because a bare `--opt` plus an `$opt`
+    # block is exactly what the C7 guard refuses; the two cases that used to
+    # run the block alone are therefore spelled with `--method ancopt` (the
+    # engine they exercise is `rf`), and the case that used to test "the
+    # xcontrol selected the engine" is covered by `u15-xcontrol-twice`.
     rf_control = os.path.join(rundir, "opt_engine_rf.ctl")
     with open(rf_control, "w") as handle:
         handle.write("$opt\n   engine=rf\n")
@@ -2445,19 +2494,23 @@ def check_method_native(exe, inp, rundir, big):
     with open(same_control, "w") as handle:
         handle.write("$opt\n   engine=rf\n$end\n$opt\n   engine=lbfgs\n")
 
-    for label, args, warned in (
+    for label, args, warned, token in (
         ("u15-conflict", ["--gfn", "2", "--opt", "--method", "lancopt",
-                          "--norestart", "--input", rf_control], True),
+                          "--norestart", "--input", rf_control], True,
+         "L-ANC optimizer"),
         ("u15-agree", ["--gfn", "2", "--opt", "--method", "lancopt",
-                       "--norestart", "--input", lbfgs_control], False),
+                       "--norestart", "--input", lbfgs_control], False,
+         "L-ANC optimizer"),
         ("u15-cli-only", ["--gfn", "2", "--opt", "--method", "lancopt",
-                          "--norestart"], False),
-        ("u15-xcontrol-only", ["--gfn", "2", "--opt", "--norestart",
-                               "--input", rf_control], False),
+                          "--norestart"], False, "L-ANC optimizer"),
+        ("u15-xcontrol-only", ["--gfn", "2", "--opt", "--method", "ancopt",
+                               "--norestart", "--input", rf_control], False,
+         "ANC micro-cycles"),
         # a repeated `$opt engine=` with two different values was silently
         # ignored before as well; it is the same conflict and is reported too
-        ("u15-xcontrol-twice", ["--gfn", "2", "--opt", "--norestart",
-                                "--input", same_control], True),
+        ("u15-xcontrol-twice", ["--gfn", "2", "--opt", "--method", "ancopt",
+                                "--norestart", "--input", same_control], True,
+         "ANC micro-cycles"),
     ):
         status, output, _ = invoke(label, inp, args)
         if status != 0:
@@ -2470,7 +2523,7 @@ def check_method_native(exe, inp, rundir, big):
             fail("%s: the conflict was reported without a [WARNING] line"
                  % label, output)
         # the command line selection survives in every case
-        if "--method" in args and "L-ANC optimizer" not in output:
+        if token not in output:
             fail("%s: the command line engine was overridden by the $opt block"
                  % label, output)
 
@@ -2484,11 +2537,18 @@ def check_native_opt_symbols(exe, inp, rundir):
     `sym(2:)` of a `character(len=:), allocatable :: sym(:)` component under
     intrinsic assignment while every length stays correct (stride bug,
     AGENTS.md section 6.5 - the suite's own `src/landscape/types/log.f90`
-    already works around it).  Measured consequence: with `$opt engine=lbfgs`
+    already works around it).  Measured consequence: with the L-ANCopt engine
     the symbol column of `xtbopt.xyz` **and** of the `final structure:` block
     of stdout came out as NUL bytes, while the numbers were correct.  The `rf`
-    engine was never affected, which is why `--opt` (default engine `rf` for
-    a small system) looked healthy in the BC-4 fixtures.
+    engine was never affected, which is why the native `--opt` (default engine
+    `rf` for a small system) looked healthy in the BC-4 fixtures.
+
+    The engine is selected with `--method lancopt` and not with an
+    `$opt engine=lbfgs` xcontrol anymore: since stage 3 of the CLI redesign
+    `--opt` without `--method` is a landscape run type, and an `$opt` block
+    next to it is refused (C7).  The selection is the same one - `--method
+    lancopt` pins `p_engine_lbfgs` in the parser, `$opt engine=lbfgs` set it in
+    the control file - so the engine under test is unchanged.
 
     The assertion is on the **bytes**, not on the text: a NUL byte is a valid
     UTF-8 code point (U+0000), so a strict `decode("utf-8")` alone stays green
@@ -2502,12 +2562,8 @@ def check_native_opt_symbols(exe, inp, rundir):
     shutil.rmtree(workdir, ignore_errors=True)
     os.makedirs(workdir)
 
-    control = os.path.join(workdir, "engine.ctl")
-    with open(control, "w") as handle:
-        handle.write("$opt\n   engine=lbfgs\n$end\n")
-
     proc = subprocess.run(
-        [exe, inp, "--gfn", "2", "--opt", "normal", "--input", control,
+        [exe, inp, "--gfn", "2", "--opt", "normal", "--method", "lancopt",
          "--norestart"],
         cwd=workdir, capture_output=True, text=False,
     )
@@ -3483,6 +3539,514 @@ def check_lvib_restart_warm(exe, inp, rundir):
              "equivalence of `--help` no longer holds")
 
 
+# ---------------------------------------------------------------------------
+# CLI redesign stage 3: `--opt`/`--ohess` are executed by the landscape suite
+# ---------------------------------------------------------------------------
+#
+# `--opt`/`--ohess` keep their run types and their identity, but the run they
+# start is the suite task `opt` - plus the frequency analysis for `--ohess` -
+# and the native ANCopt family is reachable through `--method
+# ancopt|lancopt|fire|pbc_lbfgs` only.  Every check below is written against a
+# token the *other* path prints, so "the wrong path ran" and "both paths ran"
+# are both failures:
+#
+#   suite minimisation      `landscape: <algorithm> minimisation`
+#   suite frequencies       `landscape: harmonic frequencies`
+#   native ANCopt           `ANC micro-cycles`
+#   native L-ANCopt         `L-ANC optimizer`
+#   native FIRE             `initial time step`
+#   native pbc L-BFGS       `current lattice:`
+#   native Hessian          `Numerical Hessian`
+#   native frequency table  `Frequency Printout`
+#
+# The design is `docs/_simplify-recon/11-cli-redesign.md` (sections 3.8, 3.11,
+# 3.11.1); the implementation is `docs/_simplify-recon/42-stage3a-impl.md`.
+
+TOTAL_RE = re.compile(r"TOTAL ENTHALPY\s+([-0-9.eE+]+) Eh")
+GIBBS_RE = re.compile(r"TOTAL FREE ENERGY\s+([-0-9.eE+]+) Eh")
+TOTAL_ENERGY_RE = re.compile(r"TOTAL ENERGY\s+([-0-9.eE+]+) Eh")
+LVIB_H_RE = re.compile(r"total enthalpy H\(T\):\s+([-0-9.eE+]+) Eh")
+LVIB_G_RE = re.compile(r"total free energy G\(T\):\s+([-0-9.eE+]+) Eh")
+
+
+def one(pattern, output, what):
+    """Return the single match of `pattern` in `output` (or fail)."""
+    found = pattern.findall(output)
+    if len(found) != 1:
+        fail("expected exactly one %s, found %d" % (what, len(found)), output)
+    return float(found[0])
+
+
+def check_opt_alias_once(exe, inp, rundir):
+    """`--opt` runs the landscape suite, exactly once.
+
+    Mirrors `xtb/landscape-opt-alias-once` (CLI redesign sections 3.11 and
+    4.7.1, R24/M-3).  Two independent signals prove "once": the suite prints
+    its algorithm line while the native engine prints `ANC micro-cycles`
+    (`src/optimizer.f90:392`), and the suite writes `landscape_opt.json`
+    although `--opt` was a run type the `--ljson` switch warned about.  The
+    document is compared with the one of `--lopt`, because "the redeployed
+    `--opt` is the same task" is the point of the alias.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    optdir = os.path.join(rundir, "opt")
+    loptdir = os.path.join(rundir, "lopt")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--opt", "--ljson", "--norestart"], optdir
+    )
+    if status != 0:
+        fail("--opt exited %d" % status, output)
+    if "landscape: lbfgs minimisation" not in output:
+        fail("--opt did not run the landscape suite", output)
+    if "ANC micro-cycles" in output:
+        fail("--opt ran the native ANCopt as well", output)
+    if "[NOTICE]" not in output:
+        fail("the redeployed --opt did not announce the semantic change", output)
+    if "writes nothing without a landscape run type" in output:
+        fail("--ljson reported the redeployed --opt as a run type that knows "
+             "nothing about the switch", output)
+    status2, output2 = run(
+        exe, inp, ["--gfn", "2", "--lopt", "--ljson", "--norestart"], loptdir
+    )
+    if status2 != 0:
+        fail("--lopt exited %d" % status2, output2)
+    document = read_json(optdir, "landscape_opt.json")
+    reference = read_json(loptdir, "landscape_opt.json")
+    if document.get("task") != "opt":
+        fail("the --opt document is not an opt result", output)
+    if document.get("counters", {}).get("n_steps") != \
+            reference.get("counters", {}).get("n_steps"):
+        fail("--opt and --lopt report a different number of steps: %s vs %s"
+             % (document.get("counters"), reference.get("counters")),
+             output + output2)
+    print("opt alias: --opt ran the suite (%s steps, same as --lopt)"
+          % document.get("counters", {}).get("n_steps"))
+
+
+def check_opt_native_exit(exe, inp, rundir):
+    """The four native engines behind `--method` keep `--opt` native.
+
+    Mirrors `xtb/landscape-opt-native-exit` (CLI redesign sections 3.8 and
+    4.7.1).  The three guards, the suppression of the native optimisation block
+    and the `--ljson` criterion all read the same flag, so a run that names a
+    native engine has to keep the native path **and** must not write a
+    landscape document.
+    """
+    rundir = os.path.abspath(rundir)
+    for name, token in (("ancopt", "ANC micro-cycles"),
+                        ("lancopt", "L-ANC optimizer"),
+                        ("fire", "initial time step"),
+                        ("pbc_lbfgs", "current lattice:")):
+        workdir = os.path.join(rundir, "native-" + name)
+        shutil.rmtree(workdir, ignore_errors=True)
+        status, output = run(
+            exe, inp,
+            ["--gfn", "2", "--opt", "--method", name, "--ljson", "--norestart"],
+            workdir,
+        )
+        if status != 0:
+            fail("--opt --method %s exited %d" % (name, status), output)
+        if token not in output:
+            fail("--opt --method %s did not reach the native engine" % name,
+                 output)
+        if "landscape: " in output:
+            fail("--opt --method %s ran the landscape suite" % name, output)
+        if "[NOTICE]" in output:
+            fail("--opt --method %s announced a redeployment" % name, output)
+        if "writes nothing without a landscape run type" not in output:
+            fail("--ljson did not report the native exit --opt --method %s as a "
+                 "run type without a document" % name, output)
+        documents = [f for f in os.listdir(workdir)
+                     if f.startswith("landscape_") and f.endswith(".json")]
+        if documents:
+            fail("--opt --method %s wrote %s" % (name, documents), output)
+        print("opt native exit: --method %-10s -> %s" % (name, token))
+
+
+def check_ohess_suite_once(exe, inp, rundir):
+    """`--ohess` is the suite minimisation followed by the suite frequencies.
+
+    Mirrors `xtb/landscape-ohess-suite-once` (CLI redesign section 3.11.1,
+    T1/T2/T3).  The native Hessian block and the native frequency printout are
+    suppressed through the same flag as the native optimisation, and their
+    tokens (`Numerical Hessian`, `Frequency Printout`, `ANC micro-cycles`) are
+    the falsifiable part; the container they fill is covered by
+    `xtb/landscape-ohess-fres-bridge`.  Each stage of the chain must run
+    exactly once, which is what the two milestone counts and the single
+    `landscape engine: Hessians           1` line of the frequency report show.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    status, output = run(exe, inp, ["--gfn", "2", "--ohess", "--norestart"], rundir)
+    if status != 0:
+        fail("--ohess exited %d" % status, output)
+    for token, expected in (("Numerical Hessian", 0), ("Frequency Printout", 0),
+                            ("ANC micro-cycles", 0),
+                            ("analytical hessian", 0),
+                            ("landscape: lbfgs minimisation", 1),
+                            ("landscape: harmonic frequencies", 1),
+                            ("landscape engine: Hessians           1", 1)):
+        count = output.count(token)
+        if count != expected:
+            fail("--ohess printed %r %d times instead of %d"
+                 % (token, count, expected), output)
+    for name in ("hessian", "vibspectrum", "g98.out", "xtbopt.xyz"):
+        if not os.path.exists(os.path.join(rundir, name)):
+            fail("--ohess wrote no %s" % name, output)
+    print("ohess suite: one minimisation + one frequency analysis, "
+          "no native Hessian/frequency block")
+
+
+def check_ohess_native_hess(exe, inp, rundir):
+    """`--ohess --method ancopt` keeps the native Hessian and frequency path.
+
+    Mirrors `xtb/landscape-ohess-native-hess`, the reverse direction of the
+    suppression: a criterion that is always false (for instance one that only
+    looks at the suite) would silently drop the native Hessian here, and the
+    missing `Numerical Hessian` line and the missing files are the failure.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--ohess", "--method", "ancopt", "--norestart"],
+        rundir,
+    )
+    if status != 0:
+        fail("--ohess --method ancopt exited %d" % status, output)
+    for token, expected in (("Numerical Hessian", 1), ("Frequency Printout", 1),
+                            ("analytical hessian", 1),
+                            ("landscape: harmonic frequencies", 0),
+                            ("landscape: lbfgs minimisation", 0)):
+        count = output.count(token)
+        if count != expected:
+            fail("--ohess --method ancopt printed %r %d times instead of %d"
+                 % (token, count, expected), output)
+    for name in ("hessian", "vibspectrum", "g98.out"):
+        if not os.path.exists(os.path.join(rundir, name)):
+            fail("--ohess --method ancopt wrote no %s" % name, output)
+    print("ohess native: native Hessian and frequency path kept")
+
+
+def check_ohess_fres_bridge(exe, inp, rundir):
+    """The `--ohess` frequency bridge reproduces the native console contract.
+
+    Mirrors `xtb/landscape-ohess-fres-bridge` (CLI redesign section 3.11.1,
+    T3).  `anyhess` stays the criterion of the three readers of the frequency
+    container, so the redeployed `--ohess` has to *fill* it: without the bridge
+    the property block loses `TOTAL ENTHALPY`/`TOTAL FREE ENERGY`, and a half
+    fix (container printed, not filled) prints `TOTAL ENERGY 0.000000000000`.
+    The totals are compared with `--lvib` on the minimised geometry, so a
+    bridge that fills the wrong field fails as well.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    ohessdir = os.path.join(rundir, "ohess")
+    vibdir = os.path.join(rundir, "vib")
+    status, output = run(exe, inp, ["--gfn", "2", "--ohess", "--norestart"], ohessdir)
+    if status != 0:
+        fail("--ohess exited %d" % status, output)
+    energy = one(TOTAL_ENERGY_RE, output, "TOTAL ENERGY line")
+    enthalpy = one(TOTAL_RE, output, "TOTAL ENTHALPY line")
+    gibbs = one(GIBBS_RE, output, "TOTAL FREE ENERGY line")
+    if abs(energy) < 1.0e-8:
+        fail("--ohess reports TOTAL ENERGY 0: the frequency container was "
+             "printed but not filled", output)
+    status2, output2 = run(
+        exe, os.path.join(ohessdir, "xtbopt.xyz"),
+        ["--gfn", "2", "--lvib", "--norestart"], vibdir,
+    )
+    if status2 != 0:
+        fail("--lvib on the minimised geometry exited %d" % status2, output2)
+    reference_h = one(LVIB_H_RE, output2, "total enthalpy H(T) line")
+    reference_g = one(LVIB_G_RE, output2, "total free energy G(T) line")
+    if abs(enthalpy - reference_h) > 1.0e-6:
+        fail("--ohess TOTAL ENTHALPY %.12f differs from --lvib %.12f"
+             % (enthalpy, reference_h), output + output2)
+    if abs(gibbs - reference_g) > 1.0e-6:
+        fail("--ohess TOTAL FREE ENERGY %.12f differs from --lvib %.12f"
+             % (gibbs, reference_g), output + output2)
+    print("ohess bridge: TOTAL ENERGY %.12f, H(T) %.12f (--lvib %.12f)"
+          % (energy, enthalpy, reference_h))
+
+
+def check_opt_guard(exe, inp, rundir, case):
+    """The three guards of the redeployed `--opt` (CLI redesign section 3.8).
+
+    Mirrors `xtb/landscape-opt-scanblock`, `xtb/landscape-opt-pbc` and
+    `xtb/landscape-opt-xcontrol`.  Each case asserts both directions: the
+    redeployed `--opt` refuses the input with a message that names the native
+    exit, and the same input through `--opt --method ancopt` still works -
+    a guard that is too wide would fail the second half, a guard that is
+    missing would fail the first.  The scan case additionally pins the absence
+    of `xtbscan.log` (the block must not run at all) and the xcontrol case the
+    full scope of C7 (`--lopt` refuses the same block).
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    os.makedirs(rundir, exist_ok=True)
+
+    def invoke(label, input_file, args):
+        workdir = os.path.join(rundir, label)
+        os.makedirs(workdir)
+        return run(exe, input_file, args, workdir) + (workdir,)
+
+    if case == "scanblock":
+        control = os.path.join(rundir, "scan.inp")
+        with open(control, "w") as handle:
+            handle.write("$constrain\n  distance: 1, 2, auto\n"
+                         "$scan\n  1: 0.9, 1.1, 3\n$end\n")
+        status, output, workdir = invoke(
+            "guard", inp, ["--gfn", "2", "--opt", "--input", control, "--norestart"]
+        )
+        if status == 0:
+            fail("--opt accepted the xcontrol $scan block", output)
+        # the message of the guard itself; the `[NOTICE]` line of the same run
+        # also contains `--method ancopt`, so the bare substring is not enough
+        if "does not execute the xcontrol $scan block: use --opt --method ancopt" \
+                not in output:
+            fail("the refusal is not the $scan guard of the redeployed --opt",
+                 output)
+        if os.path.exists(os.path.join(workdir, "xtbscan.log")):
+            fail("--opt wrote xtbscan.log although it refused the block", output)
+        status, output, workdir = invoke(
+            "baseline", inp,
+            ["--gfn", "2", "--opt", "--method", "ancopt", "--input", control,
+             "--norestart"],
+        )
+        if status != 0:
+            fail("the native exit refused the $scan block (exit %d)" % status,
+                 output)
+        if "RELAXED SCAN" not in output:
+            fail("the native exit did not execute the $scan block", output)
+        if not os.path.exists(os.path.join(workdir, "xtbscan.log")):
+            fail("the native exit wrote no xtbscan.log", output)
+        print("opt guard scanblock: refused with %r, native exit runs it"
+              % "--method ancopt")
+    elif case == "pbc":
+        status, output, _ = invoke(
+            "guard", inp, ["--gfnff", "--opt", "--norestart"]
+        )
+        if status == 0:
+            fail("--opt accepted a periodic system", output)
+        # the guard, not the generic refusal of the driver and not the
+        # `[NOTICE]` line (both of which also mention the native exit)
+        if "runs the landscape suite, which does not support periodic " \
+                "boundary conditions: use --opt --method ancopt" not in output:
+            fail("the refusal is not the periodic guard of the redeployed "
+                 "--opt", output)
+        status, output, _ = invoke(
+            "baseline", inp,
+            ["--gfnff", "--opt", "--method", "ancopt", "--norestart"],
+        )
+        if status != 0:
+            fail("the native exit refused the periodic system (exit %d)" % status,
+                 output)
+        if "current lattice:" not in output:
+            fail("the native periodic optimiser did not run", output)
+        print("opt guard pbc: refused with %r, native exit runs pbc_lbfgs"
+              % "--method ancopt")
+    elif case == "xcontrol":
+        control = os.path.join(rundir, "opt.inp")
+        with open(control, "w") as handle:
+            handle.write("$opt\n   optlevel=tight\n")
+        status, output, _ = invoke(
+            "guard", inp, ["--gfn", "2", "--opt", "--input", control, "--norestart"]
+        )
+        if status == 0:
+            fail("--opt accepted the xcontrol $opt block", output)
+        if "the xcontrol $opt block does nothing for --opt" not in output:
+            fail("the refusal is not the $opt guard of the redeployed --opt",
+                 output)
+        status, output, _ = invoke(
+            "baseline", inp,
+            ["--gfn", "2", "--opt", "--method", "ancopt", "--input", control,
+             "--norestart"],
+        )
+        if status != 0:
+            fail("the native exit refused the $opt block (exit %d)" % status,
+                 output)
+        # C7 covers every suite run type, not only the redeployed `--opt`
+        status, output, _ = invoke(
+            "lopt", inp, ["--gfn", "2", "--lopt", "--input", control, "--norestart"]
+        )
+        if status == 0:
+            fail("--lopt accepted the xcontrol $opt block", output)
+        if "the xcontrol $opt block does nothing for --lopt" not in output:
+            fail("the --lopt refusal is not the $opt guard", output)
+        print("opt guard xcontrol: refused for --opt and --lopt, "
+              "native exit honours it")
+    else:
+        fail("unknown opt guard case %r" % case)
+
+
+def check_opt_xtbopt_once(exe, inp, rundir):
+    """`--opt` writes `xtbopt.xyz` once and labels its timer correctly.
+
+    Mirrors `xtb/landscape-opt-xtbopt-once` (CLI redesign read points 13/14).
+    The native optimisers have a second geometry writer of their own next to
+    the one of the suite, and the timing block names the timer that ran; for
+    the redeployed `--opt` both have to follow the suite.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    plain = os.path.join(rundir, "plain")
+    status, output = run(exe, inp, ["--gfn", "2", "--opt", "--norestart"], plain)
+    if status != 0:
+        fail("--opt exited %d" % status, output)
+    if output.count("optimized geometry written to:") != 0:
+        fail("--opt printed the native geometry message as well", output)
+    if output.count("wrote xtbopt.xyz") != 1:
+        fail("--opt wrote xtbopt.xyz %d times instead of 1"
+             % output.count("wrote xtbopt.xyz"), output)
+    if "landscape optimizer" not in output:
+        fail("the timing block does not name the landscape optimiser", output)
+    if "ANC optimizer" in output:
+        fail("the timing block still names the native optimiser", output)
+    namespaced = os.path.join(rundir, "namespaced")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--opt", "--namespace", "c1", "--norestart"],
+        namespaced,
+    )
+    if status != 0:
+        fail("--opt --namespace c1 exited %d" % status, output)
+    if not os.path.exists(os.path.join(namespaced, "c1.xtbopt.xyz")):
+        fail("--opt --namespace c1 wrote no c1.xtbopt.xyz", output)
+    if os.path.exists(os.path.join(namespaced, "xtbopt.xyz")):
+        fail("--opt --namespace c1 also wrote the unprefixed xtbopt.xyz", output)
+    print("opt xtbopt: one writer, landscape timer, namespace honoured")
+
+
+def check_opt_level_bridge(exe, inp, rundir):
+    """`--opt <LEVEL>` drives the suite convergence level (redesign 3.5).
+
+    Mirrors `xtb/landscape-opt-level-bridge` (stage 3a fix round, finding B and
+    the destructive change F3).  Before the fix the upstream level keyword
+    reached the native ANCopt only, which `--opt` left in stage 3, so `--opt`,
+    `--opt tight` and `--opt crude` were the same run.  The bridge makes
+    `--opt tight` the same run as `--lopt --lopt-level tight` (byte-identical
+    geometry and trajectory), `--opt crude` a *different* one (it maps to
+    `superloose`), an unknown keyword an error that names the flag, and the
+    level flag of the suite unusable with the `--opt` run type.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    opt = os.path.join(rundir, "opt-tight")
+    lopt = os.path.join(rundir, "lopt-tight")
+    status, output = run(exe, inp,
+                         ["--gfn", "2", "--opt", "tight", "--norestart"], opt)
+    if status != 0:
+        fail("--opt tight exited %d" % status, output)
+    if "landscape convergence level: tight" not in output:
+        fail("--opt tight did not report the bridged level", output)
+    status2, output2 = run(
+        exe, inp,
+        ["--gfn", "2", "--lopt", "--lopt-level", "tight", "--norestart"],
+        lopt,
+    )
+    if status2 != 0:
+        fail("--lopt --lopt-level tight exited %d" % status2, output2)
+    for name in ("xtbopt.xyz", "xtb.trj"):
+        with open(os.path.join(opt, name), "rb") as handle:
+            bridged = handle.read()
+        with open(os.path.join(lopt, name), "rb") as handle:
+            reference = handle.read()
+        if bridged != reference:
+            fail("--opt tight and --lopt --lopt-level tight wrote different %s"
+                 % name, output + output2)
+
+    def steps(label, args):
+        workdir = os.path.join(rundir, label)
+        run(exe, inp, ["--gfn", "2"] + args + ["--ljson", "--norestart"], workdir)
+        return read_json(workdir, "landscape_opt.json")["counters"]["n_steps"]
+
+    crude = steps("opt-crude", ["--opt", "crude"])
+    tight = steps("opt-tight-json", ["--opt", "tight"])
+    if crude == tight:
+        fail("--opt crude and --opt tight produced the same run (%d steps)"
+             % crude)
+
+    status, output = run(exe, inp,
+                         ["--gfn", "2", "--opt", "banana", "--norestart"],
+                         os.path.join(rundir, "banana"))
+    if status == 0:
+        fail("--opt banana was accepted silently", output)
+    if "Unknown --opt level 'banana'" not in output:
+        fail("the unknown --opt level was not named", output)
+
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--opt", "tight", "--lopt-level", "loose",
+         "--norestart"],
+        os.path.join(rundir, "conflict"),
+    )
+    if status == 0:
+        fail("--opt tight with --lopt-level loose was accepted", output)
+    print("opt level bridge: --opt tight == --lopt --lopt-level tight, "
+          "crude %d != tight %d steps" % (crude, tight))
+
+
+def check_cycles_mapping(exe, inp, rundir):
+    """`--cycles N` drives the suite step budget of the run type (3.10b).
+
+    Mirrors `xtb/landscape-cycles-map`, `-lvib` and `-conflict` (stage 3a fix
+    round, finding C).  `--cycles` used to set the native
+    `set%optset%maxoptcycle` that no landscape run type reads, so it was a dead
+    knob.  The water fixture needs five steps by default, so a budget of four
+    binds and the document reports exactly four steps - the same number as
+    `--lopt-max-steps 4`, and fewer than the default.  A budget the
+    minimisation cannot meet exits non-zero, which is expected; the document
+    is written in either case, so only `counters.n_steps` is asserted.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+
+    def steps(label, args):
+        workdir = os.path.join(rundir, label)
+        run(exe, inp, ["--gfn", "2"] + args + ["--ljson", "--norestart"],
+            workdir)
+        return read_json(workdir, "landscape_opt.json")["counters"]["n_steps"]
+
+    default = steps("default", ["--lopt"])
+    cycles = steps("cycles", ["--lopt", "--cycles", "4"])
+    flag = steps("flag", ["--lopt", "--lopt-max-steps", "4"])
+    opt = steps("opt", ["--opt", "--cycles", "4"])
+    if cycles != flag:
+        fail("--lopt --cycles 4 reports %d steps, --lopt --lopt-max-steps 4 %d"
+             % (cycles, flag))
+    if cycles >= default:
+        fail("--lopt --cycles 4 does not bind (default %d, cycles %d)"
+             % (default, cycles))
+    if opt != cycles:
+        fail("--opt --cycles 4 reports %d steps, --lopt --cycles 4 %d"
+             % (opt, cycles))
+    same = steps("same", ["--lopt", "--cycles", "4", "--lopt-max-steps", "4"])
+    if same != cycles:
+        fail("--cycles and --lopt-max-steps of the same value disagree")
+
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--lopt", "--cycles", "4", "--lopt-max-steps", "5",
+         "--norestart"],
+        os.path.join(rundir, "conflict"),
+    )
+    if status == 0:
+        fail("--cycles 4 with --lopt-max-steps 5 was accepted", output)
+    if "--lopt-max-steps" not in output:
+        fail("the step budget conflict does not name --lopt-max-steps", output)
+
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--lvib", "--cycles", "4", "--norestart"],
+        os.path.join(rundir, "lvib"),
+    )
+    if status == 0:
+        fail("--lvib --cycles 4 was accepted", output)
+    if "--cycles has no meaning for --lvib" not in output:
+        fail("--lvib --cycles did not report the missing step budget", output)
+    print("cycles map: --cycles 4 == --lopt-max-steps 4 (%d steps, default %d), "
+          "lvib and conflict refused" % (cycles, default))
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -3593,6 +4157,27 @@ def main():
         check_hessian_step_used(exe, inp, rundir, rest[0], rest[1], rest[2])
     elif mode == "lvibrestart":
         check_lvib_restart_warm(exe, inp, rundir)
+    elif mode == "optalias":
+        check_opt_alias_once(exe, inp, rundir)
+    elif mode == "optnative":
+        check_opt_native_exit(exe, inp, rundir)
+    elif mode == "ohesssuite":
+        check_ohess_suite_once(exe, inp, rundir)
+    elif mode == "ohessnative":
+        check_ohess_native_hess(exe, inp, rundir)
+    elif mode == "ohessbridge":
+        check_ohess_fres_bridge(exe, inp, rundir)
+    elif mode == "optguard":
+        if len(rest) < 1:
+            fail("the optguard mode needs the guard case "
+                 "(scanblock, pbc or xcontrol)")
+        check_opt_guard(exe, inp, rundir, rest[0])
+    elif mode == "optxtbopt":
+        check_opt_xtbopt_once(exe, inp, rundir)
+    elif mode == "optlevel":
+        check_opt_level_bridge(exe, inp, rundir)
+    elif mode == "cycles":
+        check_cycles_mapping(exe, inp, rundir)
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

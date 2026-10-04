@@ -268,8 +268,11 @@ subroutine help(iunit)
    "    performs a gradient calculation",&
    "",&
    "-o, --opt [LEVEL]",&
-   "    call ancopt(3) to perform a geometry optimization, levels from crude, sloppy,", &
-   "    loose, normal (default), tight, verytight to extreme can be chosen",&
+   "    optimize the geometry with the landscape task suite (stage 3); the legacy", &
+   "    ANCopt is reachable as --opt --method ancopt, and the level keyword follows", &
+   "    the upstream names crude, sloppy, loose, lax, normal (default), tight,", &
+   "    verytight, extreme, the spelling vtight and the suite-only superloose; the", &
+   "    run echoes the level it uses",&
    "",&
    "--method NAME",&
    "    select the method of the current landscape run type; the value domain is", &
@@ -279,8 +282,8 @@ subroutine help(iunit)
    "    string, gsm; --lirc accepts the integrators gs, hpc, lqa, eulerpc; auto keeps", &
    "    the default of the task.  With --opt and --ohess the native engines ancopt", &
    "    (alias rf), lancopt (alias l-ancopt), fire (alias inertial) and pbc_lbfgs are", &
-   "    accepted, a landscape name is refused until --opt is dispatched to the", &
-   "    suite.  --method is the canonical name of --lopt-engine, --lscan-method,", &
+   "    accepted; a landscape name selects the suite that the redeployed --opt runs.", &
+   "    --method is the canonical name of --lopt-engine, --lscan-method,", &
    "    --lts-method and --lirc-method: the same value is idempotent, a different", &
    "    value through two of the flags aborts the run.  The name is not", &
    "    case-sensitive",&
@@ -297,7 +300,7 @@ subroutine help(iunit)
    "    minimize the geometry with the landscape task suite (src/landscape); the", &
    "    algorithm is selected with --lopt-engine and the thresholds with --lopt-level",&
    "    an xcontrol $scan block is not executed by this run type and aborts the run", &
-   "    (use --opt for that block, or --lscan with --lscan-coord)", &
+   "    (use --opt --method ancopt for that block, or --lscan with --lscan-coord)", &
    "",&
    "--lopt-engine NAME",&
    "    minimisation algorithm of the landscape suite, one of sd, cg, lbfgs,", &
@@ -774,7 +777,9 @@ subroutine help(iunit)
    "    perform a numerical hessian calculation on input geometry",&
    "",&
    "--ohess [LEVEL]",&
-   "    perform a numerical hessian calculation on an ancopt(3) optimized geometry",&
+   "    minimize the geometry with the landscape task suite and run its harmonic", &
+   "    frequency analysis (the legacy ancopt(3) plus numerical Hessian path is", &
+   "    --ohess --method ancopt)", &
    "",&
    "--bhess [LEVEL]",&
    "    perform a biased numerical hessian calculation on an ancopt(3) optimized geometry",&
