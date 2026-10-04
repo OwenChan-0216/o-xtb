@@ -3774,6 +3774,74 @@ add_test("xtb/landscape-cycles-map"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cycles-map
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The legacy file contract (CLI redesign section 3.9, R4): the suite writes
+# `.xtboptok`/`NOT_CONVERGED`, `xtbopt.log`, `xtblast.xyz` and
+# `compliance.dat` with the upstream semantics, and the three geometry names
+# carry the namespace while `compliance.dat` stays bare.  The `--ohess`
+# failure path (section 3.9, T2) aborts with the single opt error instead of
+# the misleading frequency cascade.
+add_test("xtb/landscape-file-contract-opt"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=filecontractopt;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-file-contract-opt"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-file-contract-opt
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-file-contract-opt-fail"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=filecontractoptfail;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-file-contract-opt-fail"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-file-contract-opt-fail
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-file-contract-vib"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=filecontractvib;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-file-contract-vib"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-file-contract-vib
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-file-contract-namespace"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=filecontractns;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-file-contract-namespace"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-file-contract-namespace
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-ohess-fail"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=ohessfail;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-fail"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-fail
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The converse of the `compliance.dat` contract (a single atom and `$fix atoms:`
+# must not write it) and the native run types that stage 3a accidentally
+# disconnected from their optimisation: `--omd`/`--screen`/`--metaopt` are not
+# redeployed, so their native ANCopt block has to run (review HIGH-1 of
+# `52-stage3b-review.md`).  The second test uses the distorted water fixture
+# (O-H = 1.300 angstrom), whose bond the native minimisation shortens to 0.96.
+add_test("xtb/landscape-vib-compliance-skip"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=vibcomplianceskip;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-vib-compliance-skip"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-vib-compliance-skip
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+add_test("xtb/landscape-native-runtypes-unaffected"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=nativetypes;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O-STRETCH};${CMAKE_CURRENT_BINARY_DIR}/landscape-native-runtypes-unaffected"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-native-runtypes-unaffected
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # 340x OpenMP anti-scaling of many small single points out of the picture
 # (AGENTS.md section 6.8).  The stage 1 CLI checks of the same family
@@ -3829,6 +3897,13 @@ set_tests_properties(
   "xtb/landscape-ohess-fres-bridge"
   "xtb/landscape-opt-level-bridge"
   "xtb/landscape-cycles-map"
+  "xtb/landscape-file-contract-opt"
+  "xtb/landscape-file-contract-opt-fail"
+  "xtb/landscape-file-contract-vib"
+  "xtb/landscape-file-contract-namespace"
+  "xtb/landscape-ohess-fail"
+  "xtb/landscape-vib-compliance-skip"
+  "xtb/landscape-native-runtypes-unaffected"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

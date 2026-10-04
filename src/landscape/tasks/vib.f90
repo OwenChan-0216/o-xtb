@@ -59,6 +59,8 @@ module xtb_landscape_tasks_vib
    use xtb_landscape_results, only : landscape_result, landscape_vib_result
    use xtb_landscape_coords, only : vec_norm, geometry_pack
    use xtb_landscape_hessian, only : landscape_write_hessian_file
+   use xtb_landscape_constraints, only : landscape_frozen_mask
+   use xtb_compliance, only : compliance_driver
    use xtb_landscape_vib_numhess, only : landscape_vib_hessian
    use xtb_landscape_vib_modes, only : landscape_vib_analysis
    use xtb_landscape_vib_thermo, only : landscape_vib_thermo_output, &
@@ -157,6 +159,38 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
    if (fail) then
       result%message = "frequency analysis failed"
       return
+   end if
+
+   ! Legacy `compliance.dat` (CLI redesign section 3.9): the native `--hess`
+   ! calls `compliance_driver` right after the numerical Hessian
+   ! (`src/hessian.F90:331`), and the driver writes the file under its **bare**
+   ! name (`src/compliance.f90:287`, no namespace).  The suite calls the same
+   ! driver so that a `--lvib` run produces the file the `--hess` tool chain
+   ! expects.
+   !
+   ! The **condition is deliberately not upstream's**: `src/hessian.F90:331`
+   ! tests `freezeset%n == 0`, i.e. the `$fix freeze:` list, which is read only
+   ! for the numerical Hessian and is a *different* list from the `$fix atoms:`
+   ! list (`src/constrain_param.f90:335-357` writes `fixset` for `atoms` and
+   ! `freezeset` for `freeze`; `man/xcontrol.7.adoc:212-216`).  Both directions
+   ! are reachable: `$fix atoms: ...` leaves `freezeset%n == 0` and upstream
+   ! would write the file, `$fix freeze: ...` sets it and upstream would not.
+   ! The suite rejects the atoms of `fixset` here, because `fixset` /
+   ! `landscape_frozen_mask` is the **single** `$fix` source of truth of the
+   ! suite (`types/constraints.f90`).  The frequency analysis never reads that
+   ! mask: the fixed atoms get a zero gradient at the calculator layer
+   ! (`src/xtb/calculator.f90`), and the finite difference Hessian is built from
+   ! gradient differences (`types/hessian.f90`), so the rows and columns of the
+   ! frozen coordinates are zero - the compliance analysis of this run must not
+   ! cover coordinates the Hessian does not contain.  Registered as a
+   ! deviation in `docs/_simplify-recon/11-cli-redesign.md` section 3.9;
+   ! `$fix freeze:` is not honoured by the suite at all, so a run with only a
+   ! `freeze:` list takes the same branch as one without any `$fix` block.
+   ! The suite refuses periodic systems before the task runs
+   ! (`landscape_driver.f90`), so `mol%npbc == 0` documents the parity.
+   if (mol%n > 1 .and. .not. any(landscape_frozen_mask(mol%n)) .and. &
+      & mol%npbc == 0) then
+      call compliance_driver(env, mol, hess)
    end if
    ! The electronic energy of the analysed geometry is part of the frequency
    ! result: the `--ohess` chain of `main.F90` fills the native frequency

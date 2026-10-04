@@ -153,6 +153,16 @@ run_command(
   h2o_xyz,
   check: true,
 )
+# the distorted water of `xtb/landscape-native-runtypes-unaffected`: the native
+# optimisation has to shorten the 1.30 angstrom O-H bond, so an unoptimised run
+# is detectable in the geometry itself
+h2o_stretch_xyz = meson.current_build_dir() / 'landscape_h2o_stretch.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("3\\nstretched water\\nO 0.0 0.0 0.0\\nH 0.0 0.0 1.3\\nH 1.3 0.0 -0.4\\n")',
+  h2o_stretch_xyz,
+  check: true,
+)
 test('landscape opt', xtb_exe, env: landscape_env, args: [
   h2o_xyz, '--gfn', '2', '--lopt', '--lopt-engine', 'lbfgs',
   '--lopt-level', 'normal', '--norestart', '--namespace', 'landscape1',
@@ -885,4 +895,36 @@ test('landscape opt level bridge', python, env: landscape_env, args: [
 test('landscape cycles map', python, env: landscape_env, args: [
   landscape_cli_check, 'cycles', xtb_exe, h2o_xyz,
   landscape_cli_dir / 'landscape-cycles-map',
+])
+# stage 3b: the legacy file contract (redesign section 3.9, R4) and the
+# `--ohess` failure path (section 3.9, T2)
+test('landscape file contract opt', python, env: landscape_env, args: [
+  landscape_cli_check, 'filecontractopt', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-file-contract-opt',
+])
+test('landscape file contract opt fail', python, env: landscape_env, args: [
+  landscape_cli_check, 'filecontractoptfail', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-file-contract-opt-fail',
+])
+test('landscape file contract vib', python, env: landscape_env, args: [
+  landscape_cli_check, 'filecontractvib', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-file-contract-vib',
+])
+test('landscape file contract namespace', python, env: landscape_env, args: [
+  landscape_cli_check, 'filecontractns', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-file-contract-namespace',
+])
+test('landscape ohess fail', python, env: landscape_env, args: [
+  landscape_cli_check, 'ohessfail', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-ohess-fail',
+])
+# the converse of the compliance contract and the native run types that stage 3a
+# accidentally disconnected from their optimisation (review HIGH-1)
+test('landscape vib compliance skip', python, env: landscape_env, args: [
+  landscape_cli_check, 'vibcomplianceskip', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-vib-compliance-skip',
+])
+test('landscape native runtypes unaffected', python, env: landscape_env, args: [
+  landscape_cli_check, 'nativetypes', xtb_exe, h2o_stretch_xyz,
+  landscape_cli_dir / 'landscape-native-runtypes-unaffected',
 ])

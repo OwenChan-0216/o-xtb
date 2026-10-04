@@ -147,6 +147,11 @@
 | BC-5 | **被改派的任务必须显式告知**：`--opt`/`--ohess` 的语义改变必须在**每次运行**打印一行提示。**R11 修订**：提示走 **stdout**（与 `env%warning`/`env%error` 同一 `env%unit`，`[实测]` §3.4），因此判据是"grep **stdout** 里的 `[NOTICE]` 行" —— 与 §9.2 的测试写法一致，不再自相矛盾 | `xtb/landscape-opt-alias` 断言 stdout 含 `[NOTICE]` |
 
 **本设计对 BC-1..BC-5 全部满足**（BC-4 在 `--opt`/`--ohess` 两处**有意违反**，见 §10 A 类；其余 runtyp 满足 BC-4）。
+
+> **[订正 T4，阶段 3b 修复轮]** 上一句的“**两处**”不完整：`--lvib` **不是**改派 runtype，但 §3.9 的遗留文件契约
+> 给它加了 **stdout 的一段 compliance 块 + 一个新的输出文件 `compliance.dat`**（文件属 BC-3 允许的“新增”，
+> stdout 变化属 BC-4 意义上的**有意差异**）。⇒ BC-4 的有意差异**至少三处**（`--opt`/`--ohess`/`--lvib`），
+> 穷尽清单以 §10 B 类与 §19.4 为准。
 **R11 修订**：旧稿写"本设计对 BC-1..BC-3、BC-5 满足；对 BC-4 有意违反"，与 §10 的 B 类（文件集合减少）矛盾——
 B 类经 R4（套件补写遗留文件，§3.9）已清零，BC-3 改为"集合不小"后**无条件成立**，矛盾消失。
 
@@ -810,6 +815,21 @@ CLI 的 `--opt/--ohess/--cycles` 也调 `set_opt`，**它们不置位**——因
 
 ### 3.9 【R4 新增】套件写全 4 个遗留文件（B 类清零）
 
+> **落地状态（阶段 3b，HEAD b822c1f 之后）：已实现。** 实现点：
+> `src/landscape/types/log.f90`（`landscape_file_contract_reset` / `_mark` /
+> `landscape_write_last_geometry` + `xtbopt.log` 多帧写点）、
+> `src/landscape/tasks/opt.f90`（开场删哨兵、结束时按 `result%converged` 建
+> `.xtboptok`/`NOT_CONVERGED` 与 `xtblast`）、`src/landscape/tasks/vib.f90`
+> （同条件复用 `compliance_driver`）。测试：`xtb/landscape-file-contract-{opt,opt-fail,vib,namespace}`
+> 与 `xtb/landscape-ohess-fail`。报告 `50-stage3b-impl.md`。
+>
+> **T2 有意偏离（登记）**：原生 `--ohess` 在几何未收敛时 **exit 0** 且**仍写频率文件**；
+> 套件改为 **exit 1 + `NOT_CONVERGED` + 不写频率**（跳过 vib 半）。理由：(a) 保持套件既有的
+> 诚实失败契约（`--lopt` 已是 exit 1 + 单因消息）；(b) 非驻点几何上的频率分析意义可疑；
+> (c) `NOT_CONVERGED` 正是上游对"未收敛"的既有信号。旧链的误导级联
+> （`Could not generate lattice points` / `Setup of Coulomb evaluator failed`，源于失败的
+> opt 留在 `env`/`calc` 的坏状态被 vib 半复用）随之消失。
+>
 > **来源**：用户决策 2。要求按**上游语义**写；本节给逐文件语义 + **上游对照 `file:line`**。
 > **上游对照不是猜名字**：下表的"上游写点/条件"均在仓库内可核。
 
@@ -818,7 +838,7 @@ CLI 的 `--opt/--ohess/--cycles` 也调 `set_opt`，**它们不置位**——因
 | **`.xtboptok`** | `src/geoopt_driver.f90:112-113` 开场 **删** `.xtboptok`（仅 `pr=.true.`）；`:186` 成功时 `touch_file('.xtboptok')`；`:183` 失败时 `touch_file('NOT_CONVERGED')` | **仅收敛成功时创建**（外部流水线的收敛判据）；任务开场先删旧哨兵；失败时**不**创建 `.xtboptok`，改创 `NOT_CONVERGED`（与上游同构）。
 | **`xtbopt.log`** | 开场 `src/geoopt_driver.f90:120-121` `open_file(ilog,'xtbopt.log','w')`（**名字无前导点**）；可被 `$opt logfile=` 重定向到 `-`（stdout）或自定义文件（`:123-128`）。**逐帧写点（L-3 补）**：`src/optimizer.f90:801` `call writeMolecule(mol, ilog, format=fileType%xyz, ..., number=iter)`，在 `ancopt` 的 `relax` 内（打印控制 `:800`），因此文件是 XMOL 多帧 | 逐步轨迹日志（XMOL 多帧），**名字 `xtbopt.log`**（W1 旧稿写的 `.xtbopt.log` **有误**，本轮核实并改对）。若未给 `--namespace` 则为裸名。
 | **`xtblast.xyz`** | `src/prog/main.F90:956-962`（仅 `murks`/失败路径）：`generateFileName(tmpname,'xtblast',extension,mol%ftype)` → `open_file` → `writeMolecule`，并打印 `"last geometry written to: <name>"` | 套件 `opt` 任务**失败时**写最后一步几何（xyz），并打印同名提示。成功时**不**写。
-| **`compliance.dat`** | **不是 `main_freq` 写的**：`compliance_driver` 仅被 `src/hessian.F90:331-332` 的 `numhess` 调用，条件是 `mol%n > 1 .and. freezeset%n == 0 .and. .not. set%periodic`（`:331`）；写函数 `src/compliance.f90:253-358` `write_compliance_dat` 用**裸名** `open(newunit,file="compliance.dat",status="replace")`（**行号在 `:287`，L-2 订正：旧稿写 `:248-300`/`:283`**） | 套件 `vib` 任务在**与上游同条件**（`n>1`、无 `$fix`、非周期）下调用同一个 `compliance_driver`（复用，不重写）。⇒ 上游 `--hess`/`--ohess` 有它，套件 `--lvib`（及 `--ohess` 链）也应有。 |
+| **`compliance.dat`** | **不是 `main_freq` 写的**：`compliance_driver` 仅被 `src/hessian.F90:331-332` 的 `numhess` 调用，条件是 `mol%n > 1 .and. freezeset%n == 0 .and. .not. set%periodic`（`:331`）；写函数 `src/compliance.f90:253-358` `write_compliance_dat` 用**裸名** `open(newunit,file="compliance.dat",status="replace")`（**行号在 `:287`，L-2 订正：旧稿写 `:248-300`/`:283`**） | 套件 `vib` 任务在 `n>1`、非周期、**套件的 `$fix` 掩码为空**时调用同一个 `compliance_driver`（复用，不重写）。⇒ 上游 `--hess`/`--ohess` 有它，套件 `--lvib`（及 `--ohess` 链）也应有。**条件不同构（订正 T3，阶段 3b 修复轮）**：上游读 `freezeset%n == 0`（`$fix freeze:` 名单，`man/xcontrol.7.adoc:212-216`），套件读 `fixset`/`landscape_frozen_mask`（`$fix atoms:` 名单，`src/constrain_param.f90:335-357` 两个 `case` 写两个不同的 list）；两个方向都可达。套件用 `fixset` 是**有意**的（它是套件 `$fix` 的唯一真源，频率分析的投影掩码就是它）。逐字差异登记在 `src/landscape/tasks/vib.f90:166-182` 与 `53-stage3b-fix.md` §3。 |
 
 **`--namespace` 交互（上游行为，本轮核到源码）**：
 
@@ -835,9 +855,10 @@ CLI 的 `--opt/--ohess/--cycles` 也调 `set_opt`，**它们不置位**——因
 
 | 测试 | 断言 | 反例（突变下应变红） |
 |---|---|---|
-| `xtb/landscape-file-contract-opt` | 收敛任务后 `.xtboptok` 与 `xtbopt.log` 存在；`.xtboptok` **非空**且无 `NOT_CONVERGED` | 删任一写点 |
+| `xtb/landscape-file-contract-opt` | 收敛任务后 `.xtboptok` 与 `xtbopt.log` 存在；`.xtboptok` **为空**（`src/type/iohandler.f90:364-392` 的 `touchFile` 建空文件；**订正 T5，阶段 3b 修复轮：旧稿写“非空”与上游实现矛盾**）且无 `NOT_CONVERGED` | 删任一写点 |
 | `xtb/landscape-file-contract-opt-fail` | 受限步数（`--cycles 1`，不可收敛）+ `--opt` → **不得**创建 `.xtboptok`；`NOT_CONVERGED` 存在；`xtblast.xyz` 存在且可解析为 xyz | 把 `.xtboptok` 改成无条件 `touch` |
-| `xtb/landscape-file-contract-vib` | `--lvib`（水）→ `compliance.dat` 存在且首行含 `compliance.dat`；`--lopt`（→`--opt` 链）亦同 | 去掉 `compliance_driver` 调用 |
+| `xtb/landscape-file-contract-vib` | `--lvib`（水）→ `compliance.dat` 存在且**内容含**字符串 `compliance.dat`（**订正 T5：首行是 `#`，该字符串在第 2 行**；不锁首行）；`--lopt`（→`--opt` 链）亦同 | 去掉 `compliance_driver` 调用 |
+| `xtb/landscape-vib-compliance-skip`（阶段 3b 新增） | 反向：单原子（`n == 1`）与 `$fix atoms: 1` 的 `--lvib` → **不**写 `compliance.dat` | 删掉条件里的任一子句 |
 | `xtb/landscape-file-contract-namespace` | `--namespace c1 --opt` → 存在 `c1.xtbopt.log`/`.c1.xtboptok`；**不**存在裸 `xtbopt.log`/`.xtboptok`；`compliance.dat` **不**带前缀 | 改用 `get_namespace` 以外的裸名（旧 N-1 缺陷同类） |
 
 ### 3.10 【R5 新增】新档位语义的影响面：既有测试与已验收数字的**再基线清单**
@@ -2357,9 +2378,15 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 ### B 类 — 文件契约改变（**R4：清零，0 条**）
 
 > **旧稿 B1–B5 作废**：用户决策 2 定为**套件按上游语义写全 4 个遗留文件**（§3.9），
-> 因此"缺 `.xtboptok` / `xtbopt.log` / `xtblast.xyz` / `compliance.dat`"不再成立。
-> **唯一残留**：新增的 `xtb.trj`/`vib_normal_modes` 是**新增而非删除** ⇒ 不构成破坏（BC-3 已改为"集合不小"）。
+> 因此“缺 `.xtboptok` / `xtbopt.log` / `xtblast.xyz` / `compliance.dat`”不再成立。
+> **唯一残留**：新增的 `xtb.trj`/`vib_normal_modes` 是**新增而非删除** ⇒ 不构成破坏（BC-3 已改为“集合不小”）。
 > **B 类清零，BC-3 无条件成立。**
+
+> **[登记 T4，阶段 3b 修复轮]** `--lvib` **不是**改派 runtyp，但它是 BC-4 意义上的第二类有意差异：
+> - **stdout 变化**：`--lvib` 在 Hessian 成功后多打印一段 compliance 块（与原生 `--hess`/`--ohess` 的
+>   现有输出同形）。逐行比对 `--lvib` stdout 的外部脚本必须知悉。
+> - **文件新增**：`compliance.dat`（裸名，无命名空间，与上游同），属 BC-3 允许的“集合不小”。
+> - 验收：`xtb/landscape-file-contract-vib`（正向）+ `xtb/landscape-vib-compliance-skip`（反向：单原子与 `$fix atoms:` 不写该文件）。
 
 ### C 类 — 新增的**响亮错误**（本来静默，现在会失败；R6 决策 4）
 

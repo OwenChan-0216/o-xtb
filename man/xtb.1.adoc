@@ -236,7 +236,8 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     performs a gradient calculation
 
 *-o, --opt* ['LEVEL']::
-    call `ancopt(3)` to perform a geometry optimization,
+    run the landscape suite geometry optimization (pass `--method ancopt`
+    for the native `ancopt(3)`),
     levels from crude, sloppy, loose, normal (default), tight, verytight
     to extreme can be chosen
 
@@ -244,8 +245,9 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     perform a numerical hessian calculation on input geometry
     
 *--ohess* ['LEVEL']::
-    perform a numerical hessian calculation on an `ancopt(3)` optimized
-    geometry
+    perform a numerical hessian calculation on a geometry optimized by the
+    landscape suite (pass `--method ancopt` for the native `ancopt(3)`
+    optimizer)
 
 *--bhess* ['LEVEL']::
     perform a biased numerical hessian calculation on an `ancopt(3)` optimized

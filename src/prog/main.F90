@@ -229,7 +229,12 @@ contains
       parameter(one=1.0_wp)
       parameter(two=2.0_wp)
       logical :: ex, okbas
-      logical :: epr, diff, murks
+      !> Set by `geometry_optimization` when the native minimisation did not
+      !> converge; read by the `--metaopt` guard below.  Explicitly initialised:
+      !> the native optimisation block is not the only reader of the variable
+      !> in every run type, and an undefined value here decided whether a
+      !> metadynamics run was aborted (review HIGH-1 of stage 3b).
+      logical :: epr, diff, murks = .false.
       logical :: exist
       logical :: lgrad, restart
       logical :: copycontrol
@@ -984,7 +989,14 @@ contains
       ! next to the suite task (CLI redesign R24).  The two `anyopt`
       ! `env%terminate` guards above (CPCM-X, PTB) keep their behaviour on
       ! purpose: a native workaround is not available for those two either way.
-      if (anyopt .and. landscape_native_engine /= 0) then
+      !
+      ! The criterion is `landscape_is_suite_run`, not `landscape_native_engine
+      ! /= 0`: `anyopt` also covers `--omd`/`--screen`/`--metaopt`, which are
+      ! never redeployed and cannot take `--method` at all, so their
+      ! `landscape_native_engine` is always 0 and an `/= 0` test would make this
+      ! block unreachable for them -- `--omd` would run its dynamics on the
+      ! input geometry (review HIGH-1 of stage 3b, regression of stage 3a).
+      if (anyopt .and. .not. landscape_is_suite_run(set%runtyp, landscape_native_engine)) then
 
          if (mol%npbc > 0 .and. (set%mode_extrun == p_ext_gfnff &
                  & .or. set%mode_extrun == p_ext_mcgfnff)) then  ! if(npbc)
@@ -1092,6 +1104,17 @@ contains
          ! suppressed for it through `landscape_native_hessian_path`, so this
          ! chain is the only one that runs (CLI redesign section 3.11.1).
          if (landscape_ohess_chain(set%runtyp, landscape_native_engine)) then
+            ! T2 of CLI redesign section 3.9: the frequency half runs only on a
+            ! converged geometry.  A failed minimisation has already logged its
+            ! single error (the `landscape_optimize` task); running the
+            ! frequency analysis anyway would reuse the calculator the failed
+            ! optimisation left behind and produce a misleading cascade
+            ! (`Could not generate lattice points` / `Setup of Coulomb
+            ! evaluator failed`).  The native `--ohess` continues after a
+            ! failed geometry optimisation and still writes the frequency
+            ! files; aborting cleanly here is a deliberate deviation (recorded
+            ! in the design document).
+            if (lres%converged) then
             lvset%engine%acc = set%acc
             lvset%engine%etemp = set%etemp
             call run_landscape(env, mol, chk, calc, lvset, lres)
@@ -1132,6 +1155,7 @@ contains
             ! reported energy must stay the converged one.
             res%e_total = lres%energy
             res%gnorm = lres%gnorm
+            end if
          end if
          call env%checkpoint("Landscape task terminated")
       end if

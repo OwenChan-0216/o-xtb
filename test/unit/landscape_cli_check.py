@@ -3917,6 +3917,309 @@ def check_opt_xtbopt_once(exe, inp, rundir):
     print("opt xtbopt: one writer, landscape timer, namespace honoured")
 
 
+def count_xyz_frames(path):
+    """Number of complete XMOL frames in `path`."""
+    with open(path) as fh:
+        lines = fh.read().splitlines()
+    n = 0
+    i = 0
+    while i < len(lines):
+        try:
+            nat = int(lines[i].split()[0])
+        except (ValueError, IndexError):
+            break
+        if nat <= 0 or i + nat + 2 > len(lines):
+            break
+        n += 1
+        i += nat + 2
+    return n
+
+
+def check_file_contract_opt(exe, inp, rundir):
+    """A converged `--opt` writes `.xtboptok` and the `xtbopt.log` trajectory.
+
+    Mirrors `xtb/landscape-file-contract-opt` (CLI redesign section 3.9).  The
+    upstream optimiser creates `.xtboptok` only on success
+    (`src/geoopt_driver.f90:186`) and opens `xtbopt.log` as a multi frame XMOL
+    file (`:121`, frames at `src/optimizer.f90:801`); the redeployed `--opt`
+    has to follow both.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    run_dir = os.path.join(rundir, "run")
+    status, output = run(exe, inp, ["--gfn", "2", "--opt", "--norestart"], run_dir)
+    if status != 0:
+        fail("--opt exited %d" % status, output)
+    ok_path = os.path.join(run_dir, ".xtboptok")
+    if not os.path.exists(ok_path):
+        fail("a converged --opt wrote no .xtboptok", output)
+    if os.path.getsize(ok_path) != 0:
+        fail(".xtboptok is not empty", output)
+    if os.path.exists(os.path.join(run_dir, "NOT_CONVERGED")):
+        fail("a converged --opt also wrote NOT_CONVERGED", output)
+    log_path = os.path.join(run_dir, "xtbopt.log")
+    if not os.path.exists(log_path):
+        fail("--opt wrote no xtbopt.log", output)
+    frames = count_xyz_frames(log_path)
+    if frames < 2:
+        fail("xtbopt.log is not a multi frame trajectory (%d frames)" % frames,
+             output)
+    print("file contract opt: .xtboptok + xtbopt.log (%d frames)" % frames)
+
+
+def check_file_contract_opt_fail(exe, inp, rundir):
+    """A failed `--opt` writes `NOT_CONVERGED` and `xtblast.xyz`, not `.xtboptok`.
+
+    Mirrors `xtb/landscape-file-contract-opt-fail` (section 3.9).  Upstream
+    (`src/geoopt_driver.f90:183`) creates `NOT_CONVERGED` instead of
+    `.xtboptok` on failure, and the native `--opt` writes the last geometry to
+    `xtblast.<ext>` with the message `last geometry written to: <name>`
+    (`src/prog/main.F90:1024-1034`; the block moved when stage 3b added the
+    sentinel handling above it).
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    run_dir = os.path.join(rundir, "run")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--opt", "--cycles", "2", "--norestart"],
+        run_dir,
+    )
+    if status == 0:
+        fail("a two step --opt converged unexpectedly", output)
+    if os.path.exists(os.path.join(run_dir, ".xtboptok")):
+        fail("a failed --opt wrote .xtboptok", output)
+    if not os.path.exists(os.path.join(run_dir, "NOT_CONVERGED")):
+        fail("a failed --opt wrote no NOT_CONVERGED", output)
+    last_path = os.path.join(run_dir, "xtblast.xyz")
+    if not os.path.exists(last_path):
+        fail("a failed --opt wrote no xtblast.xyz", output)
+    if count_xyz_frames(last_path) != 1:
+        fail("xtblast.xyz is not a single geometry", output)
+    if "last geometry written to:" not in output:
+        fail("the last geometry message is missing", output)
+    print("file contract opt-fail: NOT_CONVERGED + xtblast.xyz, no .xtboptok")
+
+
+def check_file_contract_vib(exe, inp, rundir):
+    """`--lvib` writes the legacy `compliance.dat` (CLI redesign section 3.9).
+
+    Mirrors `xtb/landscape-file-contract-vib`.  The native `--hess` runs
+    `compliance_driver` after the numerical Hessian (`src/hessian.F90:331`)
+    under the condition `mol%n > 1 .and. freezeset%n == 0 .and.
+    .not. set%periodic`; the suite has to produce the same file.  It is
+    written under the bare name (`src/compliance.f90:287`).  The frequency
+    half of the redeployed `--ohess` is the second writer of the same file.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    run_dir = os.path.join(rundir, "run")
+    status, output = run(exe, inp, ["--gfn", "2", "--lvib"], run_dir)
+    if status != 0:
+        fail("--lvib exited %d" % status, output)
+    path = os.path.join(run_dir, "compliance.dat")
+    if not os.path.exists(path):
+        fail("--lvib wrote no compliance.dat", output)
+    with open(path) as fh:
+        text = fh.read()
+    if "compliance.dat" not in text:
+        fail("compliance.dat does not name itself", text)
+    # The `--ohess` chain runs the same frequency half, so it writes the same
+    # file (`landscape_ohess_chain` -> `tasks/vib.f90`); the assertion is here
+    # and not in the failure-path check, because it is a property of the
+    # successful chain.
+    ohess_dir = os.path.join(rundir, "ohess")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--ohess", "--norestart"], ohess_dir)
+    if status != 0:
+        fail("--ohess exited %d" % status, output)
+    if not os.path.exists(os.path.join(ohess_dir, "hessian")):
+        fail("--ohess wrote no hessian", output)
+    if not os.path.exists(os.path.join(ohess_dir, "compliance.dat")):
+        fail("--ohess wrote no compliance.dat in its frequency half", output)
+    print("file contract vib: compliance.dat written by --lvib and by --ohess")
+
+
+def check_vib_compliance_skip(exe, inp, rundir):
+    """The converse of the `compliance.dat` contract.
+
+    Mirrors `xtb/landscape-vib-compliance-skip`.  `compliance_driver` is called
+    only for a nonperiodic system of more than one atom whose `$fix` mask is
+    empty, so a single atom and a run with `$fix atoms:` must not write the
+    file.  Without this case the condition is only covered from the side where
+    it is true, and deleting either clause would stay green.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    # 1. a single atom (`mol%n > 1` is false)
+    atom = os.path.join(rundir, "landscape_he.xyz")
+    os.makedirs(rundir, exist_ok=True)
+    with open(atom, "w") as handle:
+        handle.write("1\nhelium\nHe  0.0000000  0.0000000  0.0000000\n")
+    single_dir = os.path.join(rundir, "single")
+    status, output = run(exe, atom, ["--gfn", "2", "--lvib"], single_dir)
+    if status != 0:
+        fail("--lvib on a single atom exited %d" % status, output)
+    if os.path.exists(os.path.join(single_dir, "compliance.dat")):
+        fail("a single atom wrote compliance.dat", output)
+    # 2. `$fix atoms:` (the `$fix` mask is not empty)
+    xcontrol = os.path.join(rundir, "landscape_vib_fix.inp")
+    with open(xcontrol, "w") as handle:
+        handle.write("$fix\n   atoms: 1\n$end\n")
+    fixed_dir = os.path.join(rundir, "fixed")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--lvib", "--input", xcontrol], fixed_dir)
+    if status != 0:
+        fail("--lvib with $fix atoms: exited %d" % status, output)
+    if os.path.exists(os.path.join(fixed_dir, "compliance.dat")):
+        fail("$fix atoms: still wrote compliance.dat", output)
+    if not os.path.exists(os.path.join(fixed_dir, "hessian")):
+        fail("the frozen run produced no hessian at all", output)
+    print("vib compliance skip: no compliance.dat for a single atom / $fix atoms:")
+
+
+def check_file_contract_namespace(exe, inp, rundir):
+    """The legacy names carry the namespace, except `compliance.dat`.
+
+    Mirrors `xtb/landscape-file-contract-namespace` (section 3.9).  Upstream
+    routes `.xtboptok`/`xtbopt.log`/`xtblast.xyz` through `open_file`/
+    `touch_file`, which adds the prefix (`.c1.xtboptok`, `c1.xtbopt.log`),
+    while `compliance.dat` uses a bare Fortran `open` and stays unprefixed.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    opt_dir = os.path.join(rundir, "opt")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--opt", "--namespace", "c1", "--norestart"],
+        opt_dir,
+    )
+    if status != 0:
+        fail("--opt --namespace c1 exited %d" % status, output)
+    if not os.path.exists(os.path.join(opt_dir, ".c1.xtboptok")):
+        fail("--opt --namespace c1 wrote no .c1.xtboptok", output)
+    if not os.path.exists(os.path.join(opt_dir, "c1.xtbopt.log")):
+        fail("--opt --namespace c1 wrote no c1.xtbopt.log", output)
+    if os.path.exists(os.path.join(opt_dir, ".xtboptok")):
+        fail("--opt --namespace c1 also wrote the bare .xtboptok", output)
+    if os.path.exists(os.path.join(opt_dir, "xtbopt.log")):
+        fail("--opt --namespace c1 also wrote the bare xtbopt.log", output)
+    vib_dir = os.path.join(rundir, "vib")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--lvib", "--namespace", "c1"], vib_dir)
+    if status != 0:
+        fail("--lvib --namespace c1 exited %d" % status, output)
+    if not os.path.exists(os.path.join(vib_dir, "compliance.dat")):
+        fail("--lvib --namespace c1 wrote no bare compliance.dat", output)
+    if os.path.exists(os.path.join(vib_dir, "c1.compliance.dat")):
+        fail("compliance.dat must not carry the namespace prefix", output)
+    print("file contract namespace: legacy names prefixed, compliance.dat bare")
+
+
+def check_ohess_fail(exe, inp, rundir):
+    """A failed `--ohess` aborts with the opt error, without the cascade.
+
+    Mirrors `xtb/landscape-ohess-fail` (CLI redesign section 3.9, T2).  The
+    frequency half runs only on a converged geometry, so a failed minimisation
+    reports its single error, writes `NOT_CONVERGED`, and produces neither the
+    frequency files nor the misleading `Could not generate lattice points` /
+    `Setup of Coulomb evaluator failed` cascade of the old chain.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    fail_dir = os.path.join(rundir, "fail")
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--ohess", "--cycles", "2", "--norestart"],
+        fail_dir,
+    )
+    if status == 0:
+        fail("a two step --ohess converged unexpectedly", output)
+    for needle in ("Could not generate lattice points",
+                   "Setup of Coulomb evaluator failed"):
+        if needle in output:
+            fail("the misleading cascade is back: %s" % needle, output)
+    if os.path.exists(os.path.join(fail_dir, ".xtboptok")):
+        fail("a failed --ohess wrote .xtboptok", output)
+    if not os.path.exists(os.path.join(fail_dir, "NOT_CONVERGED")):
+        fail("a failed --ohess wrote no NOT_CONVERGED", output)
+    for name in ("hessian", "vibspectrum"):
+        if os.path.exists(os.path.join(fail_dir, name)):
+            fail("a failed --ohess wrote %s" % name, output)
+    # The contrast: a converged --ohess runs both halves.
+    ok_dir = os.path.join(rundir, "ok")
+    status, output = run(exe, inp, ["--gfn", "2", "--ohess", "--norestart"], ok_dir)
+    if status != 0:
+        fail("a converged --ohess exited %d" % status, output)
+    if not os.path.exists(os.path.join(ok_dir, ".xtboptok")):
+        fail("a converged --ohess wrote no .xtboptok", output)
+    if not os.path.exists(os.path.join(ok_dir, "hessian")):
+        fail("a converged --ohess wrote no hessian", output)
+    print("ohess fail: single opt error, NOT_CONVERGED, no cascade; "
+          "converged run writes the frequency files")
+
+
+def check_native_runtypes_unaffected(exe, inp, rundir):
+    """`--omd`/`--screen`/`--metaopt` still run their native ANCopt first.
+
+    Mirrors `xtb/landscape-native-runtypes-unaffected` (review HIGH-1 of
+    `52-stage3b-review.md`, a regression of stage 3a).  The suppression of the
+    native optimisation block reads `landscape_is_suite_run`, not
+    `landscape_native_engine /= 0`: these three run types are never redeployed
+    and cannot take `--method` at all (`main.F90` refuses it with "only
+    available with --opt or --ohess"), so an `/= 0` test makes the block
+    unreachable for them - `--omd` then runs its dynamics on the **input**
+    geometry.  The geometry golden values below are the ones the pre-stage-3a
+    binary `/tmp/xtb-land/build/xtb` produced for this fixture
+    (`--gfn 2 --omd|--screen|--metaopt`), measured in the fix round; the
+    optimisation is deterministic (only the dynamics draws the run's random
+    seed), so the comparison is exact.
+
+    `--screen` needs a `screen` file in the working directory and aborts
+    without one **after** the optimisation; that abort is upstream behaviour
+    and identical before and after the fix (`norm`-ed stdout of the two
+    binaries differs only in backtrace addresses), so the expected status is
+    pinned to it instead of being skipped.
+    """
+    golden_energy = -5.070544363296
+    cases = [("--omd", "--omd", 0), ("--screen", "--screen", 1),
+             ("--metaopt", "--metaopt", 0)]
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    for label, flag, want_status in cases:
+        case_dir = os.path.join(rundir, label.strip("-"))
+        status, output = run(
+            exe, inp, ["--gfn", "2", flag, "--norestart"], case_dir)
+        if status != want_status:
+            fail("%s exited %d instead of the native %d"
+                 % (label, status, want_status), output)
+        if "ANC micro-cycles" not in output:
+            fail("%s did not run the native ANCopt (no 'ANC micro-cycles')"
+                 % label, output)
+        if "optimized geometry written to:" not in output:
+            fail("%s did not report an optimized geometry" % label, output)
+        path = os.path.join(case_dir, "xtbopt.xyz")
+        if not os.path.exists(path):
+            fail("%s wrote no xtbopt.xyz" % label, output)
+        with open(path) as handle:
+            lines = handle.read().splitlines()
+        # frame comment of `writeMolecule`: ' energy: <E> gnorm: <g> xtb: ...'
+        energy = float(lines[1].split("energy:")[1].split()[0])
+        if abs(energy - golden_energy) > 1.0e-9:
+            fail("%s ended at %s instead of the native %s"
+                 % (label, energy, golden_energy), "\n".join(lines))
+        # the input O-H distance is 1.3000 angstrom; the native minimisation
+        # takes it to 0.96, so a geometry that was never optimised is caught
+        oxygen = [float(v) for v in lines[2].split()[1:4]]
+        longest = 0.0
+        for line in lines[3:5]:
+            hydrogen = [float(v) for v in line.split()[1:4]]
+            longest = max(longest, sum((a - b) ** 2
+                                       for a, b in zip(oxygen, hydrogen)) ** 0.5)
+        if not 0.9 < longest < 1.05:
+            fail("%s left the O-H distance at %.4f angstrom" % (label, longest),
+                 "\n".join(lines))
+    print("native runtypes unaffected: --omd/--screen/--metaopt optimise first, "
+          "energy %s, O-H %.4f" % (golden_energy, longest))
+
+
 def check_opt_level_bridge(exe, inp, rundir):
     """`--opt <LEVEL>` drives the suite convergence level (redesign 3.5).
 
@@ -4174,6 +4477,20 @@ def main():
         check_opt_guard(exe, inp, rundir, rest[0])
     elif mode == "optxtbopt":
         check_opt_xtbopt_once(exe, inp, rundir)
+    elif mode == "filecontractopt":
+        check_file_contract_opt(exe, inp, rundir)
+    elif mode == "filecontractoptfail":
+        check_file_contract_opt_fail(exe, inp, rundir)
+    elif mode == "filecontractvib":
+        check_file_contract_vib(exe, inp, rundir)
+    elif mode == "vibcomplianceskip":
+        check_vib_compliance_skip(exe, inp, rundir)
+    elif mode == "filecontractns":
+        check_file_contract_namespace(exe, inp, rundir)
+    elif mode == "ohessfail":
+        check_ohess_fail(exe, inp, rundir)
+    elif mode == "nativetypes":
+        check_native_runtypes_unaffected(exe, inp, rundir)
     elif mode == "optlevel":
         check_opt_level_bridge(exe, inp, rundir)
     elif mode == "cycles":

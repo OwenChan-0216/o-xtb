@@ -43,7 +43,9 @@ module xtb_landscape_tasks_opt
       & new_landscape_hessian_provider
    use xtb_landscape_optimize, only : landscape_optimize_model
    use xtb_landscape_constraints, only : landscape_frozen_mask
-   use xtb_landscape_log, only : landscape_write_files
+   use xtb_landscape_log, only : landscape_write_files, &
+      & landscape_file_contract_reset, landscape_file_contract_mark, &
+      & landscape_write_last_geometry
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_result, &
       & landscape_json_add_counter, landscape_json_add_value, &
@@ -145,6 +147,11 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
       end if
    end if
 
+   ! The convergence sentinels of a previous run are removed at task open,
+   ! exactly like the native optimiser does (`src/geoopt_driver.f90:112-113`),
+   ! so a stale `.xtboptok` can never mask this run's outcome.
+   if (settings%write_files) call landscape_file_contract_reset(env)
+
    call new_landscape_engine(engine, settings%engine)
    ! The provider factory reports an unknown `hessian_source`; the caller must
    ! abort instead of silently running with the default provider.
@@ -219,6 +226,19 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
             & result%message, source)
       else
          call env%error("landscape minimisation did not converge", source)
+      end if
+   end if
+
+   ! The legacy convergence sentinels (CLI redesign section 3.9): a converged
+   ! run creates `.xtboptok`, a failed one `NOT_CONVERGED` instead, and the
+   ! last geometry of a failed run is written to `xtblast.<ext>` with the
+   ! upstream message.  The names carry the namespace (`.xtboptok` ->
+   ! `.ns.xtboptok`); the outcome is decided here because only the task knows
+   ! whether the run as a whole succeeded.
+   if (settings%write_files) then
+      call landscape_file_contract_mark(env, result%converged)
+      if (.not. result%converged) then
+         call landscape_write_last_geometry(env, mol, result)
       end if
    end if
 
