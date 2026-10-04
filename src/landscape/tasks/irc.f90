@@ -162,6 +162,11 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
       write(env%unit, '(1x,a,es13.6,a)') "step length:              ", &
          & settings%step_length, " bohr*amu^1/2"
       write(env%unit, '(1x,a,i0)') "maximum number of steps:  ", settings%max_steps
+      ! R5 of CLI redesign section 3.5: `e_tol` follows the convergence level
+      ! (`set_conv_level`) and reaches the endpoint relaxations through the
+      ! inner minimisation settings (`opt%e_tol = settings%e_tol`).
+      write(env%unit, '(1x,a,es15.6,a)') "energy tolerance:         ", &
+         & settings%e_tol, " Eh"
       write(env%unit, '(1x,a,a)') "Hessian update:           ", &
          & landscape_hessian_update_name(settings%hessian_update)
       write(env%unit, '(1x,a,a)') "restart policy:           ", &

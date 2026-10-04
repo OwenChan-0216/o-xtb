@@ -249,6 +249,19 @@ contains
       !> landscape method name and when the flag was not given; set by
       !> `parseArguments` (CLI redesign sections 4.7/4.8, R30/MEDIUM-1)
       integer :: landscape_native_engine = 0
+      !> `--acc` was named on the command line (`intent(out)` of
+      !> `parseArguments`, same bridge as `landscape_native_engine`).  A
+      !> landscape run derives the SCC accuracy of its engine from the
+      !> convergence level (`set_conv_level` of `xtb_landscape_settings`), so
+      !> the global `set%acc` may overwrite it only when the user asked for
+      !> that value explicitly (CLI redesign section 3.5, R5).  Without the
+      !> guard the level-derived `acc` was silently replaced by the global
+      !> default 1.0 and the axis was a dead knob.  The value is passed
+      !> between the flag parser and the six synchronisation points of
+      !> `xtbMain` instead of living in a variable of the program unit, which
+      !> the hard constraint "no module level mutable variables" forbids
+      !> (`AGENTS.md` section 5, CLI redesign sections 3.5 and 3.11).
+      logical :: acc_was_set
 
 !  OMP stuff
       integer :: TID, OMP_GET_NUM_THREADS, OMP_GET_THREAD_NUM
@@ -263,7 +276,7 @@ contains
       ! read the command line arguments
       call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset, lvset, ltset, lircset, landscape_native_engine)
+         & lsset, lvset, ltset, lircset, landscape_native_engine, acc_was_set)
 
 
       ! No solvation available for PTB!
@@ -1084,9 +1097,17 @@ contains
          ! an argument but drops it, and the engine writes both values into the
          ! calculator, so the CLI values have to be synced here
          ! (docs/_landscape-recon/12-*.md, R2-02;
-         ! docs/_landscape-recon/23-m3-fix-report.md, MEDIUM-B).
-         lset%engine%acc = set%acc
+         ! docs/_landscape-recon/23-m3-fix-report.md, MEDIUM-B).  The accuracy
+         ! is synced **only** when `--acc` named it: a convergence level
+         ! derives `engine%acc` from the upstream table (CLI redesign section
+         ! 3.5, R5), and an unconditional copy of the global default 1.0
+         ! turned that axis into a dead knob (`--lopt --lopt-level loose`
+         ! reported 1.0 instead of 2.0).
+         if (acc_was_set) lset%engine%acc = set%acc
          lset%engine%etemp = set%etemp
+         ! `max_steps` of the run: the level multiplier (`normal` = 3) is the
+         ! default, an explicit `--lopt-max-steps`/`--cycles` keeps its value.
+         call lset%level_step_budget(mol%n)
          call start_timing(3)
          call run_landscape(env, mol, chk, calc, lset, lres)
          call stop_timing(3)
@@ -1115,7 +1136,7 @@ contains
             ! files; aborting cleanly here is a deliberate deviation (recorded
             ! in the design document).
             if (lres%converged) then
-            lvset%engine%acc = set%acc
+            if (acc_was_set) lvset%engine%acc = set%acc
             lvset%engine%etemp = set%etemp
             call run_landscape(env, mol, chk, calc, lvset, lres)
             call env%checkpoint("Landscape task terminated")
@@ -1163,8 +1184,9 @@ contains
       ! ------------------------------------------------------------------------
       ! landscape suite (scan with the algorithms of src/landscape)
       if (effective_landscape_task(set%runtyp, landscape_native_engine) == p_run_lscan) then
-         lsset%engine%acc = set%acc
+         if (acc_was_set) lsset%engine%acc = set%acc
          lsset%engine%etemp = set%etemp
+         call lsset%level_step_budget(mol%n)
          call start_timing(3)
          call run_landscape(env, mol, chk, calc, lsset, lres)
          call stop_timing(3)
@@ -1183,8 +1205,9 @@ contains
          ! whole run and recorded.  The settings carry it explicitly (rather
          ! than reading the inherited engine control) because the task copies
          ! it into the engine control it hands to the engine.
-         ltset%engine%acc = set%acc
          ltset%etemp = set%etemp
+         if (acc_was_set) ltset%engine%acc = set%acc
+         call ltset%level_step_budget(mol%n)
          ! The band searches need the name of the positional input file: they
          ! use it only to detect and reject a multi-frame input (the reactant
          ! is the geometry already read, the product comes from
@@ -1212,8 +1235,9 @@ contains
          ! M4/M6 hard constraint: the electronic temperature is frozen for the
          ! whole run and recorded.  The task copies it into the engine control
          ! it hands to the engine.
-         lircset%engine%acc = set%acc
          lircset%etemp = set%etemp
+         if (acc_was_set) lircset%engine%acc = set%acc
+         call lircset%level_step_budget(mol%n)
          call start_timing(3)
          call run_landscape(env, mol, chk, calc, lircset, lres)
          call stop_timing(3)
@@ -1228,7 +1252,7 @@ contains
       ! ------------------------------------------------------------------------
       ! landscape suite (harmonic frequencies and thermochemistry of src/landscape)
       if (effective_landscape_task(set%runtyp, landscape_native_engine) == p_run_lvib) then
-         lvset%engine%acc = set%acc
+         if (acc_was_set) lvset%engine%acc = set%acc
          lvset%engine%etemp = set%etemp
          call start_timing(3)
          call run_landscape(env, mol, chk, calc, lvset, lres)
@@ -1645,7 +1669,7 @@ contains
 !> Parse command line arguments and forward them to settings
    subroutine parseArguments(env, args, inputFile, paramFile, lgrad, &
          & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, dipro, tblite, lset, &
-         & lsset, lvset, ltset, lircset, landscape_native_engine)
+         & lsset, lvset, ltset, lircset, landscape_native_engine, acc_was_set)
 
       use xtb_mctc_global, only: persistentEnv
 
@@ -1714,6 +1738,16 @@ contains
 
       !> Landscape intrinsic reaction coordinate settings (`--lirc`, ...)
       type(landscape_irc_settings), intent(inout) :: lircset
+
+      !> `--acc` was named on the command line.  It is the state the six
+      !> synchronisation points of `xtbMain` read before they copy the global
+      !> `set%acc` into a landscape engine control, so that an explicit
+      !> `--acc` wins over the SCC accuracy a convergence level derives (CLI
+      !> redesign section 3.5, R5).  Declared as a dummy - and not as a
+      !> variable of the program unit - because mutable program-unit state is
+      !> forbidden (`AGENTS.md` section 5); reset at the top of the flag loop,
+      !> so a second run in the same process (C API) starts clean.
+      logical, intent(out) :: acc_was_set
 
 !$    integer :: omp_get_num_threads, nproc
       integer :: nFlags
@@ -1791,13 +1825,19 @@ contains
       ! Local parse state of the `--opt <LEVEL>` and `--cycles N` bridges of
       ! the tail (CLI redesign sections 3.5 and 3.10b); a local of a subroutine
       ! without `save` is undefined on entry, so every flag is initialised
-      ! here, before the loop can reach a `case`.
+      ! here, before the loop can reach a `case`.  `acc_was_set` is the
+      ! `intent(out)` dummy of the R5 rule; an `intent(out)` dummy is undefined
+      ! on entry just like a local, and the flag loop has `return` paths (the
+      ! early-type requests), so it is initialised here rather than only in the
+      ! `--acc` case - otherwise those paths would hand an undefined value back
+      ! to `xtbMain`.
       cycles_given = .false.
       cycles_value = 0
       lopt_max_steps_given = .false.
       lscan_max_steps_given = .false.
       lts_max_steps_given = .false.
       lirc_max_steps_given = .false.
+      acc_was_set = .false.
 
       nFlags = args%countFlags()
       call args%nextFlag(flag)
@@ -1914,6 +1954,10 @@ contains
                   else
                      set%acc = ddum
                   end if
+                  ! The value was named on the command line, so it wins over
+                  ! the one a landscape convergence level derives for the
+                  ! engine of the suite run (CLI redesign section 3.5, R5).
+                  acc_was_set = .true.
                end if
                tblite%accuracy = set%acc
             else
@@ -2576,6 +2620,9 @@ contains
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
                   lset%max_steps = idum2
+                  ! Record the explicit budget: it wins over the one the
+                  ! convergence level derives (`level_step_budget`).
+                  lset%max_steps_source = '--lopt-max-steps'
                   lopt_max_steps_given = .true.
                else
                   call env%error("The --lopt-max-steps flag requires an integer", source)
@@ -2884,6 +2931,7 @@ contains
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
                   lsset%max_steps = idum2
+                  lsset%max_steps_source = '--lscan-max-steps'
                   lscan_max_steps_given = .true.
                else
                   call env%error("The --lscan-max-steps flag requires an integer", source)
@@ -3025,6 +3073,7 @@ contains
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
                   ltset%max_steps = idum2
+                  ltset%max_steps_source = '--lts-max-steps'
                   lts_max_steps_given = .true.
                else
                   call env%error("The --lts-max-steps flag requires an integer", source)
@@ -3755,6 +3804,7 @@ contains
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
                   lircset%max_steps = idum2
+                  lircset%max_steps_source = '--lirc-max-steps'
                   lirc_max_steps_given = .true.
                else
                   call env%error("The --lirc-max-steps flag requires an integer", source)
@@ -4483,6 +4533,24 @@ contains
                landscape_opt_conv_level = 'normal'
             else
                call lset%set_conv_level(landscape_opt_conv_level)
+               ! `--ohess` is one run of two stages: the minimisation and the
+               ! frequency analysis of the minimised geometry, in the same
+               ! process.  Both stages take the level, so the frequency half
+               ! does not keep its own defaults and report the SCC accuracy of
+               ! level `normal` while the minimisation ran at the requested
+               ! one.  Measured before this write: `--ohess tight` printed
+               ! `landscape engine: SCC accuracy 0.200000` for the
+               ! minimisation and `1.000000` for the frequency analysis of
+               ! the same run, i.e. the level reached only `lset`.  An
+               ! explicit `--acc` keeps precedence over either half, because
+               ! `xtbMain` overwrites `engine%acc` only when the parser
+               ! reported `acc_was_set`.  The step budget of the level is
+               ! derived for the minimisation only: the frequency task has no
+               ! convergence loop and no budget (`--cycles` is refused for
+               ! it, section 3.10b).
+               if (set%runtyp == p_run_ohess) then
+                  call lvset%set_conv_level(landscape_opt_conv_level)
+               end if
             end if
          end if
          write(env%unit, '(a)') "[NOTICE] landscape convergence level: "// &
@@ -4492,21 +4560,27 @@ contains
       ! T3: `--cycles N` is the step budget of the run type that owns one.  The
       ! native run types, and `--opt`/`--ohess --method <native>`, keep the
       ! native semantics (`set%optset%maxoptcycle`, read in
-      ! `src/optimizer.f90`), so they are the `case default`.
+      ! `src/optimizer.f90`), so they are the `case default`.  The bridge also
+      ! records the source of the value, so the level-derived budget of
+      ! `level_step_budget` (R5, section 3.5) cannot overwrite it.
       if (cycles_given) then
          select case (effective_landscape_task(set%runtyp, landscape_native_engine))
          case (p_run_lopt)
             call landscape_bridge_step_budget(env, cycles_value, &
-               & lopt_max_steps_given, lset%max_steps, '--lopt-max-steps', source)
+               & lopt_max_steps_given, lset%max_steps, '--lopt-max-steps', source, &
+               & lset%max_steps_source)
          case (p_run_lscan)
             call landscape_bridge_step_budget(env, cycles_value, &
-               & lscan_max_steps_given, lsset%max_steps, '--lscan-max-steps', source)
+               & lscan_max_steps_given, lsset%max_steps, '--lscan-max-steps', source, &
+               & lsset%max_steps_source)
          case (p_run_lts)
             call landscape_bridge_step_budget(env, cycles_value, &
-               & lts_max_steps_given, ltset%max_steps, '--lts-max-steps', source)
+               & lts_max_steps_given, ltset%max_steps, '--lts-max-steps', source, &
+               & ltset%max_steps_source)
          case (p_run_lirc)
             call landscape_bridge_step_budget(env, cycles_value, &
-               & lirc_max_steps_given, lircset%max_steps, '--lirc-max-steps', source)
+               & lirc_max_steps_given, lircset%max_steps, '--lirc-max-steps', source, &
+               & lircset%max_steps_source)
          case (p_run_lvib)
             call env%error("--cycles has no meaning for --lvib: the "//&
                & "frequency task has no step budget", source)
@@ -4683,7 +4757,7 @@ end function landscape_opt_level_to_conv_level
 !> absent, and a **different** value through both flags is refused instead of
 !> one silently overriding the other.  The same value through both is
 !> idempotent.
-subroutine landscape_bridge_step_budget(env, cycles, flag_given, budget, flag, source)
+subroutine landscape_bridge_step_budget(env, cycles, flag_given, budget, flag, source, budget_source)
    !> Computational environment for the conflict report
    type(TEnvironment), intent(inout) :: env
    !> Value of `--cycles`
@@ -4696,10 +4770,15 @@ subroutine landscape_bridge_step_budget(env, cycles, flag_given, budget, flag, s
    character(len=*), intent(in) :: flag
    !> Name of error producer
    character(len=*), intent(in) :: source
+   !> Flag that set `budget`, set when `--cycles` wins; it keeps the
+   !> level-derived budget of `landscape_settings%level_step_budget` away
+   !> from a value the user asked for (CLI redesign section 3.5, R5)
+   character(len=:), allocatable, intent(inout), optional :: budget_source
    character(len=160) :: message
 
    if (.not. flag_given) then
       budget = cycles
+      if (present(budget_source)) budget_source = '--cycles'
    else if (budget /= cycles) then
       write(message, '(a,i0,a,a,a,i0,a)') "--cycles ", cycles, &
          & " conflicts with ", flag, " ", budget, &

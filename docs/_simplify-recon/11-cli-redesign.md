@@ -616,6 +616,28 @@ se.txt: （空）
 
 （`max_steps = clamp(原子数 × 倍数, 200, 10000)`，与上游同规则；`--cycles N` / `--lopt-max-steps N` 显式覆盖。）
 
+> **实施状态：阶段 3c 已落地**（`55-stage3c-impl.md`）。代码落点：
+> `set_conv_level` 逐档写 `e_tol`/`engine%acc`/`max_steps_multiplier`（`src/landscape/types/settings.f90`）；
+> 派生由 `landscape_settings%level_step_budget(n_atoms)` 在 `src/prog/main.F90` 的四个分派点完成，
+> 显式优先由新增字段 `max_steps_source` 保证（`--l*-max-steps` 与 `--cycles` 桥均置位）；
+> `acc` 的 6 个无条件写入点改为 `if (acc_was_set)`。**收口轮订正（`58-stage3c-closeout.md`）**：
+> `acc_was_set` 原为 `program` 单元（`module xtb_prog_main`）的宿主变量，违反「无模块级可变状态」（§3.11 与
+> `AGENTS.md` §5）⇒ 已改为 `parseArguments` 的尾随 `intent(out) logical :: acc_was_set` 哑元
+> （与 `landscape_native_engine` 同构），由 `xtbMain` 的局部接收并传给 6 个同步点；
+> `parseArguments` 开场仍写 `.false.`（`intent(out)` 哑元在早退路径上同样未定义）。
+> `e_tol` 新增 stdout 回显（`tasks/{opt,scan,ts,irc,vib}.f90`），因为落地前该轴**不可观测**（§3.10 的可证伪性要求）。
+>
+> **收口轮补修（`58-stage3c-closeout.md` T3）**：`--ohess <LEVEL>` 是**一次运行的两个半程**
+> （套件 minimisation + minimised 几何的频率分析），而档位原先只到 `lset`（opt 半）
+> ⇒ 同一次运行打出两个不同的 `landscape engine: SCC accuracy`（`--ohess tight` 实测
+> `0.200000` / `1.000000`）。现两半同源：桥接处对 `p_run_ohess` 同时
+> `call lvset%set_conv_level(level)`；显式 `--acc` 仍对两半都优先（`acc_was_set` 未变）。
+> 步预算只对 opt 半派生（频率任务无收敛循环、无预算，`--cycles` 对它报错，§3.10b）。
+> `--lvib` **没有** `--lvib-level` 旗标（`grep` 全仓库 0 命中）⇒ 不存在同类不一致，其 `engine%acc`
+> 仍只由显式 `--acc` 决定（库默认 1.0）。
+> 实测（水，`--lopt`）：默认档 `max_steps` 256 → **200**（clamp 下界），`--lopt-level loose` → acc **2.0**、
+> `--lopt-level loose --acc 1.0` → **1.0**（显式优先）、`--lopt-level tight --lopt-max-steps 8` → **8**。
+
 **[实测]** 档位确实改变行为（CH3OH，`--lopt --lopt-engine sd`，`n_cache_miss`）：
 
 ```
@@ -677,7 +699,7 @@ vtight     → 257 evals
    **实现处（R27/L-5）**：`main.F90:996`（`--lopt`）、`:1013`（`--lscan`）、`:1033`（`--lts`）、
    `:1062`（`--lirc`）、`:1078`（`--lvib`）现在是**无条件** `engine%acc = set%acc` ⇒ 会把档位派生的 `acc`
    **覆盖回全局默认** `set%acc`（`setparam.f90:227` = 1.0）。R5 的优先级要求把它改为**仅当用户显式给了
-   `--acc` 时同步**（`case ('-a','--acc')` 在 `main.F90:1665` 置 `acc_was_set = .true.`，五处同步加 `if (acc_was_set)`）。
+   `--acc` 时同步**（`case ('-a','--acc')` 置 `acc_was_set = .true.`；**R45 订正：六处**（lopt/ohess-vib/lscan/lts/lirc/lvib）同步加 `if (acc_was_set)`，原稿写「五处」）.
    不改则 `--lopt-level loose` 的 `acc = 2.0` 静默失效——这正是本项目已抓到 4 次的"死旋钮"同类缺陷。
 4. **档位是 g_max/g_rms/d_max/d_rms 四判据**，上游是"ΔE + 梯度范数"两判据；即使同名 `normal`，
    数值阈值也不同（套件 g_rms=1e-4 vs 上游 Gconv=1e-3）。
@@ -863,6 +885,13 @@ CLI 的 `--opt/--ohess/--cycles` 也调 `set_opt`，**它们不置位**——因
 
 ### 3.10 【R5 新增】新档位语义的影响面：既有测试与已验收数字的**再基线清单**
 
+> **实施状态：阶段 3c 已完成**（`55-stage3c-impl.md`，含逐项前后对比表）。结论摘要：
+> 模型势单测（M4/M5/M6）与 M3/M7 的已验收数字（dfreq 0.0100、prfo-vs-bprfo 6.3022e-06、LEPS 8.9985、
+> 四法 MEP 偏离 0.03995/0.00657/0.00215/0.02574）**逐字未动**；22 处 `set_conv_level` 用例
+> **全部仍成立**（146/146 landscape 绿）。**唯一有意更新的 golden** = `xtb/landscape-opt-knobs`
+> 钉的默认预算 256 → 200（这正是 E1 的有意变更）；`landscape_cli_check.py` 的 `(not used: ...)`
+> 断言改为「含 Hessian 的 notice」以容纳 3c 新增的 `e_tol`/刚性扫描提示（改写理由写在检查函数注释里）。
+
 > `e_tol`/`acc`/`max_steps` 随档位变化后，**所有**跑在某个档位（含默认 `normal`）上的数值都可能移位。
 > 实施阶段 3 必须：**先列清单 → 逐个重测 → **只**在有意处更新 golden 值，并在报告里贴前后对比**。
 
@@ -887,6 +916,14 @@ CLI 的 `--opt/--ohess/--cycles` 也调 `set_opt`，**它们不置位**——因
 | M4 saddle | 默认档 | MB RMSD 6.3022e-06、dimer vs prfo 7.7397e-05、虚频数值 |
 | M6 IRC | `hpc` 默认 + `--lirc-level` | 四方法端点、`--lirc-level` 端点弛豫步数 |
 | M7 验收 | 默认档 | `--hess` 对比 dfreq（0.0100/0.0600 cm⁻¹）、dZPE/dH/dG |
+
+**三条未重跑的偏离——父会话裁定接受（收口轮，`58-stage3c-closeout.md` §4）**：
+
+| # | 项 | 裁定与理由 | 证据等级 |
+|---|---|---|---|
+| M2 | 滞回 77 文件未重跑（`m2-hysteresis-data/`） | **接受**：那批数据是在**旧档位语义**（固定 e_tol/acc/max_steps）下测的，重跑得到的是**另一个实验**而不是刷新的 golden；它作为「3c 之前的档位语义」的历史记录保留是正确的 | 历史记录，不作为当前 golden |
+| M4 | dimer-vs-prfo `7.7397e-05` | ~~接受为偏离~~ **R45 订正：该条不是偏离，已实测闭合** —— `test/unit/test_landscape_saddle.f90:2004-2007` **确实打印** `rmsd(prfo)`（`es12.4`），`56-stage3c-validation.md:122/:177` 实测值为 `7.7397E-05`（**未动**）并注明「该项可销」。原稿「打印点在当前 HEAD 已不存在」是**不实陈述** | **已实测未动**（不是静态判定） |
+| M3 | CH3OH `dfreq 0.0600 cm⁻¹` 未重跑 | **接受**：人工实验、不在 ctest 内；同一链的 H2O `dfreq 0.0100` 已由注册测试 `xtb/landscape-e2e-chain` 覆盖并实测未动 | 同链的 H2O 有注册测试覆盖 |
 
 **降低爆炸半径的机制（设计已含）**：
 
@@ -1113,7 +1150,7 @@ fres%zp    = lres%vib%zpe ; fres%temp = lres%vib%temperature ; fres%nimag = lres
 | `lres%vib::landscape_vib_result`（新增组件） | `results.f90:279-322` | 全部组件默认初值（`:60-106`），数组未分配 | `tasks/vib.f90` 末尾 | 无（非 vib 任务从不读它） |
 | `landscape_vib_result%energy::real(wp)`（新增字段） | `results.f90:60-106` | `= 0.0_wp` | `tasks/vib.f90` 拿到 `energy`（`:155`）之后 | 无（但**必须**写，否则 `htot/gtot` 差一个 SCF 重启量级） |
 | `set%optset%xcontrol_supplied::logical`（U13/R28） | `setparam.f90:262-270` | `= .false.` | `set_module.f90:797` 的 `case('opt')` 分派前一行 + `set_legacy`（`:2811-2928` 的 opt 键） | 无（默认 `.false.` 是脚本的模块级初值，`save` 语义下每进程只初始化一次） |
-| `acc_was_set::logical`（R27/L-5） | `main.F90` `program xtb` 局部 | `= .false.` | `case('-a','--acc')`（`main.F90:1665`） | 无（声明初值即可，它不经 `intent(out)` dummy） |
+| `acc_was_set::logical`（R27/L-5；**R45 订正**） | `parseArguments` 的**尾随 `intent(out)` 哑元**（`main.F90:1750`，与 `landscape_native_engine` 同构），`xtbMain` 局部接收（`:264`） | 由调用方在 flag 循环前清零（`:1840`） | `case('-a','--acc')`（`:1960`） | 无（哑元进入即未定义 ⇒ 那行清零是必需的；**原稿写「`program xtb` 局部、不经 `intent(out)` dummy」与实现逐字相反**，3c 收口轮已改为参数传递以满足 `AGENTS.md` §5 的「无模块级可变变量」） |
 
 > **实施前的静态核（可 `grep`）**：`grep -n "landscape_native_engine" src/prog/main.F90` 必须命中
 > ①声明行（带 `= 0`）②flag 循环前那行 ③第 2 段的两处赋值；实现报告里贴这段输出（本轮 M-2 的教训：声称必须可核）。
@@ -1566,6 +1603,7 @@ xcontrol `$opt engine=` 同样的 first-wins 规则）⇒ **优先级：显式 C
 | **`xtb/landscape-ohess-native-hess`（R29/T1+T2 反向）** | `--ohess --method ancopt` | exit 0；`Numerical Hessian` = 1、`Frequency Printout` = 1、`landscape: harmonic frequencies` = 0 | 谓词写成恒假 ⇒ 原生侧不跑 `numhess` ⇒ `hessian` 不写 ⇒ 红 |
 | **`xtb/landscape-ohess-fres-bridge`（R29/T3）** | `--ohess normal`（套件）与同一末几何的 `--lvib` | `TOTAL ENTHALPY`/`TOTAL FREE ENERGY` 行存在且与 `--lvib` 的 `total enthalpy H(T)`/`G(T)` 一致（≤1e-6 Eh）；`TOTAL ENERGY` ≠ 0 | 删桥 ⇒ 两行消失；`anyhess` 真而不填 `fres` ⇒ 打印 `TOTAL ENERGY 0.000000000000` ⇒ 红 |
 | **`xtb/landscape-opt-xtbopt-once`（R29/L-4）** | `--opt`（套件）；以及 `--opt --namespace c1` | `optimized geometry written to:` = 0、`wrote xtbopt.xyz` = 1；`c1.xtbopt.xyz` 只写一次；计时块含 `landscape optimizer` 且不含 `ANC optimizer` | 去掉 `:1310-1320` 的抑制 ⇒ 两行提示都出现 ⇒ 红；恢复 `:4065` 的 runtyp-only 条件 ⇒ 计时标签回到 `ANC optimizer` ⇒ 红 |
+| **`xtb/landscape-ohess-level-axes`（3c 收口/T3）** | `--ohess tight`、`--ohess tight --acc 0.5`、`--ohess`（默认） | 每次运行的两条 `landscape engine: SCC accuracy` 相同：`0.200000`/`0.200000`、`0.500000`/`0.500000`、`1.000000`/`1.000000`；两条 `energy tolerance:` 亦相同（1e-6 / 5e-6） | 删掉桥接处的 `call lvset%set_conv_level(...)` ⇒ 实测 `['0.200000', '1.000000']` ⇒ 红（收口报告 §3.3 贴了改前红/改后绿）；**R45 订正**：原稿写「改成无条件写 `lvset%engine%acc` ⇒ **无档位运行**那一条红」**不成立** —— 无条件拷 `set%acc`（默认 1.0）时无档位那一条恰为期望的 `1.000000/1.000000`（**绿**），变红的是 `--ohess tight` 那一条 |
 | **`xtb/landscape-lopt-no-method`（R30/MEDIUM-1）** | `--lopt`（无 `--method`） | exit 0；含 `landscape: lbfgs minimisation`、不含 `ANC micro-cycles`；写 `landscape_opt.json` | 删掉 flag 循环前的 `landscape_native_engine = 0` ⇒ 读到未定义值。**诚实标注**：`intent(out)` 的未定义值在 `-O2` 下经常"恰好为 0"，所以**运行时测试不能可靠地证伪这一条**；真正的验收是**静态且可核的**：`grep -n "landscape_native_engine" src/prog/main.F90` 必须同时给出声明行（带 `= 0`）与 flag 循环前那行（实现报告贴输出） |
 | **`xtb/landscape-method-native-vs-xcontrol`（R34/U15）** | `--opt --method fire --input <$opt engine=rf>` | exit 0；含 `[WARNING]`（提示 `$opt engine=rf` 被丢弃）、含 `initial time step`（fire 生效）、不含 `ANC micro-cycles` | 去掉 `set_module.f90:1885` 分支的 warning ⇒ `[WARNING]` 消失 ⇒ 红（行为不变，仍 fire —— 本项只加诊断）。**R41 落地**：实现为 `xtb/landscape-method-native` 的 5 个 `u15-*` 用例（`--method lancopt` + `$opt engine=rf|lbfgs|不给|给两次`）。**实测订正 R34 的“只在 `--method` 之后命中”**：`set%opt_engine` 已赋值也可能是**同一 `$opt` 块重复给值**（首个生效、第二个原先静默消失）⇒ 该例也告警（用例 `u15-xcontrol-twice`），与“绝不静默覆盖”同一规则，已在 `28-stage2-fix-report.md` T10 登记 |
 
@@ -2442,7 +2480,7 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 
 ### E 类 — **R5：档位同时驱动 `e_tol`/`acc`/`max_steps`（新）**
 
-**E1. `--lopt-level <level>` 的语义扩大**
+**E1. `--lopt-level <level>` 的语义扩大**（**阶段 3c 已落地**，`55-stage3c-impl.md`）
 - 现象：`--lopt-level loose` 从（`e_tol`=5e-6, `acc`=1.0, `max_steps`=256）变为（5e-5, 2.0, clamp(2n,200,10000)）；
   **默认 `normal`** 的 `max_steps` 也从 256 变为 clamp(3n,200,10000)（H2O → 200）。
 - 影响谁：所有用 `--lopt-level`/`--lscan-level`/`--lts-level`/`--lirc-level` 或默认档的脚本与测试。

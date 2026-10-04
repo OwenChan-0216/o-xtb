@@ -169,6 +169,12 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
             & settings%trust_max, " bohr"
       end if
       write(env%unit, '(1x,a,i0)') "maximum number of steps:  ", settings%max_steps
+      ! R5 of CLI redesign section 3.5: `e_tol` follows the convergence level
+      ! (`set_conv_level`) and is part of the convergence test of the search
+      ! itself.  The value comes from the settings object, not from the flag
+      ! text.
+      write(env%unit, '(1x,a,es15.6,a)') "energy tolerance:         ", &
+         & settings%e_tol, " Eh"
       write(env%unit, '(1x,a,a)') "restart policy:           ", &
          & landscape_restart_name(settings%engine%restart_mode)
       ! The dimer search itself never builds a Hessian; the provider is still

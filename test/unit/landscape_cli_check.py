@@ -83,11 +83,17 @@ suite tasks and are implemented here once for both builds; their modes are
   ohesssuite <exe> <input> <rundir>  -> xtb/landscape-ohess-suite-once
   ohessnative <exe> <input> <rundir> -> xtb/landscape-ohess-native-hess
   ohessbridge <exe> <input> <rundir> -> xtb/landscape-ohess-fres-bridge
+  ohesslevelaxes <exe> <input> <rundir>
+                                     -> xtb/landscape-ohess-level-axes
   optguard <exe> <input> <rundir> <scanblock|pbc|xcontrol>
                                      -> xtb/landscape-opt-scanblock,
                                         xtb/landscape-opt-pbc,
                                         xtb/landscape-opt-xcontrol
   optxtbopt <exe> <input> <rundir>   -> xtb/landscape-opt-xtbopt-once
+  optlevel / cycles / levelaxes <exe> <input> <rundir>
+                                     -> xtb/landscape-opt-level-bridge,
+                                        xtb/landscape-cycles-map,
+                                        xtb/landscape-level-axes
 
 The environment (XTBPATH) is inherited from the meson test environment, exactly
 like in the CMake build.
@@ -3073,7 +3079,7 @@ def check_opt_knobs(exe, inp, rundir):
 
       * `--lopt-max-steps 1` exhausts the budget in the first macro iteration,
         so the run echoes the budget, stays unconverged, exits non-zero and
-        stops at a different energy than the default 256 step run;
+        stops at a different energy than the default run;
       * `--lopt-hess-step` and `--lopt-sccacc` act on the numerical Hessian,
         which the default L-BFGS never builds (measured: the default run's
         `landscape engine: Hessians` counter is 0), so they are checked with
@@ -3089,8 +3095,13 @@ def check_opt_knobs(exe, inp, rundir):
     status, output, default = knobs_run(exe, inp, opt, rundir, "optknobs-default")
     if status != 0:
         fail("the default minimisation failed with status %d" % status, output)
-    if not re.search(r"maximum number of steps: +256\s*$", output, re.M):
-        fail("the default step budget is not 256", output)
+    # Since stage 3c the default budget is the one the default `normal` level
+    # derives for the molecule: `clamp(n_atoms * 3, 200, 10000)` - 200 for the
+    # three atom water fixture, where the lower clamp binds (the fixed default
+    # of 256 this test pinned before is gone, CLI redesign section 3.5/R5).
+    if not re.search(r"maximum number of steps: +200\s*$", output, re.M):
+        fail("the default step budget is not clamp(3n, 200, 10000) = 200",
+             output)
     reference = knobs_final_energy(output, "optknobs-default")
 
     status, output, budget = knobs_run(
@@ -3359,18 +3370,29 @@ def check_hessian_step_used(exe, inp, rundir, hcn, nh3, nh3product):
             if counter is None or int(counter.group(1)) < 1:
                 fail("%s: the run claims to consume the step but built no "
                      "Hessian" % label, output)
-        match = re.search(r"^\s*\(not used: (.*)\)\s*$", output, re.M)
+        match = re.findall(r"^\s*\(not used: (.*)\)\s*$", output, re.M)
         if hint is None:
-            if match is not None:
+            # a run can carry `(not used: ...)` notices that have nothing to do
+            # with the finite difference knobs (`--lvib` names the energy
+            # tolerance it never reads, a rigid scan names the missing inner
+            # relaxation), so only a notice about the Hessian counts here - the
+            # assertion is about *this* step, not about the absence of every
+            # unused notice
+            hessian_notices = [reason for reason in match
+                               if "Hessian" in reason or "finite" in reason]
+            if hessian_notices:
                 fail("%s: the step is consumed but the run reports it as "
-                     "unused (%r)" % (label, match.group(1)), output)
+                     "unused (%r)" % (label, hessian_notices), output)
         else:
-            if match is None:
+            if not match:
                 fail("%s: the run does not report the unused step" % label,
                      output)
-            if hint not in match.group(1):
-                fail("%s: the unused reason is %r, expected %r"
-                     % (label, match.group(1), hint), output)
+            # a run can carry more than one `(not used: ...)` notice (a rigid
+            # scan names the missing inner relaxation as well), so the hint has
+            # to appear in one of them instead of in the first one
+            if not any(hint in reason for reason in match):
+                fail("%s: the unused reasons are %r, expected one with %r"
+                     % (label, match, hint), output)
         return status, output
 
     # --- opt ---------------------------------------------------------------
@@ -3696,6 +3718,65 @@ def check_ohess_suite_once(exe, inp, rundir):
             fail("--ohess wrote no %s" % name, output)
     print("ohess suite: one minimisation + one frequency analysis, "
           "no native Hessian/frequency block")
+
+
+def check_ohess_level_axes(exe, inp, rundir):
+    """`--ohess <LEVEL>` drives both stages of the chain (stage 3c close-out).
+
+    Mirrors `xtb/landscape-ohess-level-axes`.  `--ohess` is a single run made
+    of two stages - the suite minimisation and the frequency analysis of the
+    minimised geometry - and the level used to reach the minimisation only
+    (`lset`): the frequency half kept its own defaults, so one run printed
+    `landscape engine: SCC accuracy 0.200000` for the minimisation and
+    `1.000000` (level `normal`) for the frequency analysis.  Both halves now
+    read the same level, and the axes are observable in the banner of each
+    half, which is the falsifier of the fix:
+
+    * `--ohess tight` reports 0.2 and 1e-6 twice (once per stage),
+    * `--ohess tight --acc 0.5` reports 0.5 twice: the explicit `--acc` still
+      wins over the level in **both** halves,
+    * the plain `--ohess` reports the level `normal` of both halves (1.0, 5e-6),
+      so a fix that unconditionally overwrote the frequency defaults (instead
+      of following the same level) fails here.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+
+    acc = r"landscape engine: SCC accuracy\s+(\S+)"
+    etol = r"energy tolerance:\s+(\S+)"
+
+    def axes(label, args):
+        workdir = os.path.join(rundir, label)
+        status, output = run(exe, inp, ["--gfn", "2", "--ohess"] + args +
+                             ["--norestart"], workdir)
+        if status != 0:
+            fail("--ohess %s exited %d" % (" ".join(args), status), output)
+        return re.findall(acc, output), re.findall(etol, output)
+
+    tight, tight_etol = axes("tight", ["tight"])
+    if tight != ["0.200000", "0.200000"]:
+        fail("--ohess tight reported the SCC accuracies %r instead of two "
+             "times 0.200000: the level does not reach both stages" % (tight,))
+    if tight_etol != ["1.000000E-06", "1.000000E-06"]:
+        fail("--ohess tight reported the energy tolerances %r instead of two "
+             "times 1.000000E-06" % (tight_etol,))
+
+    explicit, _ = axes("tight-acc", ["tight", "--acc", "0.5"])
+    if explicit != ["0.500000", "0.500000"]:
+        fail("--ohess tight --acc 0.5 reported the SCC accuracies %r instead "
+             "of two times 0.500000: the explicit --acc does not win in both "
+             "stages" % (explicit,))
+
+    plain, plain_etol = axes("plain", [])
+    if plain != ["1.000000", "1.000000"]:
+        fail("--ohess without a level reported the SCC accuracies %r instead "
+             "of two times 1.000000 (level normal)" % (plain,))
+    if plain_etol != ["5.000000E-06", "5.000000E-06"]:
+        fail("--ohess without a level reported the energy tolerances %r "
+             "instead of two times 5.000000E-06" % (plain_etol,))
+
+    print("ohess level: both stages of the chain report the same SCC accuracy "
+          "and energy tolerance (level and explicit --acc)")
 
 
 def check_ohess_native_hess(exe, inp, rundir):
@@ -4350,6 +4431,96 @@ def check_cycles_mapping(exe, inp, rundir):
           "lvib and conflict refused" % (cycles, default))
 
 
+def check_level_axes(exe, inp, rundir):
+    """A convergence level drives `e_tol`, `acc` and the step budget (3.5/R5).
+
+    Mirrors `xtb/landscape-level-axes` (stage 3c).  Three axes are asserted on
+    the stdout banner, which is the only place they are observable:
+
+    * `--lopt --lopt-level loose` reports `SCC accuracy 2.000000`; before the
+      guard of `acc_was_set` the global `--acc` default 1.0 overwrote the
+      level-derived value and the axis was a dead knob, so this line is the
+      falsifier of T2.
+    * `--lopt --lopt-level loose --acc 1.0` reports 1.0: an explicit `--acc`
+      still wins over the level.
+    * `energy tolerance` follows the level (5e-5 loose, 1e-6 tight, 5e-4
+      superloose); the line did not exist before stage 3c, so the axis had no
+      observable at all.
+    * `maximum number of steps` is `clamp(n_atoms * multiplier, 200, 10000)`
+      for water (3 atoms, so the lower clamp 200 binds at every level), and an
+      explicit `--lopt-max-steps 8` or `--cycles 4` keeps its value.
+
+    The scaling with the atom count (the multiplier itself) is asserted in the
+    unit test `landscape-settings / level-step-budget`, which can build a 2000
+    atom settings object without paying for a 2000 atom SCF.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+
+    def banner(label, args):
+        workdir = os.path.join(rundir, label)
+        status, output = run(exe, inp,
+                             ["--gfn", "2"] + args + ["--norestart"], workdir)
+        return output
+
+    def value(output, pattern, label):
+        match = re.search(pattern, output)
+        if match is None:
+            fail("the banner does not report %s" % label, output)
+        return match.group(1)
+
+    acc = r"landscape engine: SCC accuracy\s+(\S+)"
+    etol = r"energy tolerance:\s+(\S+)"
+    budget = r"maximum number of steps:\s+(\S+)"
+
+    default = banner("default", ["--lopt"])
+    if value(default, etol, "energy tolerance:") != "5.000000E-06":
+        fail("the default level does not report e_tol 5e-6", default)
+    if value(default, acc, "the SCC accuracy of the engine") != "1.000000":
+        fail("the default level does not report acc 1.0", default)
+    if value(default, budget, "maximum number of steps:") != "200":
+        fail("the default level does not report clamp(3n, 200, 10000) = 200",
+             default)
+
+    loose = banner("loose", ["--lopt", "--lopt-level", "loose"])
+    if value(loose, acc, "the SCC accuracy of the engine") != "2.000000":
+        fail("--lopt-level loose does not report acc 2.0 (dead knob, T2)",
+             loose)
+    if value(loose, etol, "energy tolerance:") != "5.000000E-05":
+        fail("--lopt-level loose does not report e_tol 5e-5 (T3)", loose)
+
+    explicit = banner("loose-acc",
+                      ["--lopt", "--lopt-level", "loose", "--acc", "1.0"])
+    if value(explicit, acc, "the SCC accuracy of the engine") != "1.000000":
+        fail("--acc 1.0 did not win over --lopt-level loose", explicit)
+
+    tight = banner("tight", ["--lopt", "--lopt-level", "tight"])
+    if value(tight, etol, "energy tolerance:") != "1.000000E-06":
+        fail("--lopt-level tight does not report e_tol 1e-6 (T3)", tight)
+    if value(tight, budget, "maximum number of steps:") != "200":
+        fail("--lopt-level tight does not report clamp(5n, 200, 10000) = 200",
+             tight)
+
+    superloose = banner("superloose", ["--lopt", "--lopt-level", "superloose"])
+    if value(superloose, etol, "energy tolerance:") != "5.000000E-04":
+        fail("--lopt-level superloose does not report e_tol 5e-4 (T3)",
+             superloose)
+
+    explicit_budget = banner("tight-budget",
+                             ["--lopt", "--lopt-level", "tight",
+                              "--lopt-max-steps", "8"])
+    if value(explicit_budget, budget, "maximum number of steps:") != "8":
+        fail("--lopt-max-steps 8 did not win over the level-derived budget",
+             explicit_budget)
+
+    cycles = banner("tight-cycles",
+                    ["--lopt", "--lopt-level", "tight", "--cycles", "4"])
+    if value(cycles, budget, "maximum number of steps:") != "4":
+        fail("--cycles 4 did not win over the level-derived budget", cycles)
+    print("level axes: acc loose 2.0 (--acc 1.0 wins), e_tol loose/tight/"
+          "superloose echoed, budget 200 = clamp, explicit 8 and 4 win")
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -4466,6 +4637,8 @@ def main():
         check_opt_native_exit(exe, inp, rundir)
     elif mode == "ohesssuite":
         check_ohess_suite_once(exe, inp, rundir)
+    elif mode == "ohesslevelaxes":
+        check_ohess_level_axes(exe, inp, rundir)
     elif mode == "ohessnative":
         check_ohess_native_hess(exe, inp, rundir)
     elif mode == "ohessbridge":
@@ -4495,6 +4668,8 @@ def main():
         check_opt_level_bridge(exe, inp, rundir)
     elif mode == "cycles":
         check_cycles_mapping(exe, inp, rundir)
+    elif mode == "levelaxes":
+        check_level_axes(exe, inp, rundir)
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

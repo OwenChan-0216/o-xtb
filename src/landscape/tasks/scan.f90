@@ -141,6 +141,17 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
             & settings%coord(i)%atoms(1:4)
       end do
       write(env%unit, '(1x,a,i0)') "number of coordinates:    ", settings%ndim
+      ! R5 of CLI redesign section 3.5: `e_tol` follows the convergence level
+      ! of the scan (`set_conv_level`) and is the energy guard of the inner
+      ! relaxation of every scan point (`relax_scan.f90`).  A rigid scan runs
+      ! single points and never relaxes, so it says so instead of echoing a
+      ! value no code path of that mode reads.
+      write(env%unit, '(1x,a,es15.6,a)') "energy tolerance:         ", &
+         & settings%e_tol, " Eh"
+      if (landscape_lowercase(settings%mode) /= 'relaxed') then
+         write(env%unit, '(1x,a)') &
+            & "(not used: a rigid scan runs no inner relaxation)"
+      end if
       write(env%unit, '(1x,a,a)') "restart policy:           ", &
          & landscape_restart_name(settings%engine%restart_mode)
       write(env%unit, '(1x,a,a)') "Hessian source:           ", &

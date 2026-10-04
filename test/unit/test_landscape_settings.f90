@@ -39,6 +39,7 @@ subroutine collect_landscape_settings(testsuite)
       new_unittest("convergence-boundary", test_convergence_boundary), &
       new_unittest("convergence-measures", test_convergence_measures), &
       new_unittest("convergence-levels", test_convergence_levels), &
+      new_unittest("level-step-budget", test_level_step_budget), &
       new_unittest("identifier-names", test_identifier_names), &
       new_unittest("algorithm-lookup", test_algorithm_lookup), &
       new_unittest("level-lookup", test_level_lookup), &
@@ -279,6 +280,11 @@ subroutine test_convergence_measures(error)
 end subroutine test_convergence_measures
 
 !> Named convergence levels overwrite the four displacement/force thresholds
+!> A named convergence level drives four axes (CLI redesign section 3.5, R5):
+!> the four thresholds, `e_tol`, the SCC accuracy of the engine and the
+!> multiplier of the step budget.  The values are the ones of the matching
+!> upstream level (`get_optthr`, `src/optimizer.f90:48-119`), so the bridge of
+!> `--opt <LEVEL>` is an identity on the numbers.
 subroutine test_convergence_levels(error)
    type(error_type), allocatable, intent(out) :: error
    type(landscape_opt_settings) :: set
@@ -292,6 +298,12 @@ subroutine test_convergence_levels(error)
    if (allocated(error)) return
    call check(error, set%d_rms, 7.0e-3_wp)
    if (allocated(error)) return
+   call check(error, set%e_tol, 5.0e-5_wp)
+   if (allocated(error)) return
+   call check(error, set%engine%acc, 2.0_wp)
+   if (allocated(error)) return
+   call check(error, set%max_steps_multiplier, 2)
+   if (allocated(error)) return
 
    call set%set_conv_level("tight")
    call check(error, set%g_max, 1.0e-4_wp)
@@ -301,6 +313,12 @@ subroutine test_convergence_levels(error)
    call check(error, set%d_max, 1.0e-3_wp)
    if (allocated(error)) return
    call check(error, set%d_rms, 6.0e-4_wp)
+   if (allocated(error)) return
+   call check(error, set%e_tol, 1.0e-6_wp)
+   if (allocated(error)) return
+   call check(error, set%engine%acc, 0.2_wp)
+   if (allocated(error)) return
+   call check(error, set%max_steps_multiplier, 5)
    if (allocated(error)) return
 
    call set%set_conv_level("normal")
@@ -312,14 +330,78 @@ subroutine test_convergence_levels(error)
    if (allocated(error)) return
    call check(error, set%d_rms, 2.0e-3_wp)
    if (allocated(error)) return
+   call check(error, set%e_tol, 5.0e-6_wp)
+   if (allocated(error)) return
+   call check(error, set%engine%acc, 1.0_wp)
+   if (allocated(error)) return
+   call check(error, set%max_steps_multiplier, 3)
+   if (allocated(error)) return
 
    call set%set_conv_level("superloose")
    call check(error, set%g_max, 4.6e-3_wp)
    if (allocated(error)) return
+   call check(error, set%e_tol, 5.0e-4_wp)
+   if (allocated(error)) return
+   call check(error, set%engine%acc, 3.0_wp)
+   if (allocated(error)) return
+   call check(error, set%max_steps_multiplier, 1)
+   if (allocated(error)) return
+
    call set%set_conv_level("vtight")
    call check(error, set%g_max, 3.0e-5_wp)
+   if (allocated(error)) return
+   call check(error, set%e_tol, 1.0e-7_wp)
+   if (allocated(error)) return
+   call check(error, set%engine%acc, 0.05_wp)
+   if (allocated(error)) return
+   call check(error, set%max_steps_multiplier, 20)
 
 end subroutine test_convergence_levels
+
+!> The step budget a level derives from the atom count (CLI redesign section
+!> 3.5, R5).
+!>
+!> The rule is `clamp(n_atoms * multiplier, 200, 10000)` of the upstream
+!> `get_optthr`; the default level is `normal` (multiplier 3), so a water
+!> molecule gets 200 steps - **fewer** than the fixed default of 256 this code
+!> used before the level became the source of the axis.  An explicit budget
+!> (`max_steps_source`, written by `--l*-max-steps` and by the `--cycles`
+!> bridge) wins over the derived one.
+subroutine test_level_step_budget(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(landscape_opt_settings) :: set
+
+   ! default level: `normal`, multiplier 3
+   call set%level_step_budget(3)
+   call check(error, set%max_steps, 200)
+   if (allocated(error)) return
+   ! a 500 atom system grows with the atom count
+   call set%level_step_budget(500)
+   call check(error, set%max_steps, 1500)
+   if (allocated(error)) return
+   ! and the clamp of the upstream rule holds on both ends
+   call set%level_step_budget(20000)
+   call check(error, set%max_steps, 10000)
+   if (allocated(error)) return
+
+   call set%set_conv_level("vtight")
+   call set%level_step_budget(10)
+   call check(error, set%max_steps, 200)
+   if (allocated(error)) return
+   call set%level_step_budget(2000)
+   call check(error, set%max_steps, 10000)
+   if (allocated(error)) return
+
+   ! an explicit budget is not touched by the derivation, and it keeps its
+   ! value when the level is named afterwards (`--lopt-max-steps 8
+   ! --lopt-level tight` and the reverse order are the same run)
+   set%max_steps = 8
+   set%max_steps_source = '--lopt-max-steps'
+   call set%set_conv_level("tight")
+   call set%level_step_budget(1000)
+   call check(error, set%max_steps, 8)
+
+end subroutine test_level_step_budget
 
 !> Human readable names of the algorithm and update identifiers
 subroutine test_identifier_names(error)
@@ -418,6 +500,12 @@ subroutine test_enum_case(error)
    call check(error, upper%d_max, lower%d_max)
    if (allocated(error)) return
    call check(error, upper%d_rms, lower%d_rms)
+   if (allocated(error)) return
+   call check(error, upper%e_tol, lower%e_tol)
+   if (allocated(error)) return
+   call check(error, upper%engine%acc, lower%engine%acc)
+   if (allocated(error)) return
+   call check(error, upper%max_steps_multiplier, lower%max_steps_multiplier)
 
 end subroutine test_enum_case
 

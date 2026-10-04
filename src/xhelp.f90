@@ -307,7 +307,8 @@ subroutine help(iunit)
    "    bfgs, diis or rfo (default lbfgs).  The name is not case-sensitive", &
    "",&
    "--lopt-level LEVEL",&
-   "    convergence level of the landscape suite, one of superloose, loose,", &
+   "    convergence level of the landscape suite (thresholds, energy tolerance, SCC", &
+     "    accuracy and the step budget), one of superloose, loose,", &
    "    normal (default), tight or vtight.  The level name is not case-sensitive", &
    "",&
    "--lopt-hessian SOURCE",&
@@ -316,7 +317,9 @@ subroutine help(iunit)
    "    electronic gradient) or model (Lindh-D2 model Hessian)",&
    "",&
    "--lopt-max-steps N",&
-   "    step budget of the minimisation (default 256)",&
+   "    step budget of the minimisation; the default is derived from the",&
+   "    convergence level (3 steps per atom at level normal, clamped to",&
+   "    200..10000), --cycles and the level change it",&
    "",&
    "--lopt-hess-step VALUE",&
    "    finite difference step of the numerical Hessian in bohr (default 0.005);", &
@@ -370,7 +373,8 @@ subroutine help(iunit)
    "    diis or rfo.  The name is not case-sensitive", &
    "",&
    "--lscan-level LEVEL",&
-   "    convergence level of the inner minimisation, one of superloose, loose,", &
+   "    convergence level of the inner minimisation (thresholds, energy tolerance,", &
+     "    SCC accuracy and the step budget), one of superloose, loose,", &
    "    normal (default), tight or vtight",&
    "",&
    "--lscan-ndim N",&
@@ -393,7 +397,9 @@ subroutine help(iunit)
    "    exponent of the constraint potential (default 2.0)",&
    "",&
    "--lscan-max-steps N",&
-   "    step budget of the inner relaxation of every scan point (default 256)", &
+   "    step budget of the inner relaxation of every scan point; the default", &
+   "    is derived from the convergence level (3 steps per atom at level", &
+   "    normal, clamped to 200..10000), --cycles and the level change it", &
    "",&
    "--lscan-hess-step VALUE",&
    "    finite difference step of the numerical Hessian of the scan points in", &
@@ -437,10 +443,13 @@ subroutine help(iunit)
    "    curvature floor of the downhill modes in hartree/bohr^2 (default 0.01)", &
    "",&
    "--lts-max-steps N",&
-   "    maximum number of macro iterations (default 256)", &
+   "    maximum number of macro iterations; the default is derived from the", &
+   "    convergence level (3 steps per atom at level normal, clamped to", &
+   "    200..10000), --cycles and the level change it", &
    "",&
    "--lts-level LEVEL",&
-   "    convergence thresholds, one of superloose, loose, normal, tight, vtight", &
+   "    convergence level (thresholds, energy tolerance, SCC accuracy and the step", &
+     "    budget), one of superloose, loose, normal, tight, vtight", &
    "",&
    "--lts-mode-overlap-min VALUE",&
    "    mode following guard: reselect the transition vector below this overlap (default 0.3)", &
@@ -623,10 +632,13 @@ subroutine help(iunit)
    "    for a tight path)", &
    "",&
    "--lirc-max-steps N",&
-   "    maximum number of macro steps of one direction (default 256)", &
+   "    maximum number of macro steps of one direction; the default is", &
+   "    derived from the convergence level (3 steps per atom at level", &
+   "    normal, clamped to 200..10000), --cycles and the level change it", &
    "",&
    "--lirc-level LEVEL",&
-   "    convergence thresholds of the endpoint relaxation, one of superloose, loose,", &
+   "    convergence level of the endpoint relaxation (thresholds, energy tolerance,", &
+     "    SCC accuracy and the step budget), one of superloose, loose,", &
    "    normal, tight, vtight (the IRC path itself is left by the gradient and", &
    "    energy-rise termination signals, see --lirc-grad-tol/--lirc-e-rise)", &
    "",&

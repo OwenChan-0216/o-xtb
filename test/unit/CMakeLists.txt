@@ -3752,6 +3752,17 @@ add_test("xtb/landscape-ohess-fres-bridge"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-fres-bridge
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# Stage 3c close-out: `--ohess <LEVEL>` is one run of two stages, so the level
+# has to reach the frequency half as well.  Before the fix both halves printed
+# their own SCC accuracy (0.2 for the minimisation, 1.0 for the frequencies).
+add_test("xtb/landscape-ohess-level-axes"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=ohesslevelaxes;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-level-axes"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-ohess-level-axes
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # The stage 3a fix round: the upstream `--opt <LEVEL>` keyword and `--cycles N`
 # reach the suite through an explicit bridge (redesign sections 3.5/3.10b,
 # findings B/C), an unknown level is refused (F3), and every timing label names
@@ -3772,6 +3783,18 @@ add_test("xtb/landscape-cycles-map"
   -DSCRIPT=${LANDSCAPE-CLI-PY}
   "-DARGS=cycles;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cycles-map"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cycles-map
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# Stage 3c (redesign sections 3.5/R5 and 3.10): a convergence level drives
+# `e_tol`, the SCC accuracy of the engine and the step budget.  The banner is
+# the only place all three are observable, so the check asserts the echoed
+# values and the priority of the explicit flags.
+add_test("xtb/landscape-level-axes"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=levelaxes;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-level-axes"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-level-axes
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
 # The legacy file contract (CLI redesign section 3.9, R4): the suite writes
@@ -3895,8 +3918,10 @@ set_tests_properties(
   "xtb/landscape-ohess-suite-once"
   "xtb/landscape-ohess-native-hess"
   "xtb/landscape-ohess-fres-bridge"
+  "xtb/landscape-ohess-level-axes"
   "xtb/landscape-opt-level-bridge"
   "xtb/landscape-cycles-map"
+  "xtb/landscape-level-axes"
   "xtb/landscape-file-contract-opt"
   "xtb/landscape-file-contract-opt-fail"
   "xtb/landscape-file-contract-vib"

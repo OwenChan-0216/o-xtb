@@ -886,6 +886,12 @@ test('landscape ohess fres bridge', python, env: landscape_env, args: [
   landscape_cli_check, 'ohessbridge', xtb_exe, h2o_xyz,
   landscape_cli_dir / 'landscape-ohess-fres-bridge',
 ])
+# stage 3c close-out: `--ohess <LEVEL>` must drive both stages of the chain
+# (the minimisation and the frequency analysis), not only the minimisation
+test('landscape ohess level axes', python, env: landscape_env, args: [
+  landscape_cli_check, 'ohesslevelaxes', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-ohess-level-axes',
+])
 # stage 3a fix round: the `--opt <LEVEL>` and `--cycles N` bridge, the F3
 # refusal and the timing label (redesign sections 3.5/3.10b)
 test('landscape opt level bridge', python, env: landscape_env, args: [
@@ -895,6 +901,12 @@ test('landscape opt level bridge', python, env: landscape_env, args: [
 test('landscape cycles map', python, env: landscape_env, args: [
   landscape_cli_check, 'cycles', xtb_exe, h2o_xyz,
   landscape_cli_dir / 'landscape-cycles-map',
+])
+# stage 3c: the level-driven axes `e_tol`, `acc` and the step budget
+# (redesign sections 3.5 R5 and 3.10)
+test('landscape level axes', python, env: landscape_env, args: [
+  landscape_cli_check, 'levelaxes', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-level-axes',
 ])
 # stage 3b: the legacy file contract (redesign section 3.9, R4) and the
 # `--ohess` failure path (section 3.9, T2)

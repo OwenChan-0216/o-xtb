@@ -114,6 +114,13 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
       write(env%unit, '(1x,a,es15.6,a)') "gradient threshold (max): ", &
          & settings%g_max, " Eh/bohr"
       write(env%unit, '(1x,a,i0)') "maximum number of steps:  ", settings%max_steps
+      ! R5 of CLI redesign section 3.5: `e_tol` follows the convergence level
+      ! (`set_conv_level`) and is the energy guard of every convergence test
+      ! (`landscape_settings_is_converged`), so a run that echoes only the
+      ! gradient threshold would hide half of its criterion.  The value is
+      ! read from the settings object, not from the command line text.
+      write(env%unit, '(1x,a,es15.6,a)') "energy tolerance:         ", &
+         & settings%e_tol, " Eh"
       write(env%unit, '(1x,a,a)') "restart policy:           ", &
          & landscape_restart_name(settings%engine%restart_mode)
       write(env%unit, '(1x,a,a)') "Hessian source:           ", &

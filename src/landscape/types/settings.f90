@@ -322,7 +322,11 @@ module xtb_landscape_settings
       real(wp) :: etemp = 300.0_wp
       !> Maximum number of SCC iterations
       integer :: maxiter = 250
-      !> SCC convergence threshold
+      !> SCC convergence threshold.  A named convergence level overwrites it
+      !> (`set_conv_level`, the `acc` column of the upstream `get_optthr`), and
+      !> the global `--acc` overwrites it **again** only when the user named
+      !> that flag - otherwise the level-derived value would be silently
+      !> replaced by the default 1.0 (CLI redesign section 3.5, R5).
       real(wp) :: acc = 1.0_wp
       !> Print level forwarded to the single point driver
       integer :: printlevel = 0
@@ -368,9 +372,29 @@ module xtb_landscape_settings
    !>
    !> `e_tol` is an additional `AND` guard against convergence on a noisy
    !> plateau (xtb uses an energy criterion in `src/optimizer.f90:48-119`).
+   !>
+   !> A named convergence level (`set_conv_level`) overwrites **four** of the
+   !> axes together, exactly like one level of the upstream `get_optthr`
+   !> (`src/optimizer.f90:48-119`): the four thresholds, `e_tol`, the SCC
+   !> accuracy of the engine and the multiplier of the step budget
+   !> (`max_steps_multiplier`).  The budget itself needs the atom count and is
+   !> therefore derived by the caller (`level_step_budget`).
    type, abstract :: landscape_settings
       !> Maximum number of macro iterations
       integer :: max_steps = 256
+      !> Multiplier of the level-derived step budget: a run of the
+      !> dispatcher (`xtbMain`) turns it into
+      !> `clamp(n_atoms * max_steps_multiplier, 200, 10000)` through
+      !> `level_step_budget`, the rule of the upstream `get_optthr`
+      !> (`src/optimizer.f90:113-114`, `n = mol%n`).  The default 3 is the
+      !> `normal` level; `--cycles` and the per-task `--l*-max-steps` keep
+      !> precedence through `max_steps_source`.
+      integer :: max_steps_multiplier = 3
+      !> Flag that set `max_steps` explicitly, empty until one was named; the
+      !> state of the priority rule "explicit beats level-derived" (same
+      !> pattern as `landscape_opt_settings%algorithm_source`).
+      !> `level_step_budget` leaves `max_steps` alone while it is non-empty.
+      character(len=:), allocatable :: max_steps_source
       !> Energy change threshold (hartree)
       real(wp) :: e_tol = 5.0e-6_wp
       !> Maximum gradient component (hartree/bohr)
@@ -405,6 +429,8 @@ module xtb_landscape_settings
       procedure :: is_converged => landscape_settings_is_converged
       !> Overwrite the thresholds from a named convergence level
       procedure :: set_conv_level => landscape_settings_set_conv_level
+      !> Derive `max_steps` from the level multiplier and the atom count
+      procedure :: level_step_budget => landscape_settings_level_step_budget
       !> Task name implemented by the concrete settings type
       procedure(landscape_settings_task_name), deferred :: task
    end type landscape_settings
@@ -1107,7 +1133,7 @@ pure function landscape_settings_is_converged(self, de, gradient, displ, check_d
 
 end function landscape_settings_is_converged
 
-!> Overwrite the convergence thresholds from a named level.
+!> Overwrite the convergence axes from a named level.
 !>
 !> Levels follow the ORCA 6.1 naming (`superloose`, `loose`, `normal`, `tight`,
 !> `vtight`); `normal` is the default.  The MAPLE aliases (`medium`,
@@ -1117,6 +1143,13 @@ end function landscape_settings_is_converged
 !> responsible for reporting the error.  The name is matched case insensitively,
 !> so that every name accepted by `landscape_conv_level_known` also sets the
 !> thresholds.
+!>
+!> One level drives four axes at once (CLI redesign section 3.5, R5): the four
+!> minimisation thresholds, the energy threshold `e_tol`, the SCC accuracy
+!> `engine%acc` and the multiplier of the step budget.  `e_tol`, `acc` and the
+!> multiplier are the values of the corresponding upstream level
+!> (`get_optthr`, `src/optimizer.f90:48-119`), so `--lopt --lopt-level tight`
+!> is the suite run that matches `--opt tight` of the native optimiser.
 subroutine landscape_settings_set_conv_level(self, level)
    !> Convergence thresholds to overwrite
    class(landscape_settings), intent(inout) :: self
@@ -1129,29 +1162,69 @@ subroutine landscape_settings_set_conv_level(self, level)
       self%g_rms = 3.0e-3_wp
       self%d_max = 7.9e-3_wp
       self%d_rms = 5.2e-3_wp
+      self%e_tol = 5.0e-4_wp
+      self%engine%acc = 3.0_wp
+      self%max_steps_multiplier = 1
    case ('loose')
       self%g_max = 2.0e-3_wp
       self%g_rms = 5.0e-4_wp
       self%d_max = 1.0e-2_wp
       self%d_rms = 7.0e-3_wp
+      self%e_tol = 5.0e-5_wp
+      self%engine%acc = 2.0_wp
+      self%max_steps_multiplier = 2
    case ('normal')
       self%g_max = 3.0e-4_wp
       self%g_rms = 1.0e-4_wp
       self%d_max = 4.0e-3_wp
       self%d_rms = 2.0e-3_wp
+      self%e_tol = 5.0e-6_wp
+      self%engine%acc = 1.0_wp
+      self%max_steps_multiplier = 3
    case ('tight')
       self%g_max = 1.0e-4_wp
       self%g_rms = 3.0e-5_wp
       self%d_max = 1.0e-3_wp
       self%d_rms = 6.0e-4_wp
+      self%e_tol = 1.0e-6_wp
+      self%engine%acc = 0.2_wp
+      self%max_steps_multiplier = 5
    case ('vtight')
       self%g_max = 3.0e-5_wp
       self%g_rms = 8.0e-6_wp
       self%d_max = 2.0e-4_wp
       self%d_rms = 1.0e-4_wp
+      self%e_tol = 1.0e-7_wp
+      self%engine%acc = 0.05_wp
+      self%max_steps_multiplier = 20
    end select
 
 end subroutine landscape_settings_set_conv_level
+
+!> Derive `max_steps` from the level multiplier and the number of atoms.
+!>
+!> The rule is the one of the upstream `get_optthr` (`src/optimizer.f90:113-114`,
+!> `maxcycle = min(maxcycle, 10000); maxcycle = max(maxcycle, 200)`, with
+!> `n = mol%n` at the call site `:332`), so a large molecule gets a budget that
+!> grows with it and a small one still gets 200 steps.  An explicit budget
+!> wins: `max_steps_source` records the flag that set `max_steps`
+!> (`--lopt-max-steps` and friends, or `--cycles` after its bridge), and the
+!> derivation is skipped while it is allocated and non-empty.  Every task
+!> settings object owns its own step budget, so `--lts-max-steps 8` and
+!> `--lopt --lopt-level tight` do not interfere.
+subroutine landscape_settings_level_step_budget(self, natoms)
+   !> Settings whose step budget is derived
+   class(landscape_settings), intent(inout) :: self
+   !> Number of atoms of the molecule (`mol%n`)
+   integer, intent(in) :: natoms
+
+   if (allocated(self%max_steps_source)) then
+      if (len(self%max_steps_source) > 0) return
+   end if
+
+   self%max_steps = min(max(natoms*self%max_steps_multiplier, 200), 10000)
+
+end subroutine landscape_settings_level_step_budget
 
 !> Human readable name of a minimisation algorithm identifier
 pure function landscape_opt_algorithm_name(algorithm) result(name)

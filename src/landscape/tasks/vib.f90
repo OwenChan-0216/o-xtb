@@ -138,6 +138,15 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
          & settings%engine%hess_acc
       write(env%unit, '(1x,a,l1)') "project translations/rotations: ", &
          & settings%project_tr
+      ! R5 of CLI redesign section 3.5: `e_tol` belongs to the level-driven
+      ! axes of the shared settings family.  The frequency task has no
+      ! convergence loop and `--lvib` has no level of its own, so the value is
+      ! echoed for completeness and marked as not consumed, exactly like the
+      ! other knobs of this run type that no code path reads.
+      write(env%unit, '(1x,a,es15.6,a)') "energy tolerance:         ", &
+         & settings%e_tol, " Eh"
+      write(env%unit, '(1x,a)') &
+         & "(not used: the frequency task has no convergence loop)"
    end if
 
    ! A file based Hessian without a file name is a configuration error; it is
