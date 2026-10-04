@@ -3535,6 +3535,25 @@ add_test("xtb/landscape-lirc-fix"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lirc-fix
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# Upstream copied the geometry with an **intrinsic** `TMolecule` assignment in
+# the L-ANCopt engine (`src/relaxation_engine.f90:615` and `:779`), and
+# gfortran 12.2.0 corrupts `sym(2:)` of a `character(len=:), allocatable ::
+# sym(:)` component under intrinsic assignment (AGENTS.md section 6.5).  With
+# `$opt engine=lbfgs` the symbol column of `xtbopt.xyz` and of the stdout
+# `final structure:` block came out as garbage bytes while every number stayed
+# correct; the `rf` engine was never affected, which is why the BC-4 fixtures
+# (native `--opt` defaults to `rf` below 500 atoms) never saw it.  Both lines
+# now copy explicitly, exactly like the `rf` engine did at `:311`/`:379`, and
+# this check asserts the **bytes**: a NUL byte is a valid UTF-8 code point
+# (measured), so a strict decode alone is provably not enough.
+add_test("xtb/native-opt-lbfgs-symbols"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=nativeoptsym;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/native-opt-lbfgs-symbols"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/native-opt-lbfgs-symbols
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # 340x OpenMP anti-scaling of many small single points out of the picture
 # (AGENTS.md section 6.8).  The stage 1 CLI checks of the same family
@@ -3572,6 +3591,7 @@ set_tests_properties(
   "xtb/landscape-lirc-default-echo"
   "xtb/landscape-lts-escape-echo"
   "xtb/landscape-strict-unknown"
+  "xtb/native-opt-lbfgs-symbols"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

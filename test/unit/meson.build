@@ -640,6 +640,17 @@ test('landscape method table', python, env: landscape_env, args: [
   nh3_down_xyz,
 ])
 
+# the native L-BFGS `--opt` path has to write the element symbols intact
+# (mirrors `xtb/native-opt-lbfgs-symbols`): upstream copied the geometry with
+# an intrinsic `TMolecule` assignment in `src/relaxation_engine.f90`, which
+# gfortran 12.2.0 turns into garbage `sym(2:)` bytes; a NUL byte is a valid
+# UTF-8 code point, so the check scans bytes and compares the symbol column
+# against the input geometry
+native_opt_dir = landscape_cli_dir / 'native-opt-lbfgs-symbols'
+test('native opt lbfgs symbols', python, env: landscape_env, args: [
+  landscape_cli_check, 'nativeoptsym', xtb_exe, h2o_xyz, native_opt_dir,
+])
+
 # CLI checks of the M6 IRC task.  `irc` mirrors `xtb/landscape-irc-cli`: the
 # input is the bent HCN transition state guess and the check converges it with
 # `--lts` first.  The three error branches use the shared `error` mode.

@@ -70,6 +70,7 @@
 
 | **R40** | **阶段 2 缺口旗标归属订正 + `--cycles` 归属统一（复核 27 M2；本轮全量 `grep` 核实）**：(a) §6.3 的缺口旗标**本轮全部未实现**（`grep -c` 均为 0：`--lopt-max-steps`=0、`--lopt/lscan-hess-step`=0、`--lts/lirc/lvib-hess-step`=0、`--lopt/lscan-sccacc`=0、`--lopt/lvib-restart`=0）⇒ **整个 §6.3 新旗标块移出阶段 2**，登记为 **阶段 2b（非破坏收尾，先于阶段 3）**。**同时订正 §6.3/§7.2/§9.2 的一层更深的错**：其中部分**能力**其实已在 M2/M4/M6 以**任务限定名**落地（`--lscan/--lts/--lirc-max-steps`、`--lts/--lirc/--lvib-sccacc`、`--lscan/--lts/--lirc-restart`、`--lirc-step-hess`），**但从来没有 §6.3/§7.2 宣称的“统一 `--l*-hess-step` / `--l*-sccacc` 规范名”**；`--lopt-*` 三个（`max-steps`/`sccacc`/`restart`）与 `--lvib-restart` **根本不存在**。§9.2 的强制表里为这些旗标列的 4 行（`--lopt-max-steps`、`--l*-hess-step`、`--lopt/lscan-sccacc`、`--lopt/lvib-restart`）与它们点名的测试（`xtb/landscape-opt-max-steps` 等）**全部不存在**（实测：只有 `xtb/landscape-scan-max-steps` 这个 M2 遗留 test）⇒ 这 4 行标注为**未实现**；(b) §6.4 的 `--cycles` 行写“§9.1 阶段 2”与 §9.1 把 `--cycles` 写在阶段 3 **自相矛盾** ⇒ 统一为 **阶段 3** | 复核 27 M2；本轮 `grep -c -- "--<flag>'" src/prog/main.F90` 逐条实测（本行括注值） | §6.3、§6.4、§7.2、§9.1、§9.2、`28-stage2-fix-report.md §T4` |
 | **R41** | **阶段 2 修复轮登记（复核 27 的 M1/L1..L5/INFO-1 处置，`28-stage2-fix-report.md`）**：(a) M1 → 新增 `xtb/landscape-method-table`（**全部 18 个套件名 + 4 个 `auto` 运行**，逐名断言里程碑 + `<ns>.xtbts.log`/`<ns>.irc.log` 的方法行；一次相反的“名字表整体错位”突变同时打红 18 行 + 3 行 scan 回显）；(b) L1 → 4 个被改写的旧旗标补 BC-4 基线（10 次运行，全部输出文件 raw `cmp` 逐位同）；(c) L2 → `--lscan` 的**生效内层最小化器**回显（仅 relaxed；rigid 无内层器）+ “两个内层器必须改变 `xtbscan.log`”断言；(d) L3 → climbing 副作用从共享 setter 移到解析尾（对**最终值**只施加一次），`--lts-method cineb --lts-method neb` 与 `--method cineb --method neb` 等价；(e) L4 → **U15 落地**（`set_module.f90` 的 `.not.allocated` **else 分支**打 `[WARNING]`，即 R34 指定的实现点）；(f) L5 → `main.F90` 的别名表注释订正（`lancopt` 是**新增**拼写，不是 xcontrol 键；`set_module.f90:1889` 的旧引证作废）；(g) INFO-1 → 登记 `landscape_native_engine` 的**可测/不可测边界**（§9.2、§4.7.1）。(c)(d)(e) 各有反向突变证据；5 处刻意行为变更已在正文逐条登记 | 复核 27；`28-stage2-fix-report.md`（T3/T5/T8/T9/T10） | §4.7.1、§6.3、§6.4、§9.1、§9.2、`25-stage2-impl.md §1` |
+| **R42** | **上游 `relaxation_engine` 内在赋值缺陷修复（独立 bug 修复，`30-upstream-relaxation-fix.md`）**：`src/relaxation_engine.f90` 的 L-ANCopt 引擎用**内在派生类型赋值**拷贝几何（`:615 molopt = mol` / `:779 mol = molopt`），gfortran 12.2.0 会破坏 `TMolecule%sym(2:)`（`character(len=:), allocatable` 的 stride 缺陷，AGENTS.md §6 第 5 条；`rf`/FIRE 引擎本来就写 `call molopt%copy(mol)`/`call mol%copy(molopt)`）⇒ 本机构建下原生 `--opt` 走 L-BFGS（`$opt engine=lbfgs`，或 >500 原子的默认引擎）时 `xtbopt.xyz`/`xtbopt.log`/`xtbtopo.mol` 与 stdout 的 `final structure:`/性质表**写垃圾字节**（NUL/随机字节），数值全对。**修法 = 2 行**改成显式 `%copy`（与 `rf` 路径同写法、同签名 `copyMolecule(self,mol0)`）；**数值逐位不变**（`xtbopt.xyz` 12 / `xtbopt.log` 60 / `xtbtopo.mol` 10 / 归一化 stdout 389 个数值 token 序列完全相同），只有符号列由垃圾 → 正确。**计数口径：不属于 18 条 CLI 破坏性变更**（§10 汇总行 A3+B0+C8+D1+E1+F4+G1=**18** 不动），它是**独立的上游 bug 修复**；新增可证伪回归 `xtb/native-opt-lbfgs-symbols`（字节级：严格 UTF-8 + 控制字节扫描 + 符号列与输入比对；注入还原两行 ⇒ 红，还原 ⇒ 绿） | 父会话与阶段 2 修复轮定位；`30-upstream-relaxation-fix.md`（diff / 注入证据 / BC-4 逐文件 `cmp` / 数值不变证明） | §10 汇总行、`30-upstream-relaxation-fix.md`、AGENTS.md §6 第 5 条 |
 
 > **复核编号与计数的不一致（本轮记录）**：复核声明 HIGH 5 / MEDIUM 8 / LOW 7 / INFO 4，但正文只显式编号了
 > H1/H2/H3/H5、M1/M2/M4/M5/M6/M7/M8、LOW-1..LOW-7、2 条 INFO。**§14 按内容补足到与计数一致**，
@@ -89,7 +90,7 @@
 | 套件参数总量 | **122 个拼写**（121 个 case 标签），0 个未文档化（W0 审计已核） |
 | 统一选择器 | `--method <name>`，取值域 = 6 最小化 + 8 鞍点 + 4 IRC（逐条 `file:line`，§4.1） |
 | `--opt` 语义 | **方案 C**：默认套件优化器（实测依据 → lbfgs，§3.3）；`--method ancopt` 是出口；**明确列入破坏性变更** |
-| 破坏性变更 | **C 下逐条核实**：原为 6 类，**R1/R4 修订后 = A 类 3 条 + B 类 0 条（清零）+ C 类 6 条 + D 类 1 条 + E 类 1 条 + F 类 3 条**，另加"阶段 3 测试层后果"1 条（`xtb/landscape-scan-xcontrol`），见 §10。**不是 1 条**。**R23（第 2 轮复核）后 = A 3 + B 0 + C 7 + D 1 + E 1 + F 3 + G 1 = 16 条**；**R36（阶段 1 实施）后 = A 3 + B 0 + C 7 + D 1 + E 1 + F 4 + G 1 = 17 条**；**R38（阶段 1 收尾）后 = A 3 + B 0 + C 8 + D 1 + E 1 + F 4 + G 1 = 18 条**（权威口径见 §10 汇总行） |
+| 破坏性变更 | **C 下逐条核实**：原为 6 类，**R1/R4 修订后 = A 类 3 条 + B 类 0 条（清零）+ C 类 6 条 + D 类 1 条 + E 类 1 条 + F 类 3 条**，另加"阶段 3 测试层后果"1 条（`xtb/landscape-scan-xcontrol`），见 §10。**不是 1 条**。**R23（第 2 轮复核）后 = A 3 + B 0 + C 7 + D 1 + E 1 + F 3 + G 1 = 16 条**；**R36（阶段 1 实施）后 = A 3 + B 0 + C 7 + D 1 + E 1 + F 4 + G 1 = 17 条**；**R38（阶段 1 收尾）后 = A 3 + B 0 + C 8 + D 1 + E 1 + F 4 + G 1 = 18 条**（权威口径见 §10 汇总行）。**R42 不改变这个计数**：那是上游 `relaxation_engine.f90` 内在赋值缺陷的**独立 bug 修复**（原生 L-BFGS 路径的输出字节垃圾 → 正确，数值不变），不是 CLI 破坏性变更 |
 | 原生引擎出口（R21/R22） | `--method ancopt\|rf\|lancopt\|l-ancopt\|fire\|inertial\|pbc_lbfgs` = 4 个**原生**出口，仅在 `--opt`/`--ohess` 下合法；由**单一** `landscape_native_engine` 标志（取值 = `p_engine_rf/lbfgs/inertial/pbc_lbfgs`）驱动，谓词与三条守卫全读它，见 §3.11/§4.7/§4.8 |
 | 原生专属情形（R1） | **三类**（`$scan`、周期体系、xcontrol `$opt` 键）改派后**响亮报错**（`env%error`，exit 1），文本指向 `--method ancopt` / `--lscan`；逐条给检测点，见 §3.8 |
 | 遗留文件契约（R4） | 套件**按上游语义补写全部 4 个**：`.xtboptok`（仅收敛时）/ `xtbopt.log`（非隐藏名）/ `xtblast.xyz`（失败时）/ `compliance.dat` ⇒ **B 类清零**，见 §3.9 |
@@ -2405,6 +2406,20 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 > 超出 F2 登记的"只有未知旗标变响亮"范围。解析尾方案的实测行为：
 > `--strict --zzzz` 与 `--zzzz --strict` 都 exit 1（**与位置无关**），`--zzzz` 单独仍 exit 0（BC-1）。
 
+> **R42（上游 `relaxation_engine` 内在赋值缺陷修复，`30-upstream-relaxation-fix.md`）**：
+> `src/relaxation_engine.f90` 的 L-ANCopt 引擎用**内在派生类型赋值**拷贝几何（`:615 molopt = mol` /
+> `:779 mol = molopt`），而 gfortran 12.2.0 会破坏含 `character(len=:), allocatable :: sym(:)` 的
+> `TMolecule` 的 `sym(2:)`（AGENTS.md §6 第 5 条的同一缺陷，本项目在 `landscape/types/log.f90` 已绕过）。
+> 用本机编译器构建时，**原生 `--opt` 的 L-BFGS 路径**（`$opt engine=lbfgs`，或 >500 原子的默认引擎）
+> 会把垃圾字节写进 `xtbopt.xyz` / `xtbopt.log` / `xtbtopo.mol` 的符号列与 stdout 的 `final structure:` /
+> 键表，**数值全对**；`rf`/FIRE 路径本来就写 `call molopt%copy(mol)`，所以干净。
+> 修法 = **2 行**改成显式 `%copy`（与 `rf` 路径同写法）。
+> **计数口径**：这是**独立的上游 bug 修复**，**不属于** 18 条 CLI 破坏性变更，本节汇总仍为
+> **A 3 + B 0 + C 8 + D 1 + E 1 + F 4 + G 1 = 18**。
+> 它确实**改变原生输出字节**（垃圾 → 正确，是修正），所以已在 BC-4 里单列为“有意改变”的一行：
+> 10 个用例中 9 个逐文件 `cmp` 全同，只有 `optlbfgs` 的 3 个文件 + stdout 符号列变，
+> 且数值 token 序列**完全相同**。
+
 ---
 
 ## 11. 不建议做的改动（及理由）
@@ -2859,6 +2874,14 @@ grep -rn "两个逻辑标志" docs/_simplify-recon/11-cli-redesign.md docs/_simp
 > 5) R29 的 `:1310-1320`/计时标签；6) R34 的 U15 warning。前两步是所有后续步骤的判据来源。
 
 ---
+
+> **【R42 登记】阶段 3 的测试同步清单（与 R39/R40 同类）**
+> 阶段 3 落地 C7 / §3.8(c)（套件 runtype + `$opt` 块 → 响亮错误）时，**必须同步**：
+> 1. `test/unit/landscape_cli_check.py` 的 `check_scanblock` **492-503 段**：从「断言 `--opt` 执行 `$scan`」
+>    改为「断言 `--opt` + `$scan` 响亮报错 + 指向 `--method ancopt` / `--lscan`」，**保留前半段**；
+> 2. `check_native_opt_symbols`（R42 的上游缺陷回归测试）：其调用 `--opt --input <$opt engine=lbfgs>`
+>    在 C7 下会变成错误 ⇒ 改为阶段 3 的合法路径（原生 L-BFGS = `--opt --method lancopt`），
+>    **断言保持三重**（严格解码 + 控制字节扫描 + 符号列逐原子比对）。
 
 ## 17. 【R35 新增】阶段 1 工作清单（下轮可直接执行）
 

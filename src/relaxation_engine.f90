@@ -612,7 +612,9 @@ subroutine l_ancopt &
 
    estart = energy
    thiscycle = opt%micro_cycle
-   molopt = mol
+   ! explicit copy: intrinsic assignment of a TMolecule corrupts sym(2:) with
+   ! gfortran (stride bug, see AGENTS.md section 6)
+   call molopt%copy(mol)
 
    if (.not.pr.and.minpr) write(env%unit,'(a6,a14,a16,a16,a15,a6)') &
       &          "cycle", "energy", "change", "gnorm", "step", "conv?"
@@ -775,8 +777,8 @@ subroutine l_ancopt &
       endif
    endif
 
-   ! save optimized geometry
-   mol = molopt
+   ! save optimized geometry (explicit copy, see the note above)
+   call mol%copy(molopt)
 
    if (present(iter_needed)) then
       iter_needed = iter

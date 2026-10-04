@@ -53,6 +53,8 @@ mode mirrors one CMake test one-to-one:
                                      -> xtb/landscape-method-native,
                                          xtb/landscape-method-ohess,
                                          xtb/landscape-method-opt-reject
+  nativeoptsym <exe> <input> <rundir>
+                                     -> xtb/native-opt-lbfgs-symbols
   methodtable <exe> <input> <rundir> <hcn> <nh3> <nh3product>
                                      -> xtb/landscape-method-table (all 18
                                          suite names and the four `auto` runs)
@@ -2457,6 +2459,91 @@ def check_method_native(exe, inp, rundir, big):
                  % label, output)
 
 
+def check_native_opt_symbols(exe, inp, rundir):
+    """The native `--opt` L-BFGS path must write the element symbols intact.
+
+    Mirrors `xtb/native-opt-lbfgs-symbols`.  The L-ANCopt engine used to copy
+    the geometry with an intrinsic `TMolecule` assignment
+    (`src/relaxation_engine.f90:615` and `:779`); gfortran 12.2.0 corrupts
+    `sym(2:)` of a `character(len=:), allocatable :: sym(:)` component under
+    intrinsic assignment while every length stays correct (stride bug,
+    AGENTS.md section 6.5 - the suite's own `src/landscape/types/log.f90`
+    already works around it).  Measured consequence: with `$opt engine=lbfgs`
+    the symbol column of `xtbopt.xyz` **and** of the `final structure:` block
+    of stdout came out as NUL bytes, while the numbers were correct.  The `rf`
+    engine was never affected, which is why `--opt` (default engine `rf` for
+    a small system) looked healthy in the BC-4 fixtures.
+
+    The assertion is on the **bytes**, not on the text: a NUL byte is a valid
+    UTF-8 code point (U+0000), so a strict `decode("utf-8")` alone stays green
+    on the corrupted output - and so does the tolerant `errors='replace'`
+    decoding that stage 2 introduced for the unrelated Fortran record markers
+    of the 501 atom fixture (fix report T2).  Therefore the check scans both
+    streams for control bytes and compares the symbol column of the xyz file
+    with the input geometry as well.
+    """
+    workdir = os.path.join(rundir, "native-opt-lbfgs")
+    shutil.rmtree(workdir, ignore_errors=True)
+    os.makedirs(workdir)
+
+    control = os.path.join(workdir, "engine.ctl")
+    with open(control, "w") as handle:
+        handle.write("$opt\n   engine=lbfgs\n$end\n")
+
+    proc = subprocess.run(
+        [exe, inp, "--gfn", "2", "--opt", "normal", "--input", control,
+         "--norestart"],
+        cwd=workdir, capture_output=True, text=False,
+    )
+    if proc.returncode != 0:
+        fail("the native L-BFGS `--opt` exited %d" % proc.returncode,
+             decode(proc.stdout) + decode(proc.stderr))
+    output = decode(proc.stdout) + decode(proc.stderr)
+    if "L-ANC optimizer" not in output:
+        fail("the L-BFGS run did not reach the L-ANCopt engine", output)
+
+    # the input fixture is the reference for the atom count and the symbols
+    with open(inp, "rb") as handle:
+        reference = handle.read().decode("utf-8").splitlines()
+    natoms = int(reference[0].split()[0])
+    expected = [line.split()[0] for line in reference[2:2 + natoms]]
+
+    with open(os.path.join(workdir, "xtbopt.xyz"), "rb") as handle:
+        raw_xyz = handle.read()
+    raw_stdout = proc.stdout + proc.stderr
+
+    for label, raw in (("stdout", raw_stdout), ("xtbopt.xyz", raw_xyz)):
+        try:
+            raw.decode("utf-8")
+        except UnicodeDecodeError as error:
+            fail("%s is not valid UTF-8: %s" % (label, error))
+        for offset, byte in enumerate(raw):
+            if byte < 0x20 and byte not in (0x09, 0x0a, 0x0d):
+                fail("%s carries the control byte 0x%02x at offset %d"
+                     % (label, byte, offset))
+
+    # the symbol column of the written geometry
+    xyz = raw_xyz.decode("utf-8").splitlines()
+    if int(xyz[0].split()[0]) != natoms:
+        fail("xtbopt.xyz reports %s atoms instead of %d"
+             % (xyz[0].split()[0], natoms))
+    written = [line.split()[0] for line in xyz[2:2 + natoms]]
+    if written != expected:
+        fail("xtbopt.xyz carries the symbols %r instead of %r"
+             % (written, expected))
+
+    # the same symbols in the `final structure:` block of stdout
+    block = re.search(r"final structure:\s*\n=+\n\d+\n[^\n]*\n"
+                      r"((?:\S+\s+[-0-9.]+\s+[-0-9.]+\s+[-0-9.]+\n)+)",
+                      decode(raw_stdout))
+    if not block:
+        fail("the `final structure:` block is missing from stdout", output)
+    printed = [line.split()[0] for line in block.group(1).splitlines()]
+    if printed != expected:
+        fail("the `final structure:` block carries the symbols %r instead "
+             "of %r" % (printed, expected))
+
+
 def check_method_table(exe, inp, rundir, hcn, nh3, nh3product):
     """Every suite method name of `--method` has to reach its task (M1).
 
@@ -2955,6 +3042,8 @@ def main():
         if len(rest) < 3:
             fail("the methodtable mode needs the HCN, NH3 and NH3 product fixtures")
         check_method_table(exe, inp, rundir, rest[0], rest[1], rest[2])
+    elif mode == "nativeoptsym":
+        check_native_opt_symbols(exe, inp, rundir)
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")
