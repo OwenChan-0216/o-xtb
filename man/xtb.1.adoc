@@ -352,10 +352,14 @@ SUITE OPTIONS
 
 The landscape task suite (`src/landscape`) is selected by one of the run
 types `--lopt`, `--lscan`, `--lts`, `--lirc` or `--lvib` (see RUNTYPS
-above); the sub-options below configure the selected task. The common
-`--ljson` switch is listed with the run types. Unless noted otherwise an
-option is read only by the landscape run types and is ignored by the native
-xtb run types, which do not know it.
+above), and by the redeployed `--opt` and `--ohess`; the sub-options below
+configure the selected task and the common `--ljson` switch is listed with
+the run types. Every sub-option selects a landscape run type itself, so
+combining one with a native run type is a **run type conflict** and aborts
+during argument parsing (`xtb mol.xyz --sp --lscan-fc 0.05` fails with a run type
+conflict naming `--scc` and `--lscan-fc`); the native run types do not ignore
+these options, they never get that far. `--opt` and `--ohess` take the suite's
+`--method`, `--cycles`, `--acc` and `--ljson` but not the per-task sub-options.
 
 The suite keeps every quantity in atomic units internally and converts at
 the input boundary. Unless an option says otherwise a length is in bohr, an
@@ -463,8 +467,13 @@ SCAN OPTIONS (--lscan)
 
 *--lscan-restart* 'MODE'::
     wavefunction policy of the engine at every scan point, `off` (default), `pin`
-    or `warm`. `warm` reuses only the geometry of the previous point, never its
-    wavefunction.
+    or `warm`. `off` and `pin` reset the incoming wavefunction from the stored
+    reference, `warm` **keeps** it, so `warm` carries the SCF history of the
+    previous point into the next one (measured: reusing the wavefunction moves
+    the gradient by about 4e-7 hartree/bohr, which is why the suite keeps the
+    policy uniform inside one evaluation sequence). The geometry warm start is a
+    separate mechanism, `warm_start`, which is on by default and reuses the
+    previous point's geometry.
 
 *--lscan-oneway*::
     scan the forward branch only; no reverse branch and no hysteresis report.
@@ -964,6 +973,18 @@ home directory is suffient but might lead to come cluttering.
 Since the `XTBHOME` variable is deprecated with version 6.0 and newer
 `xtb(1)` will issue a warning if `XTBHOME` is not part of the `XTBPATH`
 since the `XTBHOME` variable is not used in production runs.
+
+`OMP_NUM_THREADS` sets the number of OpenMP threads. A threaded BLAS is the
+largest performance trap on multi core machines: the OpenMP threads and the BLAS
+thread pool multiply, and an idle pool spins between calls. Measured on a 24 atom
+GFN2 single point at eight threads: 0.69 s with the pool at eight threads,
+0.019 s with the pool at one and 0.019 s with a single OpenMP thread, so the pool
+and not the thread count was the problem. On a machine whose pthread OpenBLAS
+build sizes its pool from `OMP_NUM_THREADS`, set `OPENBLAS_NUM_THREADS=1`. For
+very large systems (about 500 atoms upwards), where the serial matrix work
+dominates, `OMP_WAIT_POLICY=PASSIVE` with the pool left at the thread count
+measured slightly better. `MKL_NUM_THREADS` is ignored by a build linked against
+OpenBLAS and `OPENBLAS_DEFAULT_NUM_THREADS` measured a no-op.
 
 LOCAL FILES
 -----------

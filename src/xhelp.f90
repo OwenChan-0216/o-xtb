@@ -1001,12 +1001,27 @@ subroutine help(iunit)
    "-h, --help",&
    "    show help page",&
    "",&
-   "Useful Maschine Settings:",&
+   "Useful Maschine Settings: ",&
    "",&
-   "export MKL_NUM_THREADS=<NCORE>",&
    "export OMP_NUM_THREADS=<NCORE>,1",&
    "export OMP_STACKSIZE=4G",&
    "ulimit -s unlimited",&
+   "",&
+   "A threaded BLAS is the largest performance trap on multi core machines: the",&
+   "OpenMP threads and the BLAS thread pool multiply, and an idle pool spins",&
+   "between the calls.  Measured here on a 24 atom GFN2 single point at eight",&
+   "threads: 0.69 s with the pool at eight, 0.019 s with the pool at one, and",&
+   "0.019 s with a single OpenMP thread - the pool, not the thread count, was",&
+   "the problem.  On a machine whose pthread OpenBLAS build sizes its pool from",&
+   "OMP_NUM_THREADS, the setting to use is",&
+   "",&
+   "export OPENBLAS_NUM_THREADS=1",&
+   "",&
+   "For very large systems (about 500 atoms upwards), where the serial matrix",&
+   "work dominates, OMP_WAIT_POLICY=PASSIVE with the pool left at <NCORE>",&
+   "measured slightly better.  MKL_NUM_THREADS and OPENBLAS_DEFAULT_NUM_THREADS",&
+   "do not help: the first is ignored by a build linked against OpenBLAS, the",&
+   "second measured a no-op here.",&
    "",&
    "Output Conventions:",&
    "",&
