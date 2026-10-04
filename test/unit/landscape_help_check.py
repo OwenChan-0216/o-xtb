@@ -9,9 +9,16 @@ and 17.4) splits the command line spellings into two sets:
   set N  every other spelling (the native xtb command line)
 
 The **gate** of stage 1 is that set S is documented: ``S(main) == S(help)``,
-i.e. the difference is empty.  Set N is only **printed**: the audit registered
-30 implemented but undocumented and 4 documented but unimplemented native
-spellings, and closing that list is stage 4 (section 8.6).
+i.e. the difference is empty.  Set N was only **printed** in stage 1: the audit
+registered 30 implemented but undocumented and 4 documented but unimplemented
+native spellings, and closing that list was stage 4 (section 8.6).  Stage 4
+closed it - in **dialect A** both N differences are 0 - and this check now
+**gates** them (a non-zero dialect A N difference fails).  Set S alone cannot
+catch a *wrong* description either: stage 3b redeployed ``--opt``/``--ohess`` to
+the suite while ``--help`` still described the native block, and the S gate
+stayed green (HIGH-2 of ``52-stage3b-review.md``).  Dialect B keeps its inherent
+4/2 residual (the two merged ``--[no]x`` spellings, see ``main``) and stays
+print only.
 
 Two extraction rules are implemented here.  Both are written down in the code
 below and printed with the run, because the numbers of set N depend on the
@@ -29,7 +36,9 @@ Usage:
 
     landscape_help_check.py <src/prog/main.F90> <src/xhelp.f90> [rundir]
 
-The exit status is non-zero when the two sets S differ.
+The exit status is non-zero when a **gated** difference is non-empty: set S in
+either dialect, or a dialect A N difference.  Dialect B's N counts stay
+diagnostic.
 """
 
 import re
@@ -116,7 +125,7 @@ def suite_flags(flags):
 
 
 def report(name, main_source, help_source, expand_no):
-    """Print the counts of one dialect and return the set S difference."""
+    """Print the counts of one dialect and return the three differences."""
     main = implemented_flags(main_source)
     help_ = documented_flags(help_source, expand_no)
     s_main = suite_flags(main)
@@ -151,7 +160,7 @@ def report(name, main_source, help_source, expand_no):
             name, " ".join(documented_unimplemented) or "(none)"
         )
     )
-    return s_difference
+    return s_difference, implemented_undocumented, documented_unimplemented
 
 
 def main():
@@ -168,11 +177,38 @@ def main():
     print("  help = " + sys.argv[2])
     describe_rules()
 
+    # The gate of dialect A is now the **whole** documented/implemented
+    # relation, not only set S.  Set S (`--l*` and `--method`) says that every
+    # suite spelling has a help entry; it says nothing about the *native*
+    # spellings, and that hole was used by real defects: stage 3b deployed
+    # `--opt`/`--ohess` to the suite while the help still described the old
+    # native block, and the S gate stayed green (HIGH-2 of
+    # `52-stage3b-review.md`).  Dialect A is the rule of the audit
+    # (`docs/_simplify-recon/02-cli-audit.md` section 2.1) and it reached
+    # N = 0/0 in stage 4, so both of its differences are hard gates: an
+    # implemented but undocumented flag, and a documented but unimplemented
+    # one, fail the check.
+    #
+    # Dialect B stays **print only**.  Its numbers are an artefact of the
+    # extraction rule and not a defect of the parser: without the `--[no]x`
+    # expansion it sees the two merged help spellings `--[no]copy` and
+    # `--[no]restart` as "documented but unimplemented" while the four real
+    # `case` labels `--copy`, `--nocopy`, `--restart`, `--norestart` stay
+    # "implemented but undocumented", which is the registered, inherent 4/2
+    # residual of that dialect.  Gating it would demand help entries for
+    # spellings that are merged on purpose.
     failed = []
     for name, expand_no in (("A", True), ("B", False)):
-        difference = report(name, main_source, help_source, expand_no)
-        if difference:
-            failed.append((name, difference))
+        s_difference, implemented_undocumented, documented_unimplemented = report(
+            name, main_source, help_source, expand_no
+        )
+        if s_difference:
+            failed.append((name, s_difference))
+        if name == "A":
+            if implemented_undocumented:
+                failed.append((name, implemented_undocumented))
+            if documented_unimplemented:
+                failed.append((name, documented_unimplemented))
 
     if failed:
         for name, difference in failed:
@@ -183,6 +219,7 @@ def main():
             )
         return 1
     print("PASS: set S is documented by `--help` in both dialects")
+    print("PASS: dialect A has no implemented/undocumented difference")
     return 0
 
 

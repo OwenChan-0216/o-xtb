@@ -454,6 +454,12 @@ test('landscape strict unknown', python, env: xtbenv, args: [
   landscape_cli_dir / 'landscape-cli-strict',
 ])
 
+# `--color` consumes its own argument (mirrors `xtb/landscape-color`)
+test('landscape color', python, env: xtbenv, args: [
+  landscape_cli_check, 'color', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-color',
+])
+
 # The suite enumeration names are matched case insensitively (mirrors
 # `xtb/landscape-enum-case`); the byte comparison of the result files needs a
 # fixed thread count (AGENTS.md section 6.1)

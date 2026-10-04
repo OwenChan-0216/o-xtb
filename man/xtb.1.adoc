@@ -200,6 +200,19 @@ OPTIONS
 *--cycles* 'INT'::
     maximum number of optimization cycles
 
+*--method* 'NAME'::
+    select the method of the current landscape run type; the value domain is
+    filtered by the run type and an unknown or mismatched name aborts the run.
+    `--lopt` and `--lscan` accept the minimisers sd, cg, lbfgs, bfgs, diis, rfo;
+    `--lts` accepts the saddle searches prfo, bprfo, dimer, neb, cineb, autoneb,
+    string, gsm; `--lirc` accepts the integrators gs, hpc, lqa, eulerpc; `auto`
+    keeps the default of the task.  With `-o, --opt` and `--ohess` the native
+    engines ancopt (alias rf), lancopt (alias l-ancopt), fire (alias inertial)
+    and pbc_lbfgs are accepted, and a landscape minimiser selects the suite
+    that the redeployed `--opt` runs.  `--method` is the canonical name of
+    `--lopt-engine`, `--lscan-method`, `--lts-method` and `--lirc-method`.
+    The name is not case-sensitive.
+
 RUNTYPS
 ~~~~~~~
 NOTE: You can only select *one* runtyp, only the first runtyp will be used
@@ -241,6 +254,39 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     levels from crude, sloppy, loose, normal (default), tight, verytight
     to extreme can be chosen
 
+*--lopt*::
+    minimise the geometry with the landscape task suite (`src/landscape`); the
+    algorithm is selected with `--method` (alias `--lopt-engine`) and the
+    thresholds with `--lopt-level`
+
+*--lscan*::
+    scan an internal coordinate (distance, angle or dihedral) with the
+    landscape task suite; the result is written to `xtbscan.log` with the
+    de-biased energy of every frame
+
+*--lts*::
+    transition state search with the landscape task suite; the method is
+    selected with `--method` (alias `--lts-method`), one of prfo (default),
+    bprfo, dimer, neb, cineb, autoneb or string (alias gsm).  Writes `xtbts.xyz`
+    and `xtbts.log` and confirms the imaginary mode count
+
+*--lirc*::
+    intrinsic reaction coordinate with the landscape task suite; the input
+    geometry is the transition state and must have exactly one imaginary mode.
+    The integrator is selected with `--method` (alias `--lirc-method`), one of
+    hpc (default), lqa, eulerpc or gs.  Writes `irc_forward.xyz`,
+    `irc_backward.xyz`, `irc_path.xyz` and `irc.log`
+
+*--lvib*::
+    harmonic frequencies, normal modes and thermochemistry with the landscape
+    task suite; writes `vibspectrum`, `vib_normal_modes`, `g98.out` and
+    `hessian` with the names and formats of `--hess`
+
+*--ljson*::
+    write the structured result `landscape_<task>.json` (status, counters and
+    convergence history) for every landscape task; the switch needs one of
+    `--lopt`, `--lscan`, `--lts`, `--lirc`, `--lvib`, `--opt` or `--ohess`
+
 *--hess*::
     perform a numerical hessian calculation on input geometry
     
@@ -266,10 +312,6 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
 *--imagmax* 'REAL'::
     deepest imaginary frequency (cm⁻¹) considered in the O1NumHess
     imaginary frequency repair (default 200).
-
-*--ithr* 'REAL'::
-    imaginary frequencies between this cutoff (cm⁻¹) and zero are treated
-    as vibrations in the RRHO calculation (default 20).
 
 *--md*::
     molecular dynamics simulation on start geometry
@@ -334,9 +376,6 @@ GENERAL
 
 *-v, --verbose*::
      be more verbose (not supported in every unit)
-
-*-s, --silent*::
-     clutter the screen less (not supported in every unit)
 
 *--ceasefiles*::
      reduce the amount of output and files written (e.g. xtbtopo.mol)

@@ -19,6 +19,7 @@ mode mirrors one CMake test one-to-one:
   enumcase <exe> <input> <rundir> <second>
                                      -> xtb/landscape-enum-case
   strictunknown <exe> <input> <rundir> -> xtb/landscape-strict-unknown
+  color  <exe> <input> <rundir>       -> xtb/landscape-color
   echo <exe> <input> <rundir> <case>
                                      -> xtb/landscape-fc-echo,
                                          xtb/landscape-lopt-engine-echo,
@@ -634,6 +635,46 @@ def check_strict_unknown(exe, inp, rundir):
         fail("an unknown flag without --strict failed the run", output)
     if "Unknown option '--zzzz' provided" not in output:
         fail("the unknown flag warning disappeared", output)
+
+
+def check_color(exe, inp, rundir):
+    """`--color` consumes its own argument (CLI redesign stage 4).
+
+    Mirrors `xtb/landscape-color`.  The `case ('--color')` branch of the
+    argument parser read `sec` without ever calling `args%nextArg(sec)`, so
+    `sec` held whatever the *previous* flag had left there: `--sp --color
+    never` aborted with "No color scheme provided for --color option" (the
+    variable was never allocated), while `--charge 1 --color never` warned
+    "Unknown color option '1'" and left the scheme unchanged.  The flag was
+    therefore unusable.  The third run pins the genuine error path: a `--color`
+    without a following argument still has to abort.
+    """
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--sp", "--norestart", "--color", "never"],
+        rundir,
+    )
+    if status != 0:
+        fail("--color never alone failed the run", output)
+    if "No color scheme provided" in output:
+        fail("the bare --color branch did not consume its argument", output)
+    status, output = run(
+        exe,
+        inp,
+        ["--gfn", "2", "--sp", "--charge", "1", "--norestart",
+         "--color", "never"],
+        rundir,
+    )
+    if status != 0:
+        fail("--charge 1 --color never failed the run", output)
+    if "Unknown color option" in output:
+        fail("--color still reads the argument of the previous flag", output)
+    status, output = run(
+        exe, inp, ["--gfn", "2", "--sp", "--norestart", "--color"], rundir
+    )
+    if status == 0:
+        fail("a --color without an argument was accepted", output)
+    if "No color scheme provided" not in output:
+        fail("the missing color scheme was not reported", output)
 
 
 def compare_enum_case(exe, inp, rundir, label, result, pattern, upper, lower):
@@ -4596,6 +4637,8 @@ def main():
         check_enum_case(exe, inp, rundir, rest[0])
     elif mode == "strictunknown":
         check_strict_unknown(exe, inp, rundir)
+    elif mode == "color":
+        check_color(exe, inp, rundir)
     elif mode == "echo":
         if len(rest) < 1:
             fail("the echo mode needs a case name")

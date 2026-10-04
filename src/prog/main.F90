@@ -2076,6 +2076,7 @@ contains
             end if
 
          case ('--color')
+            call args%nextArg(sec)
             if (allocated(sec)) then
                select case (sec)
                case ('auto')

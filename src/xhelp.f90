@@ -112,7 +112,7 @@ subroutine help(iunit)
    "",&
    "Options:",&
    "",&
-   "-c, --chrg INT",&
+   "-c, --chrg, --charge INT",&
    "    specify molecular charge as INT, overrides .CHRG file and xcontrol option",&
    "",&
    "--ceh <grad> [REAL]",&
@@ -127,16 +127,58 @@ subroutine help(iunit)
    "--gfn INT",&
    "    specify parametrisation of GFN-xTB (default = 2)",&
    "",&
+   "--gfn0",&
+   "    use the GFN0-xTB (EHT) Hamiltonian, the same as --gfn 0; a discouraged", &
+   "    spelling, the run prints a warning and asks for --gfn 0",&
+   "",&
+   "--gfn1",&
+   "    use the GFN1-xTB Hamiltonian, the same as --gfn 1; a discouraged", &
+   "    spelling, the run prints a warning and asks for --gfn 1",&
+   "",&
+   "--gfn2",&
+   "    use the GFN2-xTB Hamiltonian (the default), the same as --gfn 2",&
+   "",&
    "--gfnff, --gff",&
    "    specify parametrisation of GFN-FF",&
    "",&
+   "--mcgfnff",&
+   "    use the MC-GFN-FF force field",&
+   "",&
+   "--iff",&
+   "    use the IFF (intermolecular force field) calculator; the fragment", &
+   "    sizes are taken from --nat",&
+   "",&
+   "--nat LIST",&
+   "    number of atoms per fragment of the IFF calculation, comma separated",&
+   "",&
    "--tblite,",&
    "    use tblite library as implementation for xTB, please note that solvation is not yet implemented within tblite",&
+   "",&
+   "--color SCHEME",&
+   "    colour scheme of the tblite output, one of auto (follow the build", &
+   "    feature, default), always or never (tblite builds only)",&
+   "",&
+   "--dipro [REAL]",&
+   "    calculate DIPRO coupling integrals (tblite builds only); the optional", &
+   "    REAL is the coupling threshold (default 0.1)",&
    "",&
    "--ptb,",&
    "    performs single-point calculation with the density tight-binding method PTB.", &
    "    Provides electronic structure and properties, such as, e.g., atomic charges, bond orders, and dipole moments,", & 
    "    but does not provide any energy-related properties, such as, e.g., total energy, nuclear gradients, or vibrational frequencies.", &
+   "",&
+   "--tm",&
+   "    use the external Turbomole program for the energy and the gradient",&
+   "",&
+   "--orca",&
+   "    use the external ORCA program for the energy and the gradient",&
+   "",&
+   "--mopac",&
+   "    use the external MOPAC program for the energy and the gradient",&
+   "",&
+   "--driver [EXECUTABLE]",&
+   "    use an external driver program for the energy and the gradient; the", &
+   "    optional argument names the executable to run (there is no built-in default)", &
    "",&
    "--spinpol,",&
    "    enables spin-polarization for xTB methods (tblite required)",&
@@ -147,6 +189,10 @@ subroutine help(iunit)
    "    'outer' can be 'gfn2', 'gfn1', or 'gfnff'.", &
    "    The inner region is given as a comma separated indices directly in the commandline", &
    "    or in a file with each index on a separate line.", &
+   "",&
+   "--cut",&
+   "    ONIOM: cut the inner region out of the input and stop without a", &
+   "    calculation",&
    "",&
    "--efield REAL,REAL,REAL",&
    "    static electric field in Cartesian coordinates, overrides '.EFIELD' file,",&
@@ -164,11 +210,12 @@ subroutine help(iunit)
    "-a, --acc REAL",&
    "    accuracy for SCC calculation, lower is better (default = 1.0)",&
    "",&
+   "--iterations, --maxiterations INT",&
+   "    maximum number of SCC iterations per single point calculation", &
+   "    (default = 250)",&
+   "",&
    "--vparam FILE",&
    "    Parameter file for vTB calculation",&
-   "",&
-   "--xparam FILE",&
-   "    Parameter file for xTB calculation (not used)",&
    "",&
    "--alpb SOLVENT [STATE]",&
    "    analytical linearized Poisson-Boltzmann (ALPB) model,",&
@@ -242,6 +289,14 @@ subroutine help(iunit)
    "--fod",&
    "    requests FOD calculation",&
    "",&
+   "--coffee",&
+   "    ignore the input geometry and run the built-in caffeine molecule", &
+   "    (a debugging helper)",&
+   "",&
+   "--enso",&
+   "    write the machine readable thermochemistry xtb_enso.json in a", &
+   "    frequency run",&
+   "",&
    "--scc, --sp",&
    "    performs a single point calculation",&
    "",&
@@ -274,6 +329,12 @@ subroutine help(iunit)
    "    verytight, extreme, the spelling vtight and the suite-only superloose; the", &
    "    run echoes the level it uses",&
    "",&
+   "-3, -2, -1, 0, 1, 2, 3",&
+   "    numeric aliases of the level keywords.  For --opt and --ohess they map", &
+   "    onto the landscape levels (-3/-2 superloose, -1 loose, 0 normal, 1 tight,", &
+   "    2/3 vtight); the native run types --bhess, --omd and --metaopt use", &
+   "    their own table (-3 crude, -2 sloppy, 3 extreme)", &
+   "",&
    "--method NAME",&
    "    select the method of the current landscape run type; the value domain is", &
    "    filtered by the run type and an unknown or mismatched name aborts the run.", &
@@ -292,8 +353,9 @@ subroutine help(iunit)
    "    write the structured result landscape_<task>.json (status, counters and", &
    "    the convergence history) for every landscape task; the file is meant for", &
    "    regression comparison and is written independently of the other output", &
-   "    files.  The switch needs a landscape run type (--lopt, --lscan, --lvib,", &
-   "    --lts or --lirc): on its own it writes nothing and a warning says so", &
+   "    files.  The switch needs a landscape run type (--lopt, --lscan, --lts,", &
+   "    --lirc, --lvib, and since stage 3 also --opt and --ohess): on its own it", &
+   "    writes nothing and a warning says so", &
    "    (the sp task has no run type and is reachable through the API only)",&
    "",&
    "--lopt",&
@@ -304,7 +366,8 @@ subroutine help(iunit)
    "",&
    "--lopt-engine NAME",&
    "    minimisation algorithm of the landscape suite, one of sd, cg, lbfgs,", &
-   "    bfgs, diis or rfo (default lbfgs).  The name is not case-sensitive", &
+   "    bfgs, diis or rfo (default lbfgs).  Alias of --method.  The name is", &
+   "    not case-sensitive", &
    "",&
    "--lopt-level LEVEL",&
    "    convergence level of the landscape suite (thresholds, energy tolerance, SCC", &
@@ -370,7 +433,7 @@ subroutine help(iunit)
    "",&
    "--lscan-method NAME",&
    "    inner minimiser of a relaxed scan, one of sd, cg, lbfgs (default), bfgs,", &
-   "    diis or rfo.  The name is not case-sensitive", &
+   "    diis or rfo.  Alias of --method.  The name is not case-sensitive", &
    "",&
    "--lscan-level LEVEL",&
    "    convergence level of the inner minimisation (thresholds, energy tolerance,", &
@@ -431,7 +494,7 @@ subroutine help(iunit)
    "    search method, one of prfo (default), bprfo (restricted step), dimer", &
    "    (first derivatives only, no Hessian), neb, cineb (climbing image NEB),", &
    "    autoneb (incremental path building) or string / gsm (growing string).", &
-   "    The method name is not case-sensitive", &
+   "    Alias of --method.  The method name is not case-sensitive", &
    "",&
    "--lts-trust VALUE",&
    "    initial trust radius of the step in bohr (default 0.37795)", &
@@ -625,7 +688,7 @@ subroutine help(iunit)
    "    propagation, cheapest at 1.00 E/g), eulerpc (Euler predictor-corrector, use a", &
    "    step of 0.20 or less) or gs (Gonzalez-Schlegel sphere relaxation, compatible", &
    "    reference; 16.9-20.3 E/g per point and the largest path deviation).", &
-   "    The method name is not case-sensitive", &
+   "    Alias of --method.  The method name is not case-sensitive", &
    "",&
    "--lirc-step VALUE",&
    "    step length in bohr*amu^1/2 (mass weighted arc length, default 0.10; use 0.05", &
@@ -811,16 +874,15 @@ subroutine help(iunit)
    "    deepest imaginary frequency (cm⁻¹) considered in the O1NumHess",&
    "    imaginary frequency repair (default 200)",&
    "",&
-   "--ithr REAL",&
-   "    imaginary frequencies between this cutoff (cm⁻¹) and zero are treated",&
-   "    as vibrations in the RRHO calculation (default 20)",&
-   "",&
    "--md",&
    "    molecular dynamics simulation on start geometry",&
    "",&
    "--metadyn [int]",&
    "    meta dynamics simulation on start geometry, saving int snapshots of the", &
    "    trajectory to bias the simulation",&
+   "",&
+   "--bias-input, --gesc FILE",&
+   "    file with the RMSD bias of the metadynamics run (--metadyn)",&
    "",&
    "--omd",&
    "    molecular dynamics simulation on ancopt(3) optimized geometry,", &
@@ -837,6 +899,25 @@ subroutine help(iunit)
    "--modef INT",&
    "    modefollowing algorithm. INT specifies the mode that should be used for the", &
    "    modefollowing.",&
+   "",&
+   "--screen",&
+   "    optimisation loop over an ensemble: QMDFF generates it when a file", &
+   "    'solvent' exists, otherwise it is read from the file xtbscreen.xyz",&
+   "",&
+   "--mdopt",&
+   "    re-optimise the structures of the molecular dynamics trajectory xtb.trj", &
+   "    at the current optimisation level; the energies are written to", &
+   "    xtb_ensemble.xyz",&
+   "",&
+   "--siman",&
+   "    conformational search by simulated annealing; the run type is not", &
+   "    registered in this build, so the run aborts",&
+   "",&
+   "--ewin REAL",&
+   "    energy window of the conformational search (default 20.0)",&
+   "",&
+   "--gmd",&
+   "    deprecated; the run aborts with a message",&
    "",&
    "-I, --input FILE",&
    "    use FILE as input source for xcontrol(7) instructions",&
@@ -860,17 +941,29 @@ subroutine help(iunit)
    "--json",&
    "    write xtbout.json file",&
    "",&
+   "--wrtopo LIST",&
+   "    comma separated topology printouts, from etot, gnorm, nb, bpair, alist,", &
+   "    blist, tlist, vtors, vbond, vangl, hbbond, eeq and json (json selects", &
+   "    all of them); a misspelled keyword aborts the run",&
+   "",&
+   "--nocellopt",&
+   "    do not optimise the lattice of a periodic system, the cell is kept", &
+   "    fixed (default: the cell is optimised)",&
+   "",&
    "--citation",&
    "    print citation and terminate",&
    "",&
    "--license",&
    "    print license and terminate",&
    "",&
+   "--version",&
+   "    print the version banner and terminate",&
+   "",&
    "-v, --verbose",&
    "    be more verbose (not supported in every unit)",&
    "",&
-   "-s, --silent",&
-   "    clutter the screen less (not supported in every unit)",&
+   "-V, --very-verbose",&
+   "    be very verbose (this also enables the verbose output)",&
    "",&
    "--ceasefiles",&
    "    reduce the amount of output and files written",&

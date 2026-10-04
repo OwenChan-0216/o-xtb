@@ -710,6 +710,66 @@ add_test("xtb/landscape-strict-unknown"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-strict
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_strict.cmake")
 
+# Landscape suite: `--color` has to consume its own argument (CLI redesign
+# stage 4).  The `case ('--color')` branch of the argument parser read `sec`
+# without ever calling `args%nextArg(sec)`, so it saw whatever the previous
+# flag had left in the variable: `--sp --color never` aborted with "No color
+# scheme provided for --color option", and `--charge 1 --color never` warned
+# "Unknown color option '1'".  The flag was unusable.  The third run pins the
+# genuine error path, which the fix must not remove.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_color.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+separate_arguments(bare_args UNIX_COMMAND "--gfn 2 --sp --color never")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --norestart ${bare_args}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "--color never alone failed the run\n${output}")
+endif()
+if(output MATCHES "No color scheme provided")
+  message(FATAL_ERROR "the bare --color branch did not consume its argument\n${output}")
+endif()
+separate_arguments(stale_args UNIX_COMMAND
+  "--gfn 2 --sp --charge 1 --color never")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --norestart ${stale_args}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "--charge 1 --color never failed the run\n${output}")
+endif()
+if(output MATCHES "Unknown color option")
+  message(FATAL_ERROR "--color still reads the argument of the previous flag\n${output}")
+endif()
+separate_arguments(missing_args UNIX_COMMAND "--gfn 2 --sp --color")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --norestart ${missing_args}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(status EQUAL 0)
+  message(FATAL_ERROR "a --color without an argument was accepted\n${output}")
+endif()
+if(NOT output MATCHES "No color scheme provided")
+  message(FATAL_ERROR "the missing color scheme was not reported\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-color"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-color
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_color.cmake")
+
 # Landscape suite: the enumeration names are matched case insensitively (CLI
 # redesign sections 7.5 and 17.5 5b).  Every case runs the same task twice,
 # once with upper case enumeration values and once with lower case ones, and
@@ -3514,11 +3574,12 @@ add_test("xtb/landscape-lvib-restart-warm"
 # `--help` and the parser must agree in **both** directions (CLI redesign
 # sections 8.4, 8.6 and 17.4).  `landscape_help_check.py` extracts the two
 # spelling sets from the sources with the rules the script prints itself, and
-# gates on set S (the suite spellings, `--l*` plus `--method`): its difference
-# has to be empty.  The native set N is only printed with both extraction
-# dialects; the audit registered 30 implemented but undocumented and 4
-# documented but unimplemented native spellings (section 8.6) and closing that
-# list is stage 4.
+# gates set S (the suite spellings, `--l*` plus `--method`) **and** the dialect
+# A differences of the native set N: the audit registered 30 implemented but
+# undocumented and 4 documented but unimplemented native spellings (section
+# 8.6), stage 4 closed both lists to 0, and the script now fails when either
+# stops being empty.  The S gate alone cannot catch a wrong description (stage
+# 3b HIGH-2).  Dialect B keeps its inherent 4/2 residual and is only printed.
 #
 # The test reads the sources, not the built binary, so it has no environment
 # and no engine dependency.
@@ -3908,6 +3969,7 @@ set_tests_properties(
   "xtb/landscape-lirc-default-echo"
   "xtb/landscape-lts-escape-echo"
   "xtb/landscape-strict-unknown"
+  "xtb/landscape-color"
   "xtb/native-opt-lbfgs-symbols"
   "xtb/landscape-opt-alias-once"
   "xtb/landscape-opt-native-exit"
