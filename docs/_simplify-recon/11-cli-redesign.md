@@ -68,9 +68,17 @@
 | **R28** | **LOW/INFO 逐条处置**（进 §14.7）：L-1（§5.1 #21 措辞→error）、L-2（6 处行号）、L-3（补 `optimizer.f90:801` 的逐帧写点）、L-6（G15 单列）、I-2（编号重建规则）；**另发现并修正** §4.1/§4.8 的两处**文件误归属**（`l_ancopt`/`fire` 实在 `relaxation_engine.f90:400/131`，旧稿写 `optimizer.f90`） | 复核 14 §4/§5；本轮 `grep -n` file:line | §14.7、§4.1、§3.9 |
 | **R38** | **阶段 1 收尾（父会话四项裁定，`22-stage1-final-report.md`）**：(a) §17.1 的**爆炸半径入册**为 **C8**（两个及以上互斥 runtype 旗标 → error 并点名第二个；`--sp --lopt-engine bfgs` 0 → 1），C 类 7 → **8**、总计数 17 → **18**，并更新本节的计数口径（§10 汇总行为权威）；(b) **D4 不改代码**（`--lscan` 默认双向是 M2 有意的滞回自检，改默认单向等于删自检；其关切由 D1 的 `--lscan-fc` 回显 + M2 的滞回文档覆盖），§17.3 的清单修正为 D1/D2/D3/D7；(c) 新增 **§17.7**：5 处库入口字面比较改用 `landscape_lowercase`（各配一条大/小写等值单测）、IRC 启动 banner 新增**生效** `Hessian source:` 回显（默认打、显式也给） | 父会话四项裁定；本轮 6 个反向突变（全部红 -> 还原绿）+ `ctest -R landscape` 118/118 与回归子集 12/12 全绿 + BC-4 逐位对比 | §10 C8/汇总行/R29 注、§8.3 D 清单、§17.1、§17.3、§17.7 |
 
-| **R40** | **阶段 2 缺口旗标归属订正 + `--cycles` 归属统一（复核 27 M2；本轮全量 `grep` 核实）**：(a) §6.3 的缺口旗标**本轮全部未实现**（`grep -c` 均为 0：`--lopt-max-steps`=0、`--lopt/lscan-hess-step`=0、`--lts/lirc/lvib-hess-step`=0、`--lopt/lscan-sccacc`=0、`--lopt/lvib-restart`=0）⇒ **整个 §6.3 新旗标块移出阶段 2**，登记为 **阶段 2b（非破坏收尾，先于阶段 3）**。**同时订正 §6.3/§7.2/§9.2 的一层更深的错**：其中部分**能力**其实已在 M2/M4/M6 以**任务限定名**落地（`--lscan/--lts/--lirc-max-steps`、`--lts/--lirc/--lvib-sccacc`、`--lscan/--lts/--lirc-restart`、`--lirc-step-hess`），**但从来没有 §6.3/§7.2 宣称的“统一 `--l*-hess-step` / `--l*-sccacc` 规范名”**；`--lopt-*` 三个（`max-steps`/`sccacc`/`restart`）与 `--lvib-restart` **根本不存在**。§9.2 的强制表里为这些旗标列的 4 行（`--lopt-max-steps`、`--l*-hess-step`、`--lopt/lscan-sccacc`、`--lopt/lvib-restart`）与它们点名的测试（`xtb/landscape-opt-max-steps` 等）**全部不存在**（实测：只有 `xtb/landscape-scan-max-steps` 这个 M2 遗留 test）⇒ 这 4 行标注为**未实现**；(b) §6.4 的 `--cycles` 行写“§9.1 阶段 2”与 §9.1 把 `--cycles` 写在阶段 3 **自相矛盾** ⇒ 统一为 **阶段 3** | 复核 27 M2；本轮 `grep -c -- "--<flag>'" src/prog/main.F90` 逐条实测（本行括注值） | §6.3、§6.4、§7.2、§9.1、§9.2、`28-stage2-fix-report.md §T4` |
+| **R40** | **阶段 2 缺口旗标归属订正 + `--cycles` 归属统一（复核 27 M2；本轮全量 `grep` 核实）**：(a) §6.3 的缺口旗标**本轮全部未实现**（`grep -c` 均为 0：`--lopt-max-steps`=0、`--lopt/lscan-hess-step`=0、`--lts/lirc/lvib-hess-step`=0、`--lopt/lscan-sccacc`=0、`--lopt/lvib-restart`=0）⇒ **整个 §6.3 新旗标块移出阶段 2**，登记为 **阶段 2b（非破坏收尾，先于阶段 3）**。**同时订正 §6.3/§7.2/§9.2 的一层更深的错**：其中部分**能力**其实已在 M2/M4/M6 以**任务限定名**落地（`--lscan/--lts/--lirc-max-steps`、`--lts/--lirc/--lvib-sccacc`、`--lscan/--lts/--lirc-restart`、`--lirc-step-hess`），**但从来没有 §6.3/§7.2 宣称的“统一 `--l*-hess-step` / `--l*-sccacc` 规范名”**；`--lopt-*` 三个（`max-steps`/`sccacc`/`restart`）与 `--lvib-restart` **根本不存在**。§9.2 的强制表里为这些旗标列的 4 行（`--lopt-max-steps`、`--l*-hess-step`、`--lopt/lscan-sccacc`、`--lopt/lvib-restart`）与它们点名的测试（`xtb/landscape-opt-max-steps` 等）**全部不存在**（实测：只有 `xtb/landscape-scan-max-steps` 这个 M2 遗留 test）⇒ 这 4 行标注为**未实现**（**阶段 2b 已落地，见 `32-stage2b-impl.md`**）；(b) §6.4 的 `--cycles` 行写“§9.1 阶段 2”与 §9.1 把 `--cycles` 写在阶段 3 **自相矛盾** ⇒ 统一为 **阶段 3** | 复核 27 M2；本轮 `grep -c -- "--<flag>'" src/prog/main.F90` 逐条实测（本行括注值） | §6.3、§6.4、§7.2、§9.1、§9.2、`28-stage2-fix-report.md §T4` |
 | **R41** | **阶段 2 修复轮登记（复核 27 的 M1/L1..L5/INFO-1 处置，`28-stage2-fix-report.md`）**：(a) M1 → 新增 `xtb/landscape-method-table`（**全部 18 个套件名 + 4 个 `auto` 运行**，逐名断言里程碑 + `<ns>.xtbts.log`/`<ns>.irc.log` 的方法行；一次相反的“名字表整体错位”突变同时打红 18 行 + 3 行 scan 回显）；(b) L1 → 4 个被改写的旧旗标补 BC-4 基线（10 次运行，全部输出文件 raw `cmp` 逐位同）；(c) L2 → `--lscan` 的**生效内层最小化器**回显（仅 relaxed；rigid 无内层器）+ “两个内层器必须改变 `xtbscan.log`”断言；(d) L3 → climbing 副作用从共享 setter 移到解析尾（对**最终值**只施加一次），`--lts-method cineb --lts-method neb` 与 `--method cineb --method neb` 等价；(e) L4 → **U15 落地**（`set_module.f90` 的 `.not.allocated` **else 分支**打 `[WARNING]`，即 R34 指定的实现点）；(f) L5 → `main.F90` 的别名表注释订正（`lancopt` 是**新增**拼写，不是 xcontrol 键；`set_module.f90:1889` 的旧引证作废）；(g) INFO-1 → 登记 `landscape_native_engine` 的**可测/不可测边界**（§9.2、§4.7.1）。(c)(d)(e) 各有反向突变证据；5 处刻意行为变更已在正文逐条登记 | 复核 27；`28-stage2-fix-report.md`（T3/T5/T8/T9/T10） | §4.7.1、§6.3、§6.4、§9.1、§9.2、`25-stage2-impl.md §1` |
 | **R42** | **上游 `relaxation_engine` 内在赋值缺陷修复（独立 bug 修复，`30-upstream-relaxation-fix.md`）**：`src/relaxation_engine.f90` 的 L-ANCopt 引擎用**内在派生类型赋值**拷贝几何（`:615 molopt = mol` / `:779 mol = molopt`），gfortran 12.2.0 会破坏 `TMolecule%sym(2:)`（`character(len=:), allocatable` 的 stride 缺陷，AGENTS.md §6 第 5 条；`rf`/FIRE 引擎本来就写 `call molopt%copy(mol)`/`call mol%copy(molopt)`）⇒ 本机构建下原生 `--opt` 走 L-BFGS（`$opt engine=lbfgs`，或 >500 原子的默认引擎）时 `xtbopt.xyz`/`xtbopt.log`/`xtbtopo.mol` 与 stdout 的 `final structure:`/性质表**写垃圾字节**（NUL/随机字节），数值全对。**修法 = 2 行**改成显式 `%copy`（与 `rf` 路径同写法、同签名 `copyMolecule(self,mol0)`）；**数值逐位不变**（`xtbopt.xyz` 12 / `xtbopt.log` 60 / `xtbtopo.mol` 10 / 归一化 stdout 389 个数值 token 序列完全相同），只有符号列由垃圾 → 正确。**计数口径：不属于 18 条 CLI 破坏性变更**（§10 汇总行 A3+B0+C8+D1+E1+F4+G1=**18** 不动），它是**独立的上游 bug 修复**；新增可证伪回归 `xtb/native-opt-lbfgs-symbols`（字节级：严格 UTF-8 + 控制字节扫描 + 符号列与输入比对；注入还原两行 ⇒ 红，还原 ⇒ 绿） | 父会话与阶段 2 修复轮定位；`30-upstream-relaxation-fix.md`（diff / 注入证据 / BC-4 逐文件 `cmp` / 数值不变证明） | §10 汇总行、`30-upstream-relaxation-fix.md`、AGENTS.md §6 第 5 条 |
+| **R43** | **阶段 2b 修复轮登记（5 项，`35-stage2b-fix.md`）**：(a) **T1 生效性回显**——四个拥有 `--l*-hess-step`/`--l*-sccacc` 的任务（opt/scan/ts/irc）现在回显**生效值**（从设置对象读、带单位），并在该（任务, 算法, Hessian 源）组合**不消费**该值时紧跟一行 `(not used: …)`；谓词是**实测**的（§6.3 的事实表：只有 RFO 建数值 Hessian，`--lts --lts-method prfo --lts-no-verify` 仍消费，非 `numerical` 源一律不消费）。**订正（复核 `38-stage2b-fix2-review.md` LOW-2）**：其中 **`--lts`/`--lvib` 的“按方法名枚举”谓词已被取代**——这两个任务改为与引擎 Hessian 计数**同源**的运行级陈述 `engine%report_unused_hess_step`（报告 `37-stage2b-fix2.md` §T1/T2），其触发旗标族也覆盖同族的 `--l*-sccacc`（报告 `39-stage2b-closeout.md` §T1）；`--lopt`/`--lscan`/`--lirc` 的前置谓词不变，新增可证伪测试 `xtb/landscape-hess-step-used`（每任务一个 used + 一个 unused 组合；3 个注入：回显改常量 → 红、谓词取反 → 红、把 ts 谓词写成 `--lts-no-verify ⇒ unused` 的诱人错向 → 红）；(b) **T2** `--lvib-restart warm` ≡ `pin` 的**已知等价**登记到 §6.3 与 `--help`（机制：FD 序列每次位移前把波函数重置为**进入态**），并由 `xtb/landscape-lvib-restart-warm` 钉住（off≠pin，pin 与 warm 的 `hessian` 逐位同；注入 warm 行为改成 off → 红）；(c) **T3** `--help` 的 `(rfo, bfgs)` 不实文案改为与 `optimize/driver.f90:183` 一致（只有 rfo；`--lscan` 写“仅内层 rfo”）；(d) **T4** 报告 32 §5 的三处事实错误（F1/F2/F4）在 32 号内加订正块（原文保留）；(e) **T5** 两个 INFO 登记在下两行 | 用户 5 项裁定；`33-stage2b-validation.md`（F1/F2/F4/F5）、`35-stage2b-fix.md`（事实表 + 注入原文） | §6.3、`35-stage2b-fix.md`、`32-stage2b-impl.md §5` |
+
+> **R43 登记的已知项（INFO，本轮不修代码）**：
+> 1. **死参 `sccacc=`**：`src/landscape/engine/engine.f90:254` 的 `hp%sccacc = self%ctrl%hess_acc` **覆盖**任务层传进 provider 工厂的 `sccacc=` 实参
+>    （`tasks/{opt,scan,sp,irc,ts}.f90` 都传 `settings%engine%hess_acc`）。两侧同源 ⇒ 内部冗余，非用户可见缺陷（报告 33 的 I4 注入实测：任务层注入常量仍全绿）。
+> 2. **`--lts-restart` 的未知值消息措辞与 `--lscan/--lirc-restart` 不统一**：`--lts-restart bogus` 报 `The --lts-restart flag requires off, pin or warm`，
+>    而 `--lscan/--lirc-restart bogus` 报 `Unknown landscape restart policy 'bogus'`（报告 33 §10 F1 的实测分布：lscan 用新措辞 1/3，lts/lirc 用旧措辞 2/3）。阶段 2b 的新旗标（`--lopt/--lvib-restart`）**采用少数派的新措辞**；
+>    统一既有措辞会改既有输出文本，属另一个改动，故**有意不修**。
 
 > **复核编号与计数的不一致（本轮记录）**：复核声明 HIGH 5 / MEDIUM 8 / LOW 7 / INFO 4，但正文只显式编号了
 > H1/H2/H3/H5、M1/M2/M4/M5/M6/M7/M8、LOW-1..LOW-7、2 条 INFO。**§14 按内容补足到与计数一致**，
@@ -1846,22 +1854,65 @@ xcontrol `$opt engine=` 同样的 first-wins 规则）⇒ **优先级：显式 C
 
 ### 6.3 新增旗标（非破坏）
 
-> **落地阶段（R40 订正，本轮 `grep -c` 逐条实测）**：本表新增旗标**一个都没落地**。
-> 其中部分**能力**已在 M2/M4/M6 以**任务限定名**存在（`--lscan/--lts/--lirc-max-steps`、
-> `--lts/--lirc/--lvib-sccacc`、`--lscan/--lts/--lirc-restart`、`--lirc-step-hess`），
-> 但本表与 §7.2 宣称的“统一规范名”从未实现：`--lopt-max-steps`、`--lopt/lscan-hess-step`、
-> `--lts/lirc/lvib-hess-step`、`--lopt/lscan-sccacc`、`--lopt/lvib-restart` 的 `grep -c` **全部为 0**。
-> 已由 **R40** 整块移到 **阶段 2b**；§9.2 为它们列的 4 行已标“未实现”。
+> **已落地（阶段 2b，`docs/_simplify-recon/32-stage2b-impl.md`）**：本表新增旗标在阶段 2 全部缺失
+> （R40 的 `grep -c` 逐条实测），已按 R40 的归属整体移到 **阶段 2b** 并**全部实现**：
+> `--lopt-max-steps`、`--lopt/--lscan-hess-step`、`--lts/--lirc/--lvib-hess-step`（前三个为规范名，
+> 旧名 `--lts-step`/`--lirc-step-hess`/`--lvib-step` 保留为别名）、`--lopt/--lscan-sccacc`、
+> `--lopt/--lvib-restart`。每个旗标都有「证明生效」的测试（§9.2 表内已填实际测试名与变红方式），
+> 注入实验的真实输出见报告 32。
+>
+> **R40 的历史记录（保留）**：本表新增旗标曾**一个都没落地**；其中部分**能力**在 M2/M4/M6 以
+> **任务限定名**存在（`--lscan/--lts/--lirc-max-steps`、`--lts/--lirc/--lvib-sccacc`、
+> `--lscan/--lts/--lirc-restart`、`--lirc-step-hess`），但本表与 §7.2 宣称的“统一规范名”从未实现：
+> `--lopt-max-steps`、`--lopt/lscan-hess-step`、`--lts/lirc/lvib-hess-step`、
+> `--lopt/lscan-sccacc`、`--lopt/lvib-restart` 的 `grep -c` **全部为 0**。
 
 | 新旗标 | 作用 | 依据 |
 |---|---|---|
-| `--method NAME` | 统一方法选择器 | §4 |
-| `--lopt-max-steps N` | 补缺口（`--lopt` 迭代预算现在固定 256，`settings.f90:355`） | 审计 §3.2「最值得注意」第 1 条 |
-| `--lopt-hess-step V` / `--lscan-hess-step V` | 补缺口（`--lopt`/`--lscan` 现在没有 hess 步长旋钮） | 审计 §4.5 |
-| `--lts-hess-step V` / `--lirc-hess-step V` / `--lvib-hess-step V` | 规范名（旧名别名） | §7.2 |
-| `--lopt-sccacc V` / `--lscan-sccacc V` | 补缺口 | 审计 §4.5 |
-| `--lopt-restart MODE` / `--lvib-restart MODE` | 补缺口（现在只有全局 `--restart/--norestart`） | 审计 §4.5 |
-| `--method ancopt`（值，非旗标） | 方案 C 的 ANCopt 出口 | §3.0 |
+| `--method NAME` | 统一方法选择器（阶段 2 已落地，§4） | §4 |
+| `--lopt-max-steps N` | 补缺口（`--lopt` 迭代预算原本固定 256，`settings.f90:355`）**阶段 2b 已落地** | 审计 §3.2「最值得注意」第 1 条 |
+| `--lopt-hess-step V` / `--lscan-hess-step V` | 补缺口（`--lopt`/`--lscan` 原本没有 hess 步长旋钮）**阶段 2b 已落地** | 审计 §4.5 |
+| `--lts-hess-step V` / `--lirc-hess-step V` / `--lvib-hess-step V` | 规范名（旧名 `--lts-step` / `--lirc-step-hess` / `--lvib-step` 保留为别名）**阶段 2b 已落地** | §7.2 |
+| `--lopt-sccacc V` / `--lscan-sccacc V` | 补缺口 **阶段 2b 已落地** | 审计 §4.5 |
+| `--lopt-restart MODE` / `--lvib-restart MODE` | 补缺口（原本只有全局 `--restart/--norestart`）**阶段 2b 已落地** | 审计 §4.5 |
+| `--method ancopt`（值，非旗标） | 方案 C 的 ANCopt 出口（阶段 2 已落地，§3.0） | §3.0 |
+
+**阶段 2b 修复轮的实测事实表（生效性回显的谓词依据，`35-stage2b-fix.md` T1）**：
+每个（任务, 算法）组合跑「有旗标 vs 无旗标」看输出是否改变（改变 = 被消费）。
+
+| 任务 | 算法 / 方法 | 数值 Hessian 步长是否被消费 | 实测证据 |
+|---|---|---|---|
+| `--lopt` | `rfo` + `--lopt-hessian numerical` | **是** | 末能量 `-5.070544447771` → `-5.070544445800`（`--lopt-hess-step 0.2`），`xtb.trj` 字节变，`Hessians 1` |
+| `--lopt` | `sd`/`cg`/`lbfgs`/`bfgs`/`diis` | 否 | 五种引擎下 `Hessians 0`、`xtb.trj` 逐位同 |
+| `--lopt` | `rfo` + `--lopt-hessian model`（或 `file`） | 否 | 步长与 sccacc 均不改变末能量/轨迹（provider 的 `step` 实参文档为 unused） |
+| `--lscan` | 内层 `rfo` + `--lscan-hessian numerical` | **是** | `xtbscan.log` `f15bfec110` → `258b6763cc`，`Hessians 3` |
+| `--lscan` | 内层 `sd`/`cg`/`lbfgs`/`bfgs`/`diis` | 否 | `Hessians 0`，`xtbscan.log` 逐位同 |
+| `--lscan` | `--lscan-mode rigid`（无内层最小化） | 否 | `Hessians 0`，`xtbscan.log` 逐位同 |
+| `--lts` | 8 个方法（prfo/bprfo/dimer/neb/cineb/autoneb/string/gsm），确认开启 | **是** | 八法均改确认频率（如 neb `-968.98` → `-915.60` cm^-1），`Hessians ≥ 1` |
+| `--lts` | `prfo`/`bprfo` + `--lts-no-verify` | **是** | 搜索自建的数值 Hessian：`Hessians 3`（无确认）vs `4`（含确认），`xtbts.log`/`xtbts.xyz` 字节变 |
+| `--lts` | `dimer`/`neb`/`cineb` + `--lts-no-verify` | 否 | 输出逐位同，`Hessians 0` |
+| `--lts` | `autoneb`/`string`/`gsm` + `--lts-no-verify`（**37 号订正**） | **是** | 跑到自然结束（ammonia autoneb：`autoneb: termination autoneb completed`、`converged T`、exit 0）后建 **1 个数值 Hessian**（`path_ts_list.xyz` 的候选模式，`landscape engine: Hessians 1`） |
+| `--lirc` | gs/lqa/hpc/eulerpc | **是** | 四法初始 Hessian：`irc.log` 四法均变（如 gs `0abb3aef6d` → `19ecfbf0cf`），`Hessians 1` |
+| 四个任务 | 非 `numerical` 源（`model`/`file`） | 否 | `--lopt/--lts` 上 model 源与步长无关（逐位同）；`--lirc-hessian model` 在本 fixture 上因确认失败而中止（两运行相同） |
+
+> **原文保留 + 订正指针（复核 `38-stage2b-fix2-review.md` LOW-2；`37-stage2b-fix2.md` §T1）**：
+> 上表原有一行把六个方法写成同一结论 ——
+> ~~`| --lts | dimer/neb/cineb/autoneb/string/gsm + --lts-no-verify | 否 | 输出逐位同（dimer/neb/cineb 的 Hessians 0；string/gsm/autoneb 仍报 1 次但与步长无关） |`~~
+> —— **该行对 `autoneb`/`string`/`gsm` 已被实测证伪**：这三个方法 + `--lts-no-verify` 在跑到自然结束时
+> **确实**建 1 个数值 Hessian（`path_ts_list.xyz` 的候选几何），与同一份 stdout 的 `landscape engine: Hessians 1`
+> 直接矛盾。因此 `--lts`/`--lvib` 的 `(not used: …)` 不再由方法名枚举，改为**运行级同源陈述**
+> （`engine%report_unused_hess_step`，与 `Hessians` 计数同源）；`dimer`/`neb`/`cineb` 的 `Hessians 0` 仍成立。
+> 该提示的**触发旗标族**也由复核 `38-stage2b-fix2-review.md` LOW-1 补上 `--l*-sccacc`
+> （见 `39-stage2b-closeout.md` §T1）。
+
+**已在结束轮实测补全的旋钮族（`39-stage2b-closeout.md`）**：上表的谓词只看“算法/源是否消费”，但 `--lts`/`--lvib` 的提示
+还要看“用户是否给了旗标”。该族恰好是**两个**旋钮 —— `--l*-hess-step`（步长）与 `--l*-sccacc`（精度），二者由同一个数值 provider 消费；
+`hvp_step` 无 CLI 旗标，`--lvib-odlr` 已单独响亮报错，无第三类。原门槛只看步长旗标，故“只给 `--l*-sccacc`”时两个旋钮都静默，
+本轮改为“给了**任一**同族旗标而本次运行未读取任何数值 Hessian 即提示”。
+
+**已知等价（T2）**：`--lvib-restart warm` 与 `pin` 对 `--lvib` **逐位不可区分**（`hessian` md5 `54ad20a792…` 两者相同，`off` 为 `d86ba4621b…`）。
+机制：`types/hessian.f90` 的 `restart` 处理在**每个位移点前**把波函数重置为**进入算 Hessian 时的快照**（`engine.f90:607` 的 off 记录冷启动、`:559` 的 pin 记录未位移收敛态，而 warm 保留的正是同一个未位移收敛态）。
+**这是既有性质，不是缺陷；`warm` 拼写保留**，由 `xtb/landscape-lvib-restart-warm` 钉住该等价（注入 warm 行为改成 off ⇒ 红）。
 
 ### 6.4 受影响的原生参数
 
@@ -1897,7 +1948,7 @@ xcontrol `$opt engine=` 同样的 first-wins 规则）⇒ **优先级：显式 C
 **现状**：三者写**同一字段** `engine%hess_step`（`settings.f90:333`），
 解析点 `main.F90:2956 / 3714 / 3634`。`--lopt`/`--lscan` **完全没有**。
 
-**方案**：
+**方案**（**阶段 2b 已落地**，`docs/_simplify-recon/32-stage2b-impl.md`；下表即为实现状态）：
 
 | 任务 | 规范名（新） | 旧名（别名，保留） |
 |---|---|---|
@@ -1931,6 +1982,9 @@ xcontrol `$opt engine=` 同样的 first-wins 规则）⇒ **优先级：显式 C
 且运行时必须回显有效值与单位。** 这是可测的（§9.2 的 `help-unit-annotation` 检查）。
 
 ### 7.4 缺口补齐
+
+> **落地状态（阶段 2b）**：前 4 行的缺口旗标已全部实现（`32-stage2b-impl.md`）；
+> 第 5 行（`--lts-project-tr`/`--lts-imag-cutoff`）不在阶段 2b 的清单内，仍未落地。
 
 | 缺口 | 补齐 | 依据 |
 |---|---|---|
@@ -2201,12 +2255,12 @@ C3/C4 需在实现前 grep 一遍套件子选项与原生 runtype 的混用。
 | `--lscan-method`（别名） | `main.F90:2316` | 同上（`--lscan` 下） | 同上 | 
 | `--lts-method`（别名，**climbing 副作用**） | `main.F90:2581`（setter 只存值；副作用在解析尾 `parseArguments` 末尾对最终值施加一次） | 断言 `--lts --method cineb` 与 `--lts --lts-method cineb` 的 `climb` 行为同（`main.F90:2589-2593`）；**R41/L3**：`xtb/landscape-method` 的 `repeat-band-flag`/`repeat-band-method` 断言 `--lts-method cineb --lts-method neb` 与 `--method cineb --method neb` 都得到**无 climbing 的 neb** 且产物逐位同 | 把副作用搬回共享 setter（`repeat-band-flag` 红，实测）；~~把副作用搬出共享 setter~~（旧稿的突变描述已作废：副作用本来就不应逐旗标施加） |
 | `--lirc-method`（别名） | `main.F90:3325` | 同上（`--lirc` 下） | 同上 |
-| `--lts-step` / `--lvib-step` / `--lirc-step-hess`（3 别名） | `main.F90:2956/3714/3634` | **部分未实现（R40/C41）**：只有 `--lirc-step-hess` 存在（`main.F90:3684`，`grep -c` = 2）；`--lts-step`/`--lvib-step`/`--l*-hess-step` 均 0 命中 ⇒ 规范名从未落地 | —— |
-| `--lopt-max-steps N`（新） | `settings.f90:355` | **未实现（R40；`grep -c "--lopt-max-steps'" src/prog/main.F90` = 0）**；已存在的 M2 遗留是**另一个拼写** `--lscan-max-steps`（`main.F90:2596`，测试 `xtb/landscape-scan-max-steps`） | —— |
+| `--lts-step` / `--lvib-step` / `--lirc-step-hess`（3 别名） | `main.F90` 的 `case ('--lts-step')` / `case ('--lvib-step')` / `case ('--lirc-step-hess')`（阶段 2b 行号变动，见报告 32 §2） | **阶段 2b 已落地**：**同一共享 setter** `set_landscape_hess_step` 同时服务 5 个拼写，写入 `engine%hess_step` 并记 `engine%hess_step_source`；别名等价断言 + 异值冲突断言在 `xtb/landscape-hess-step-alias`（`--lts-step`/`--lts-hess-step` → `xtbts.log`+`xtbts.xyz` 逐位同且都与默认不同；`--lirc-step-hess`/`--lirc-hess-step` → `irc.log`+`irc_path.xyz`；`--lvib-step`/`--lvib-hess-step` → `hessian`），冲突三分支断言非零退出且消息同时点名两个旗标，重复旗标用 `--lvib-step 0.01 --lvib-step 0.03` 断言末值 3.000000E-02 获胜 | 把任一 `--l*-hess-step` 改成**裸 `case` 绕过 setter**（只写字段、不查冲突）⇒ 冲突断言变红（实测：`--lvib-hess-step` 绕过 setter 后冲突检查失去触发点）；把消费点改回旧行为（`vib/numhess.f90:144` 的 `step=settings%engine%hess_step` → `5.0e-3_wp`）⇒ `alias-lvib: --lvib-hess-step did not change hessian` 变红（报告 32 §4 E2 实测；注意此时「两拼写等价」断言仍为绿——这正是必须同时断言**生效**的原因） |
+| `--lopt-max-steps N`（新） | `main.F90` `case ('--lopt-max-steps')` → `lset%max_steps`（`settings.f90` 的 `landscape_settings%max_steps`，默认 256）；消费点 `optimize/driver.f90` 的 `do istep = 1, settings%max_steps` | **阶段 2b 已落地**：`xtb/landscape-opt-knobs`——`--lopt-max-steps 1` 断言回显 `maximum number of steps: 1`、`steps: 1`、`converged: F`、非零退出、`maximum number of steps reached`，且末能量 ≠ 默认 256 步运行 | 把消费点改回旧行为（`do istep = 1, 256`）⇒ `a minimisation that exhausts its budget exited 0` 变红（报告 32 §4 E4 实测） |
 | **scan 内层最小化器 `--lscan-method` / `--lscan --method`（R41/L2）** | `relax_scan.f90:597`（`opt%algorithm = from_name(settings%method)`；rigid 模式不用它） | `xtb/landscape-method-table`：`--lscan --method sd\|cg\|lbfgs` 断言 stdout 新回显 line `inner minimiser:         <name>`（`tasks/scan.f90` 的 banner，**仅 relaxed**）、断言 `--lscan-mode rigid` **不**回显，并断言 `cg`/`sd` 与 `lbfgs` 的 `xtbscan.log` **不同**（旧稿的 L-3 只知道“无法发现”：rigid 忽略它、两条别名路由共用 setter、里程碑与方法无关、`xtbscan.log` 不含方法名） | 让 banner 回显固定 `lbfgs` ⇒ 回显断言红；让 `relax_scan` 忽略 `settings%method`（恒用 sd）⇒ “两个内层器改变 `xtbscan.log`” 红（两项实测均红） |
-| `--lopt-hess-step` / `--lscan-hess-step`（新） | `settings.f90:333` | **未实现（R40；两者 `grep -c` = 0）**；任务限定名 `--lscan-hess-step` 也不存在 | —— |
-| `--lopt-sccacc` / `--lscan-sccacc`（新） | `settings.f90:335` | **未实现（R40；两者 `grep -c` = 0）**；存在的是 `--lts/--lirc/--lvib-sccacc` | —— |
-| `--lopt-restart` / `--lvib-restart`（新） | `settings.f90` restart_mode | **未实现（R40；两者 `grep -c` = 0）**；存在的是 `--lscan/--lts/--lirc-restart` | —— |
+| `--lopt-hess-step` / `--lscan-hess-step`（新） | `main.F90` `case ('--lopt-hess-step')` / `case ('--lscan-hess-step')` → 共享 setter → `lset%engine%hess_step` / `lsset%engine%hess_step`；消费点 `engine/engine.f90` 的 `step_used = self%ctrl%hess_step`（`tasks/opt.f90:277` 不传 `step=`）与各任务 provider（`tasks/scan.f90`、`vib/numhess.f90:144`） | **阶段 2b 已落地**：`xtb/landscape-opt-knobs`（`--lopt-engine rfo --lopt-hessian numerical --lopt-max-steps 2`，`--lopt-hess-step 0.2` 必须改变末能量）与 `xtb/landscape-scan-knobs`（`--lscan-method rfo --lscan-hessian numerical`，`--lscan-hess-step 0.2` 必须改变 `xtbscan.log` 字节） | 把消费点改回旧行为（`engine/engine.f90` 的 `step_used = 5.0e-3_wp`）⇒ 两个测试各自变红（实测：`--lopt-hess-step did not change the minimisation` / `--lscan-hess-step did not change the scan`，报告 32 §4 E1） |
+| `--lopt-sccacc` / `--lscan-sccacc`（新） | `main.F90` `case ('--lopt-sccacc')` / `case ('--lscan-sccacc')` → `lset%engine%hess_acc` / `lsset%engine%hess_acc`；**真实消费点 `engine/engine.f90:254` 的 `hp%sccacc = self%ctrl%hess_acc`**（`set_numerical_accuracy`，provider 挂接时写入；任务层 `sccacc=settings%engine%hess_acc` 参数**被它覆盖**，实测——在任务层注入 `0.3` 两个测试**不变红**） | **阶段 2b 已落地**：同上两条测试（`--lopt-sccacc 10.0` 改变末能量；`--lscan-sccacc 10.0` 改变 `xtbscan.log` 字节）。**实测前提：默认 `lbfgs` 不建 Hessian（`landscape engine: Hessians 0`），因此该测试必须配 `--l*-hessian numerical` 与 Hessian 型引擎** | 把**真实消费点**改回常量（`engine/engine.f90` 的 `hp%sccacc = 0.3_wp`）⇒ 对应断言变红（实测：`--lopt-sccacc did not change the minimisation` / `--lscan-sccacc did not change the scan`，报告 32 §4 E5）；在**任务层**参数注入则不红（同上 E5 的前半步） |
+| `--lopt-restart` / `--lvib-restart`（新） | `main.F90` `case ('--lopt-restart')` / `case ('--lvib-restart')` → `lset%engine%restart_mode` / `lvset%engine%restart_mode`；消费点 `engine/engine.f90` 的 `engine_apply_restart`（`select case (self%ctrl%restart_mode)`） | **阶段 2b 已落地**：`xtb/landscape-restart-knobs`——三个模式各断言任务 banner `restart policy: <mode>` **与** engine 读回行 `landscape engine: restart policy     <mode>`，并断言 `pin`/`warm` 的 `xtb.trj`（`--lopt`）/ `hessian`（`--lvib`）字节 ≠ `off`（实测差异在几何第 12 位小数，重复运行的 `pin` 逐位可复现） | 把消费点改回旧行为（`select case (self%ctrl%restart_mode)` → `select case (p_landscape_restart_off)`）⇒ `--lopt-restart pin did not change xtb.trj` 变红，且 `--lvib-restart pin` 的 `hessian` 与 `off` 逐位同（报告 32 §4 E3 实测） |
 | `--method` 冲突（异值） | §4.3 | `xtb/landscape-method-conflict`（`--method bfgs --lopt-engine cg` 非零退出） | 去掉冲突检测 |
 | `--opt normal` → 套件（含 `-o`） | `main.F90:2153` | `xtb/landscape-opt-alias`（断言 stdout 含 `[NOTICE]` 与 `landscape: lbfgs`，且 `xtbopt.xyz` 与 `--lopt` 逐位同） | 还原原生分支 |
 | `--opt` + `$scan` / 周期 / `$opt` 块 | §3.8 | `xtb/landscape-opt-scanblock`、`-opt-pbc`、`-opt-xcontrol`（非零退出 + 文本点名） | 去掉守卫 |

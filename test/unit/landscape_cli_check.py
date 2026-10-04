@@ -59,6 +59,22 @@ mode mirrors one CMake test one-to-one:
                                      -> xtb/landscape-method-table (all 18
                                          suite names and the four `auto` runs)
 
+The stage 2b checks of the CLI redesign (section 6.3) run more than one flag
+combination and compare the output files of two runs byte by byte, so they are
+implemented here **once** and the CMake build drives this script as well (the
+precedent is `landscape_e2e_check.py`, which CMake runs through
+`landscape_e2e_py.cmake`); their modes are
+
+  optknobs <exe> <input> <rundir>    -> xtb/landscape-opt-knobs
+  scanknobs <exe> <input> <rundir>   -> xtb/landscape-scan-knobs
+  hessstepalias <exe> <input> <rundir> <hcn>
+                                     -> xtb/landscape-hess-step-alias
+  restartknobs <exe> <input> <rundir>
+                                     -> xtb/landscape-restart-knobs
+  hessused <exe> <input> <rundir> <hcn> <nh3> <nh3product>
+                                     -> xtb/landscape-hess-step-used
+  lvibrestart <exe> <input> <rundir> -> xtb/landscape-lvib-restart-warm
+
 The environment (XTBPATH) is inherited from the meson test environment, exactly
 like in the CMake build.
 """
@@ -2951,6 +2967,522 @@ def check_echo(exe, inp, rundir, case):
                      % (case, label, route.get("json_task", "scan")), output)
 
 
+# ---------------------------------------------------------------------------
+# CLI redesign stage 2b: the flags of section 6.3 that had no command line
+# ---------------------------------------------------------------------------
+#
+# The design lists a block of "unified name" flags (`--lopt-max-steps`,
+# `--l*-hess-step`, `--l*-sccacc`, `--lopt/--lvib-restart`).  Stage 2 found
+# that none of them had landed (finding R40) and moved the block to stage 2b.
+# Every one of them needs a test that proves it takes effect, not one that
+# proves it parses: the assertions below all compare **observable results** of
+# two runs (the reported energy or budget, or the bytes of an output file).
+
+
+def knobs_run(exe, inp, args, rundir, label):
+    """Run one flag combination in its own directory.
+
+    Every combination gets a fresh directory, so the output files of two runs
+    can be compared byte by byte without a `--namespace`.  Returns the exit
+    status, the combined output and the directory.
+    """
+    workdir = os.path.join(rundir, label)
+    shutil.rmtree(workdir, ignore_errors=True)
+    os.makedirs(workdir)
+    status, output = run(exe, inp, args, workdir)
+    return status, output, workdir
+
+
+def knobs_file(workdir, name):
+    """Read one output file of a `knobs_run` directory as bytes."""
+    path = os.path.join(workdir, name)
+    if not os.path.exists(path):
+        fail("%s was not written" % path)
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
+def knobs_final_energy(output, label):
+    """The `final energy:` value of an `--lopt` run."""
+    match = re.search(r"final energy: +(-?[0-9.]+) Eh", output)
+    if match is None:
+        fail("%s: the run does not report a final energy" % label, output)
+    return match.group(1)
+
+
+def check_opt_knobs(exe, inp, rundir):
+    """The four new `--lopt` knobs reach the minimisation.
+
+    Mirrors `xtb/landscape-opt-knobs` (CLI redesign sections 6.3 and 9.2):
+
+      * `--lopt-max-steps 1` exhausts the budget in the first macro iteration,
+        so the run echoes the budget, stays unconverged, exits non-zero and
+        stops at a different energy than the default 256 step run;
+      * `--lopt-hess-step` and `--lopt-sccacc` act on the numerical Hessian,
+        which the default L-BFGS never builds (measured: the default run's
+        `landscape engine: Hessians` counter is 0), so they are checked with
+        `--lopt-engine rfo --lopt-hessian numerical` and have to move the
+        final energy;
+      * `--lopt-restart` reaches `landscape_engine%apply_restart`: the engine
+        echo line is printed from the control object the task handed to the
+        engine, and `pin`/`warm` change the trajectory (byte comparison of
+        `xtb.trj`) against the default `off`.
+    """
+    common = ["--gfn", "2", "--norestart"]
+    opt = common + ["--lopt"]
+    status, output, default = knobs_run(exe, inp, opt, rundir, "optknobs-default")
+    if status != 0:
+        fail("the default minimisation failed with status %d" % status, output)
+    if not re.search(r"maximum number of steps: +256\s*$", output, re.M):
+        fail("the default step budget is not 256", output)
+    reference = knobs_final_energy(output, "optknobs-default")
+
+    status, output, budget = knobs_run(
+        exe, inp, opt + ["--lopt-max-steps", "1"], rundir, "optknobs-max-steps")
+    if status == 0:
+        fail("a minimisation that exhausts its budget exited 0", output)
+    if not re.search(r"maximum number of steps: +1\s*$", output, re.M):
+        fail("--lopt-max-steps 1 did not reach the minimisation", output)
+    if not re.search(r"^ steps: +1\s*$", output, re.M):
+        fail("the run did not stop after one step", output)
+    if not re.search(r"converged: +F", output):
+        fail("the run claims convergence after one step", output)
+    if "maximum number of steps reached" not in output:
+        fail("the exhausted budget was not reported", output)
+    if knobs_final_energy(output, "optknobs-max-steps") == reference:
+        fail("the step budget did not change the result", output)
+
+    hessian_alg = opt + ["--lopt-engine", "rfo", "--lopt-hessian",
+                         "numerical", "--lopt-max-steps", "2"]
+    status, output, rfo = knobs_run(exe, inp, hessian_alg, rundir, "optknobs-rfo")
+    if status != 0:
+        fail("the RFO minimisation failed with status %d" % status, output)
+    rfo_energy = knobs_final_energy(output, "optknobs-rfo")
+    status, output, workdir = knobs_run(
+        exe, inp, hessian_alg + ["--lopt-hess-step", "0.2"], rundir,
+        "optknobs-hess-step")
+    if status != 0:
+        fail("the RFO minimisation with --lopt-hess-step failed", output)
+    if knobs_final_energy(output, "optknobs-hess-step") == rfo_energy:
+        fail("--lopt-hess-step did not change the minimisation", output)
+    status, output, workdir = knobs_run(
+        exe, inp, hessian_alg + ["--lopt-sccacc", "10.0"], rundir,
+        "optknobs-sccacc")
+    if status != 0:
+        fail("the RFO minimisation with --lopt-sccacc failed", output)
+    if knobs_final_energy(output, "optknobs-sccacc") == rfo_energy:
+        fail("--lopt-sccacc did not change the minimisation", output)
+
+    trajectories = {}
+    for mode in ("off", "pin", "warm"):
+        status, output, workdir = knobs_run(
+            exe, inp, opt + ["--lopt-restart", mode], rundir,
+            "optknobs-restart-" + mode)
+        if status != 0:
+            fail("--lopt-restart %s failed with status %d" % (mode, status),
+                 output)
+        if not re.search(r"landscape engine: restart policy +%s\s*$" % mode,
+                         output, re.M):
+            fail("the engine did not read back the %s policy" % mode, output)
+        trajectories[mode] = knobs_file(workdir, "xtb.trj")
+    for mode in ("pin", "warm"):
+        if trajectories[mode] == trajectories["off"]:
+            fail("--lopt-restart %s did not change the trajectory" % mode)
+
+
+def check_scan_knobs(exe, inp, rundir):
+    """The two new `--lscan` knobs reach the scan points.
+
+    Mirrors `xtb/landscape-scan-knobs` (CLI redesign sections 6.3 and 9.2):
+    `--lscan-hess-step` and `--lscan-sccacc` act on the numerical Hessian of
+    the inner relaxation, so the scan runs with `--lscan-method rfo
+    --lscan-hessian numerical`, and each knob has to change the byte image of
+    `xtbscan.log` (the de-biased energies and the drift report of the three
+    points of a one step bidirectional sweep).
+    """
+    scan = ["--gfn", "2", "--norestart", "--lscan", "--lscan-method", "rfo",
+            "--lscan-hessian", "numerical", "--lscan-coord", "angle",
+            "--lscan-atoms", "2,1,3", "--lscan-step", "3",
+            "--lscan-nstep", "1", "--lscan-max-steps", "2"]
+    logs = {}
+    for label, extra in (("default", []),
+                         ("hess-step", ["--lscan-hess-step", "0.2"]),
+                         ("sccacc", ["--lscan-sccacc", "10.0"])):
+        status, output, workdir = knobs_run(
+            exe, inp, scan + extra, rundir, "scanknobs-" + label)
+        if status != 0:
+            fail("the scan with %s failed with status %d" % (label, status),
+                 output)
+        logs[label] = knobs_file(workdir, "xtbscan.log")
+    for label in ("hess-step", "sccacc"):
+        if logs[label] == logs["default"]:
+            fail("--lscan-%s did not change the scan" % label)
+
+
+def check_hess_step_alias(exe, inp, rundir, second):
+    """The canonical `--l*-hess-step` names and their older spellings.
+
+    Mirrors `xtb/landscape-hess-step-alias` (CLI redesign sections 6.2, 6.3,
+    7.2 and 9.2).  Three field names were inconsistent (`--lts-step`,
+    `--lirc-step-hess` and `--lvib-step`), so each pair gets a canonical
+    spelling and the old name stays as an alias.  The check pins both halves
+    of the alias contract:
+
+      * the two spellings given the **same** value are equivalent - the output
+        files are byte identical (and each of them differs from the default
+        run, so the comparison cannot pass by both flags being ignored);
+      * the two spellings given **different** values abort with a non-zero
+        status and a message that names both flags;
+      * a repeated flag keeps the last value.
+
+    `second` is the bent HCN fixture: the `--lts` and `--lirc` runs need a
+    transition state as their input and cannot use the water minimum.
+    """
+    common = ["--gfn", "2", "--norestart"]
+
+    def compare(label, fixture, args, files, old, new):
+        status, output, _ = knobs_run(exe, fixture, args, rundir, label + "-default")
+        if status != 0:
+            fail("%s: the default run failed with status %d" % (label, status), output)
+        status, output, olddir = knobs_run(
+            exe, fixture, args + [old, "0.02"], rundir, label + "-old")
+        if status != 0:
+            fail("%s: %s failed with status %d" % (label, old, status), output)
+        status, output, newdir = knobs_run(
+            exe, fixture, args + [new, "0.02"], rundir, label + "-new")
+        if status != 0:
+            fail("%s: %s failed with status %d" % (label, new, status), output)
+        defaultdir = os.path.join(rundir, label + "-default")
+        for name in files:
+            if knobs_file(olddir, name) != knobs_file(newdir, name):
+                fail("%s: %s and %s %s are not equivalent"
+                     % (label, old, new, name))
+            if knobs_file(newdir, name) == knobs_file(defaultdir, name):
+                fail("%s: %s did not change %s" % (label, new, name))
+
+    compare("alias-ts", second, common + ["--lts", "--lts-method", "prfo"],
+            ("xtbts.log", "xtbts.xyz"), "--lts-step", "--lts-hess-step")
+    compare("alias-lirc", second,
+            common + ["--lirc", "--lirc-method", "gs", "--lirc-max-steps", "1"],
+            ("irc.log", "irc_path.xyz"), "--lirc-step-hess", "--lirc-hess-step")
+    compare("alias-lvib", inp, common + ["--lvib"], ("hessian",),
+            "--lvib-step", "--lvib-hess-step")
+
+    # the same value through both spellings is not a conflict, also when the
+    # two spellings are written differently (`1.0e-2` vs `0.01`)
+    status, output, _ = knobs_run(
+        exe, inp, common + ["--lvib", "--lvib-step", "0.01",
+                            "--lvib-hess-step", "1.0e-2"],
+        rundir, "alias-lvib-same")
+    if status != 0:
+        fail("the same step through both spellings was rejected", output)
+    if not re.search(r"Hessian step: +1[.]000000E-02 bohr", output):
+        fail("the shared value did not reach the task", output)
+    # a repeated flag keeps the last value
+    status, output, _ = knobs_run(
+        exe, inp, common + ["--lvib", "--lvib-step", "0.01",
+                            "--lvib-step", "0.03"],
+        rundir, "alias-lvib-repeat")
+    if status != 0:
+        fail("the repeated flag was rejected", output)
+    if not re.search(r"Hessian step: +3[.]000000E-02 bohr", output):
+        fail("the repeated flag did not keep the last value", output)
+
+    # a different value through the two spellings is a loud error naming both
+    for runflag, old, new in (("--lts", "--lts-step", "--lts-hess-step"),
+                              ("--lirc", "--lirc-step-hess", "--lirc-hess-step"),
+                              ("--lvib", "--lvib-step", "--lvib-hess-step")):
+        status, output = run(
+            exe, inp, common + [runflag, old, "0.02", new, "0.03"], rundir)
+        if status == 0:
+            fail("the conflicting spellings of the Hessian step exited 0", output)
+        if "conflicting Hessian finite difference steps" not in output:
+            fail("the conflict was not reported for %s" % runflag, output)
+        if new not in output or old not in output:
+            fail("the conflict message does not name both flags", output)
+
+
+def check_restart_knobs(exe, inp, rundir):
+    """The two new restart flags reach the engine's restart policy.
+
+    Mirrors `xtb/landscape-restart-knobs` (CLI redesign sections 6.3 and 9.2).
+    `--lopt-restart` and `--lvib-restart` close the two tasks that had no
+    policy flag (`--lscan-restart`, `--lts-restart` and `--lirc-restart`
+    existed).  Each mode is checked twice: the engine report has to read back
+    the requested policy (it prints the control object the task handed over)
+    and the result has to change - the trajectory for the minimisation, the
+    `hessian` file for the frequency task.  Measured magnitude of the change:
+    the `off`/`pin` geometries differ in the 12th decimal, which is a real,
+    reproducible difference (a repeated `pin` run is byte identical).
+    """
+    common = ["--gfn", "2", "--norestart"]
+    for task, files in (("--lopt", "xtb.trj"), ("--lvib", "hessian")):
+        results = {}
+        for mode in ("off", "pin", "warm"):
+            label = "restart-%s-%s" % (task[2:], mode)
+            status, output, workdir = knobs_run(
+                exe, inp, common + [task, "%s-restart" % task, mode], rundir,
+                label)
+            if status != 0:
+                fail("%s %s-restart %s failed with status %d"
+                     % (task, task, mode, status), output)
+            if not re.search(r"restart policy: +%s\s*$" % mode, output, re.M):
+                fail("%s did not echo the %s policy" % (task, mode), output)
+            if not re.search(r"landscape engine: restart policy +%s\s*$" % mode,
+                             output, re.M):
+                fail("the engine did not read back the %s policy" % mode, output)
+            results[mode] = knobs_file(workdir, files)
+        for mode in ("pin", "warm"):
+            if results[mode] == results["off"]:
+                fail("%s-restart %s did not change %s" % (task, mode, files))
+
+
+def check_hessian_step_used(exe, inp, rundir, hcn, nh3, nh3product):
+    """The effectivity echo of the finite difference parameters.
+
+    Mirrors `xtb/landscape-hess-step-used` (CLI redesign sections 7.3 and 9.2,
+    fix report `35-stage2b-fix.md` section T1).  `--l*-hess-step` and
+    `--l*-sccacc` are knobs of the numerical Hessian, and whether the selected
+    algorithm and Hessian source consume them differs per task.  The tasks now
+    echo the effective value and mark the parameters as unused otherwise, and
+    this check pins both halves for all four tasks that own the knobs:
+
+      * a combination that consumes the step echoes the value **from the
+        settings object** (the flag value, not the default) and carries no
+        `(not used:` line;
+      * a combination that does not consume it echoes the same value and the
+        one line reason.
+
+    The predicate of `--lopt`, `--lscan` and `--lirc` is the measured one of
+    the fact table (only an RFO minimiser and, for `--lirc`, the initial
+    Hessian of every method builds a numerical Hessian).  `--lts` and `--lvib`
+    do not decide anything before the run: their notice is derived from the
+    Hessian builds the engine actually performed, so it is the same fact as
+    the `landscape engine: Hessians` counter and cannot contradict it
+    (`37-stage2b-fix2.md` sections T1 and T2).  That is why the `--lts` cases
+    below assert the observed run, not a method name: `--lts-method autoneb
+    --lts-no-verify` runs to its natural end and **does** build a Hessian (the
+    candidate modes of `path_ts_list.xyz`), so the old method-name guess
+    reported it as unused next to a non-zero counter.
+
+    Two cases exist to catch a predicate that is written in the wrong
+    direction: `--lts --lts-method prfo --lts-no-verify` still consumes the
+    step through the search Hessian and must stay silent, and a non-numerical
+    Hessian source marks the step unused even for RFO.
+
+    The step and the accuracy flag are **one family** (the numerical provider
+    consumes both, `model`/`file` ignore both), so the `--lts`/`--lvib` notice
+    appears when the user named **either** of them and this run read neither.
+    The `*-sccacc-only` cases give the accuracy flag alone - no
+    `--l*-hess-step` - which the gate that only looked at `hess_step_source`
+    left silent (`38-stage2b-fix2-review.md` LOW-1).
+    """
+    common = ["--gfn", "2", "--norestart"]
+    step_text = "2.000000E-02"
+    acc_text = "1.000000E+01"
+
+    def expect(label, fixture, args, hint, used=True, require=None,
+               step=step_text):
+        status, output, _ = knobs_run(exe, fixture, args, rundir, label)
+        if require is not None and not re.search(require, output):
+            fail("%s: the run did not reach the expected state (%s)"
+                 % (label, require), output)
+        if not re.search(r"Hessian step: +%s bohr" % re.escape(step),
+                         output):
+            fail("%s: the run does not echo the effective step %s"
+                 % (label, step), output)
+        if not re.search(r"Hessian SCC accuracy: +%s\s*$" % re.escape(acc_text),
+                         output, re.M):
+            fail("%s: the run does not echo the effective SCC accuracy %s"
+                 % (label, acc_text), output)
+        # the echo alone does not prove the claim: a used combination has to
+        # build at least one Hessian through the engine (the counter counts
+        # every provider, so it is only asserted on the used side)
+        if used:
+            counter = re.search(r"landscape engine: Hessians +([0-9]+)", output)
+            if counter is None or int(counter.group(1)) < 1:
+                fail("%s: the run claims to consume the step but built no "
+                     "Hessian" % label, output)
+        match = re.search(r"^\s*\(not used: (.*)\)\s*$", output, re.M)
+        if hint is None:
+            if match is not None:
+                fail("%s: the step is consumed but the run reports it as "
+                     "unused (%r)" % (label, match.group(1)), output)
+        else:
+            if match is None:
+                fail("%s: the run does not report the unused step" % label,
+                     output)
+            if hint not in match.group(1):
+                fail("%s: the unused reason is %r, expected %r"
+                     % (label, match.group(1), hint), output)
+        return status, output
+
+    # --- opt ---------------------------------------------------------------
+    opt = common + ["--lopt", "--lopt-max-steps", "2"]
+    expect("used-opt-rfo", inp,
+           opt + ["--lopt-engine", "rfo", "--lopt-hessian", "numerical",
+                  "--lopt-hess-step", "0.02", "--lopt-sccacc", "10.0"],
+           None)
+    expect("unused-opt-lbfgs", inp,
+           opt + ["--lopt-hess-step", "0.02", "--lopt-sccacc", "10.0"],
+           "lbfgs builds no numerical Hessian", used=False)
+    expect("unused-opt-model", inp,
+           opt + ["--lopt-engine", "rfo", "--lopt-hessian", "model",
+                  "--lopt-hess-step", "0.02", "--lopt-sccacc", "10.0"],
+           "the Hessian source 'model' has no finite differences", used=False)
+
+    # --- scan --------------------------------------------------------------
+    scan = common + ["--lscan", "--lscan-coord", "angle", "--lscan-atoms",
+                     "2,1,3", "--lscan-step", "3", "--lscan-nstep", "1",
+                     "--lscan-max-steps", "2"]
+    expect("used-scan-rfo", inp,
+           scan + ["--lscan-method", "rfo", "--lscan-hessian", "numerical",
+                   "--lscan-hess-step", "0.02", "--lscan-sccacc", "10.0"],
+           None)
+    expect("unused-scan-lbfgs", inp,
+           scan + ["--lscan-method", "lbfgs", "--lscan-hess-step", "0.02",
+                   "--lscan-sccacc", "10.0"],
+           "lbfgs builds no numerical Hessian", used=False)
+    expect("unused-scan-rigid", inp,
+           scan + ["--lscan-mode", "rigid", "--lscan-method", "rfo",
+                   "--lscan-hess-step", "0.02", "--lscan-sccacc", "10.0"],
+           "a rigid scan builds no Hessian", used=False)
+
+    # --- ts ----------------------------------------------------------------
+    # `--lts` does not decide before the run: whether a build happens depends
+    # on the method, on the confirmation and on the part of the path the run
+    # reaches, so the notice comes from the engine counters (T1).
+    ts = common + ["--lts", "--lts-max-steps", "2"]
+    expect("used-ts-prfo", hcn,
+           ts + ["--lts-method", "prfo", "--lts-hess-step", "0.02",
+                 "--lts-sccacc", "10.0"], None)
+    # the search Hessian of P-RFO keeps consuming the step without the
+    # confirmation, so this must not be marked unused
+    expect("used-ts-prfo-no-verify", hcn,
+           ts + ["--lts-method", "prfo", "--lts-no-verify",
+                 "--lts-hess-step", "0.02", "--lts-sccacc", "10.0"], None)
+    # AutoNEB builds no Hessian during the band relaxation, but it does build
+    # one for the candidate modes of `path_ts_list.xyz`, so a run that reaches
+    # its natural end reports a non-zero counter and must carry no notice.
+    expect("used-ts-autoneb-no-verify", nh3,
+           common + ["--lts", "--lts-method", "autoneb", "--lts-images", "5",
+                     "--lts-product", nh3product, "--lts-no-verify",
+                     "--lts-hess-step", "0.02", "--lts-sccacc", "10.0"],
+           None, require=r"autoneb: termination autoneb completed")
+    expect("unused-ts-dimer-no-verify", hcn,
+           ts + ["--lts-method", "dimer", "--lts-no-verify",
+                 "--lts-hess-step", "0.02", "--lts-sccacc", "10.0"],
+           "no numerical Hessian was built by this run", used=False)
+    expect("unused-ts-neb-no-verify", nh3,
+           ts + ["--lts-method", "neb", "--lts-images", "5", "--lts-product",
+                 nh3product, "--lts-no-verify", "--lts-hess-step", "0.02",
+                 "--lts-sccacc", "10.0"],
+           "no numerical Hessian was built by this run", used=False)
+    expect("unused-ts-model", hcn,
+           ts + ["--lts-method", "prfo", "--lts-hessian", "model",
+                 "--lts-hess-step", "0.02", "--lts-sccacc", "10.0"],
+           "the Hessian source 'model' has no finite differences", used=False)
+
+    # --- the accuracy knob of the same family (LOW-1) ----------------------
+    # `--l*-sccacc` alone (no `--l*-hess-step`), so the echo shows the builtin
+    # step.  A run that reads neither knob has to carry the notice, and one
+    # that reads the accuracy flag (it builds a numerical Hessian) must not.
+    default_step = "5.000000E-03"
+    expect("unused-ts-sccacc-only", hcn,
+           ts + ["--lts-method", "dimer", "--lts-no-verify",
+                 "--lts-sccacc", "10.0"],
+           "no numerical Hessian was built by this run", used=False,
+           step=default_step)
+    expect("used-ts-sccacc-only", hcn,
+           ts + ["--lts-method", "prfo", "--lts-sccacc", "10.0"], None,
+           step=default_step)
+
+    # --- irc ---------------------------------------------------------------
+    irc = common + ["--lirc", "--lirc-method", "gs", "--lirc-max-steps", "1"]
+    expect("used-irc-gs", hcn,
+           irc + ["--lirc-hess-step", "0.02", "--lirc-sccacc", "10.0"], None)
+    # measured: the model Hessian of this fixture has no imaginary mode, so the
+    # run aborts at the transition state confirmation after the banner; the
+    # step is not consumed either way
+    status, output = expect("unused-irc-model", hcn,
+                            irc + ["--lirc-hessian", "model",
+                                   "--lirc-hess-step", "0.02",
+                                   "--lirc-sccacc", "10.0"],
+                            "the Hessian source 'model' has no finite differences",
+                            used=False)
+    if status == 0:
+        fail("the model Hessian of the IRC fixture did not abort the run",
+             output)
+
+    # --- lvib --------------------------------------------------------------
+    # The same-source notice for the frequency task (T2): the source decides,
+    # not the method, and the flag has to be visible in the file it claims to
+    # change.
+    lvib = common + ["--lvib", "--lvib-sccacc", "10.0"]
+    expect("unused-lvib-model", inp,
+           lvib + ["--lvib-hessian", "model", "--lvib-hess-step", "0.02"],
+           "the Hessian source 'model' has no finite differences", used=False)
+    expect("used-lvib-numerical", inp,
+           lvib + ["--lvib-hessian", "numerical", "--lvib-hess-step", "0.02"],
+           None)
+    # the same pair for the accuracy flag alone (LOW-1)
+    expect("unused-lvib-sccacc-only", inp,
+           common + ["--lvib", "--lvib-hessian", "model", "--lvib-sccacc",
+                     "10.0"],
+           "the Hessian source 'model' has no finite differences", used=False,
+           step=default_step)
+    expect("used-lvib-sccacc-only", inp,
+           common + ["--lvib", "--lvib-hessian", "numerical",
+                     "--lvib-sccacc", "10.0"], None, step=default_step)
+    for source, changes in (("numerical", True), ("model", False)):
+        files = {}
+        for step in ("0.005", "0.02"):
+            _, _, workdir = knobs_run(
+                exe, inp, common + ["--lvib", "--lvib-sccacc", "10.0",
+                                    "--lvib-hessian", source,
+                                    "--lvib-hess-step", step],
+                rundir, "lvib-hess-step-%s-%s" % (source, step))
+            files[step] = knobs_file(workdir, "hessian")
+        if changes and files["0.005"] == files["0.02"]:
+            fail("--lvib-hess-step did not change the %s hessian" % source)
+        if not changes and files["0.005"] != files["0.02"]:
+            fail("--lvib-hess-step changed the %s hessian although the source "
+                 "has no finite differences" % source)
+
+
+def check_lvib_restart_warm(exe, inp, rundir):
+    """`--lvib-restart warm` is not distinguishable from `pin`.
+
+    Mirrors `xtb/landscape-lvib-restart-warm` (fix report
+    `35-stage2b-fix.md` section T2).  The finite difference sequence of the
+    frequency task resets the wavefunction to the state it entered the Hessian
+    with before every displacement, so `warm` (keep the incoming state) and
+    `pin` (reuse the recorded state) hand the provider the same start: the
+    `hessian` files are byte identical, while `off` records the cold start
+    wavefunction and differs.  The equivalence is a documented property, not a
+    defect, and this check pins it so that a later change of the restart policy
+    cannot make the documentation wrong silently.
+    """
+    results = {}
+    for mode in ("off", "pin", "warm"):
+        status, output, workdir = knobs_run(
+            exe, inp, ["--gfn", "2", "--norestart", "--lvib",
+                       "--lvib-restart", mode],
+            rundir, "lvib-restart-" + mode)
+        if status != 0:
+            fail("--lvib-restart %s failed with status %d" % (mode, status),
+                 output)
+        if not re.search(r"landscape engine: restart policy +%s\s*$" % mode,
+                         output, re.M):
+            fail("the engine did not read back the %s policy" % mode, output)
+        results[mode] = knobs_file(workdir, "hessian")
+    if results["pin"] == results["off"]:
+        fail("--lvib-restart pin did not change the hessian file")
+    if results["warm"] != results["pin"]:
+        fail("--lvib-restart warm differs from pin: the documented "
+             "equivalence of `--help` no longer holds")
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -3044,6 +3576,23 @@ def main():
         check_method_table(exe, inp, rundir, rest[0], rest[1], rest[2])
     elif mode == "nativeoptsym":
         check_native_opt_symbols(exe, inp, rundir)
+    elif mode == "optknobs":
+        check_opt_knobs(exe, inp, rundir)
+    elif mode == "scanknobs":
+        check_scan_knobs(exe, inp, rundir)
+    elif mode == "hessstepalias":
+        if len(rest) < 1:
+            fail("the hessstepalias mode needs the transition state input")
+        check_hess_step_alias(exe, inp, rundir, rest[0])
+    elif mode == "restartknobs":
+        check_restart_knobs(exe, inp, rundir)
+    elif mode == "hessused":
+        if len(rest) < 3:
+            fail("the hessused mode needs the HCN, NH3 and NH3 product "
+                 "fixtures")
+        check_hessian_step_used(exe, inp, rundir, rest[0], rest[1], rest[2])
+    elif mode == "lvibrestart":
+        check_lvib_restart_warm(exe, inp, rundir)
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

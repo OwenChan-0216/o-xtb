@@ -156,8 +156,15 @@ subroutine landscape_vib_hessian(env, mol, chk, calc, settings, hess, energy, &
    ! that never reached the engine (missing CLI sync) or a dead control field
    ! becomes visible on stdout instead of silently running at 300 K.  PLAN
    ! section 9.5 makes this record a gate for the M4 transition-state and IRC
-   ! entries.  The same call also prints the cost counters of the run.
-   if (settings%printlevel > 0) call engine%report(env%unit)
+   ! entries.  The same call also prints the cost counters of the run, and the
+   ! unused notice follows it: it is derived from the builds the engine
+   ! actually performed, so it agrees with the `Hessians` counter by
+   ! construction and `--lvib-hess-step` can no longer be silently ignored for
+   ! `--lvib-hessian model|file` (`37-stage2b-fix2.md` section T2).
+   if (settings%printlevel > 0) then
+      call engine%report(env%unit)
+      call engine%report_unused_hess_step(env%unit)
+   end if
 
    ! The engine adds the displaced points of the provider to its own counter,
    ! so the reported cost is the true 6N+1 of the numerical Hessian.

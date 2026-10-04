@@ -34,7 +34,8 @@ module xtb_landscape_tasks_opt
    use xtb_type_restart, only : TRestart
    use xtb_type_calculator, only : TCalculator
    use xtb_landscape_settings, only : landscape_opt_settings, &
-      & landscape_opt_algorithm_name, landscape_restart_name
+      & landscape_opt_algorithm_name, landscape_restart_name, &
+      & p_landscape_opt_rfo, landscape_lowercase
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack
    use xtb_landscape_engine, only : landscape_engine, new_landscape_engine, &
@@ -103,6 +104,7 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
    real(wp), allocatable :: x0(:), xfinal(:), traj(:, :)
    logical, allocatable :: fix_mask(:)
    integer :: n_scf_fail
+   character(len=:), allocatable :: unused_hess
 
    if (settings%printlevel > 0) then
       write(env%unit, '(1x,a,a,a)') "landscape: ", &
@@ -114,6 +116,22 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
          & landscape_restart_name(settings%engine%restart_mode)
       write(env%unit, '(1x,a,a)') "Hessian source:           ", &
          & trim(settings%hessian_source)
+      ! CLI redesign sections 7.3 and 9.2: every flag that carries a unit must
+      ! echo its effective value and unit, and a knob of this run type that no
+      ! code path of the selected algorithm reads must say so.  Both values
+      ! come from the settings object the task hands to the engine, not from
+      ! the command line text.  The predicate is the measured one of
+      ! `35-stage2b-fix.md` section T1: only RFO builds a numerical Hessian
+      ! (`optimize/driver.f90:183`), and the provider ignores the finite
+      ! difference step for every other Hessian source.
+      write(env%unit, '(1x,a,es15.6,a)') "Hessian step:             ", &
+         & settings%engine%hess_step, " bohr"
+      write(env%unit, '(1x,a,es15.6)') "Hessian SCC accuracy:     ", &
+         & settings%engine%hess_acc
+      unused_hess = opt_unused_hessian_step(settings)
+      if (len(unused_hess) > 0) then
+         write(env%unit, '(1x,a,a,a)') "(not used: ", unused_hess, ")"
+      end if
       ! D3 of the CLI redesign section 8.3: the native `--opt` runs ANCopt,
       ! this task defaults to lbfgs, so the active engine is echoed.  The
       ! notice is printed only when the engine was not named on the command
@@ -277,5 +295,35 @@ subroutine engine_model_hessian(self, x, hess, fail)
    call self%engine%hessian(self%env, self%mol, self%chk, hess, fail)
 
 end subroutine engine_model_hessian
+
+!> Why the finite difference parameters of the numerical Hessian are not used.
+!>
+!> Empty when this run consumes `settings%engine%hess_step` and
+!> `settings%engine%hess_acc`, otherwise a one line reason for the banner.  The
+!> minimisation builds a numerical Hessian only for RFO
+!> (`xtb_landscape_optimize::landscape_optimize_model`, `use_trust`), and the
+!> provider ignores the finite difference step for every other Hessian source
+!> (`xtb_landscape_hessian::model_hessian_compute` documents its `step`
+!> argument as unused).  Measured on GFN2 water: `--lopt-engine rfo
+!> --lopt-hessian numerical` changes the final energy with
+!> `--lopt-hess-step 0.2`, while all five other engines and
+!> `--lopt-hessian model` leave the trajectory byte identical (0 Hessian
+!> builds) - see `docs/_simplify-recon/35-stage2b-fix.md` section T1.
+function opt_unused_hessian_step(settings) result(reason)
+   !> Optimisation settings
+   type(landscape_opt_settings), intent(in) :: settings
+   !> Empty when the finite difference step reaches a provider, else the reason
+   character(len=:), allocatable :: reason
+
+   reason = ""
+   if (landscape_lowercase(settings%hessian_source) /= 'numerical') then
+      reason = "the Hessian source '"//trim(settings%hessian_source)//&
+         & "' has no finite differences"
+   else if (settings%algorithm /= p_landscape_opt_rfo) then
+      reason = trim(landscape_opt_algorithm_name(settings%algorithm))//&
+         & " builds no numerical Hessian"
+   end if
+
+end function opt_unused_hessian_step
 
 end module xtb_landscape_tasks_opt

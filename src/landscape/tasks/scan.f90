@@ -46,7 +46,7 @@ module xtb_landscape_tasks_scan
       & landscape_restart_name, landscape_scan_coord_name, &
       & landscape_missing_value, landscape_value_present, &
       & landscape_lowercase, landscape_opt_algorithm_from_name, &
-      & landscape_opt_algorithm_name
+      & landscape_opt_algorithm_name, p_landscape_opt_rfo
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_coords, only : geometry_pack, geometry_unpack
    use xtb_landscape_engine, only : landscape_engine, new_landscape_engine, &
@@ -117,6 +117,8 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
    real(wp) :: best_energy, best_residual
    integer :: n_fail, n_unconverged, n_valid, i
    logical :: fail
+   integer :: inner_algorithm
+   character(len=:), allocatable :: unused_hess
 
    if (settings%printlevel > 0) then
       write(env%unit, '(1x,a,a,a)') "landscape: ", trim(settings%mode), &
@@ -128,10 +130,10 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
       ! It is echoed here for the relaxed mode; a rigid scan builds the
       ! geometry and runs a single point, so it has no inner minimiser and
       ! stays quiet (stage 2 review L2).
+      inner_algorithm = landscape_opt_algorithm_from_name(settings%method)
       if (landscape_lowercase(settings%mode) == 'relaxed') then
          write(env%unit, '(1x,a,a,a)') "  inner minimiser:         ", &
-            & trim(landscape_opt_algorithm_name(&
-            & landscape_opt_algorithm_from_name(settings%method)))
+            & trim(landscape_opt_algorithm_name(inner_algorithm))
       end if
       do i = 1, settings%ndim
          write(env%unit, '(1x,a,i0,a,a,4(1x,i0))') "  coordinate ", i, ": ", &
@@ -143,6 +145,23 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
          & landscape_restart_name(settings%engine%restart_mode)
       write(env%unit, '(1x,a,a)') "Hessian source:           ", &
          & trim(settings%hessian_source)
+      ! CLI redesign sections 7.3 and 9.2: every flag that carries a unit must
+      ! echo its effective value and unit, and a knob that no code path of the
+      ! selected inner minimiser reads must say so.  Both values come from the
+      ! settings object the inner minimisation is built from, not from the
+      ! command line text.  The predicate is the measured one of
+      ! `35-stage2b-fix.md` section T1: only an RFO inner minimiser builds a
+      ! numerical Hessian (`optimize/driver.f90:183`), a rigid scan has no
+      ! inner minimisation at all, and the provider ignores the finite
+      ! difference step for every other Hessian source.
+      write(env%unit, '(1x,a,es15.6,a)') "Hessian step:             ", &
+         & settings%engine%hess_step, " bohr"
+      write(env%unit, '(1x,a,es15.6)') "Hessian SCC accuracy:     ", &
+         & settings%engine%hess_acc
+      unused_hess = scan_unused_hessian_step(settings, inner_algorithm)
+      if (len(unused_hess) > 0) then
+         write(env%unit, '(1x,a,a,a)') "(not used: ", unused_hess, ")"
+      end if
       ! D1 of the CLI redesign section 8.3: the suite force constant 0.5
       ! hartree/bohr^2 is ten times the xtb scan value 0.05 (`fcconstr`).  The
       ! notice prints the value **read from the settings object** and is
@@ -527,6 +546,40 @@ subroutine write_scan_grid(env, mol, settings, grid)
       & " frame(s), ", nomitted, " failed point(s) omitted"
 
 end subroutine write_scan_grid
+
+!> Why the finite difference parameters of the numerical Hessian are not used.
+!>
+!> Empty when the scan consumes `settings%engine%hess_step` and
+!> `settings%engine%hess_acc`, otherwise a one line reason for the banner.  A
+!> rigid scan constructs the geometry and runs a single point, so it has no
+!> inner minimisation and no Hessian; a relaxed scan builds a numerical
+!> Hessian only when the inner minimiser is RFO, and the provider ignores the
+!> finite difference step for every other Hessian source.  Measured on GFN2
+!> water: `--lscan-method rfo --lscan-hessian numerical` changes
+!> `xtbscan.log` with `--lscan-hess-step 0.2` (3 Hessian builds), while the
+!> other five inner minimisers, `--lscan-mode rigid` and `--lscan-hessian
+!> model` leave it byte identical (0 Hessian builds) - see
+!> `docs/_simplify-recon/35-stage2b-fix.md` section T1.
+function scan_unused_hessian_step(settings, algorithm) result(reason)
+   !> Scan settings
+   type(landscape_scan_settings), intent(in) :: settings
+   !> Inner minimisation algorithm resolved from `settings%method`
+   integer, intent(in) :: algorithm
+   !> Empty when the finite difference step reaches a provider, else the reason
+   character(len=:), allocatable :: reason
+
+   reason = ""
+   if (landscape_lowercase(settings%mode) /= 'relaxed') then
+      reason = "a rigid scan builds no Hessian"
+   else if (landscape_lowercase(settings%hessian_source) /= 'numerical') then
+      reason = "the Hessian source '"//trim(settings%hessian_source)//&
+         & "' has no finite differences"
+   else if (algorithm /= p_landscape_opt_rfo) then
+      reason = trim(landscape_opt_algorithm_name(algorithm))//&
+         & " builds no numerical Hessian"
+   end if
+
+end function scan_unused_hessian_step
 
 !> Decimal representation of an integer for an error message.
 function int_to_string(value) result(string)

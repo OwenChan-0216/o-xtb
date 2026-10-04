@@ -188,6 +188,13 @@ module xtb_landscape_engine
       integer :: n_cache_hit = 0
       !> Number of Hessian evaluations
       integer :: n_hess = 0
+      !> Number of Hessian evaluations that reached the numerical provider,
+      !> that is the builds that consumed `ctrl%hess_step`.  `n_hess` counts
+      !> the model and file providers too, which document the finite
+      !> difference step as unused, so the two counters are not the same
+      !> number.  This one is the single source of the "(not used: ...)"
+      !> notice of `report_unused_hess_step`.
+      integer :: n_hess_fd = 0
       !> Number of Hessian-vector products
       integer :: n_hvp = 0
       !> Number of single point calls with unconverged SCC
@@ -221,6 +228,8 @@ module xtb_landscape_engine
       procedure :: hvp => engine_hvp
       !> Print the cost counters
       procedure :: report => engine_report
+      !> Report a named finite difference step no build of this run consumed
+      procedure :: report_unused_hess_step => engine_report_unused_hess_step
       !> Effective electronic temperature read back from the calculator
       procedure :: effective_etemp => engine_effective_etemp
       !> Release all allocatable components
@@ -685,6 +694,14 @@ subroutine engine_hessian(self, env, mol, chk, hess, fail, step, final_err)
       ! added to the cost counters here.  Without this the reported "energy
       ! evaluations" would grossly underestimate a numerical Hessian (6N).
       self%n_eval = self%n_eval + self%hp%n_eval
+      ! The finite difference step reached a provider exactly when the numeric
+      ! provider computed: the `model` and `file` providers document their
+      ! `step` argument as unused (`types/hessian.f90`).  The counter is the
+      ! same fact as the `Hessians` line of `report`, so the unused notice
+      ! cannot contradict the printed count.
+      if (allocated(self%hp%name)) then
+         if (self%hp%name == 'numerical') self%n_hess_fd = self%n_hess_fd + 1
+      end if
    else
       call env%error("landscape engine has neither a calculator nor an energy model", &
          & source)
@@ -826,5 +843,54 @@ subroutine engine_report(self, unit)
    end if
 
 end subroutine engine_report
+
+!> Report a named finite difference knob that no Hessian build consumed.
+!>
+!> The notice comes from the counter `n_hess_fd` (the builds that actually
+!> reached the numerical provider) and from the provider the engine used, so
+!> it states the same fact as the `Hessians` line of `report` and cannot
+!> contradict it: a non-zero `n_hess_fd` silences it, and a zero one only
+!> occurs when the step was handed to no finite difference build at all.  The
+!> claim is about the observed run, not about the selected method, so it stays
+!> true when the run stops before its first Hessian (budget exhaustion): a
+!> method that would have built one later simply reports that this run built
+!> none.  Nothing is printed when the user did not name a flag of the knobs,
+!> because the notice is about a knob the user asked for.
+!>
+!> The step (`hess_step`) and the SCC accuracy (`hess_acc`) are one family:
+!> the numerical provider consumes both and the `model`/`file` providers
+!> ignore both, so a single notice covers them and the gate has to accept a
+!> flag of **either** of them (`hess_step_source` **or** `hess_acc_source`).
+!> Looking only at `hess_step_source` left `--lts-sccacc` / `--lvib-sccacc`
+!> silent when they were the only knob given (`38-stage2b-fix2-review.md`
+!> LOW-1).
+subroutine engine_report_unused_hess_step(self, unit)
+   !> Engine
+   class(landscape_engine), intent(in) :: self
+   !> Output unit
+   integer, intent(in) :: unit
+
+   character(len=:), allocatable :: reason
+
+   reason = ""
+   if (self%n_hess_fd > 0) then
+      return
+   else if (.not. allocated(self%ctrl%hess_step_source) .and. &
+         &  .not. allocated(self%ctrl%hess_acc_source)) then
+      return
+   else if (allocated(self%hp)) then
+      if (allocated(self%hp%name)) then
+         if (self%hp%name /= 'numerical') then
+            reason = "the Hessian source '"//trim(self%hp%name)//&
+               & "' has no finite differences"
+         end if
+      end if
+   end if
+   if (len(reason) == 0) then
+      reason = "no numerical Hessian was built by this run"
+   end if
+   write(unit, '(1x,a,a,a)') "(not used: ", reason, ")"
+
+end subroutine engine_report_unused_hess_step
 
 end module xtb_landscape_engine

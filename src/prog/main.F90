@@ -105,7 +105,7 @@ module xtb_prog_main
    use xtb_landscape, only: run_landscape
    use xtb_landscape_settings, only: landscape_opt_settings, &
       & landscape_scan_settings, landscape_vib_settings, landscape_ts_settings, &
-      & landscape_irc_settings, &
+      & landscape_irc_settings, landscape_engine_control, &
       & landscape_opt_algorithm_from_name, landscape_conv_level_known, &
       & landscape_opt_algorithm_name, landscape_ts_method_name, &
       & landscape_irc_method_name, &
@@ -2357,6 +2357,80 @@ contains
                call env%error("The --lopt-hessian flag requires a source name", source)
             end if
 
+         case ('--lopt-max-steps')
+            ! Step budget of the minimisation (CLI redesign section 6.3).  The
+            ! field existed with a fixed default of 256, it was simply not
+            ! reachable from the command line; the mirror spelling of the scan
+            ! is `--lscan-max-steps`.
+            call select_runtyp(env, 'lopt', '--lopt-max-steps', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lset%max_steps = idum2
+               else
+                  call env%error("The --lopt-max-steps flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lopt-max-steps flag requires an integer", source)
+            end if
+
+         case ('--lopt-hess-step')
+            ! Finite difference step of the numerical Hessian (bohr, CLI
+            ! redesign section 6.3); the minimisation had no knob for it, the
+            ! field kept its default.  The scan mirror is `--lscan-hess-step`.
+            call select_runtyp(env, 'lopt', '--lopt-hess-step', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  call set_landscape_hess_step(env, lset%engine, ddum, &
+                     & '--lopt-hess-step', source)
+               else
+                  call env%error("The --lopt-hess-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lopt-hess-step flag requires a number", source)
+            end if
+
+         case ('--lopt-sccacc')
+            ! SCC accuracy of the displaced single points of the numerical
+            ! Hessian (CLI redesign section 6.3); the scan mirror is
+            ! `--lscan-sccacc`
+            call select_runtyp(env, 'lopt', '--lopt-sccacc', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lset%engine%hess_acc = ddum
+                  lset%engine%hess_acc_source = '--lopt-sccacc'
+               else
+                  call env%error("The --lopt-sccacc flag requires a number", source)
+               end if
+            else
+               call env%error("The --lopt-sccacc flag requires a number", source)
+            end if
+
+         case ('--lopt-restart')
+            ! Wavefunction restart policy of the engine (CLI redesign section
+            ! 6.3); the minimisation mirror of `--lscan-restart`
+            call select_runtyp(env, 'lopt', '--lopt-restart', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               select case (landscape_lowercase(sec))
+               case ('off')
+                  lset%engine%restart_mode = p_landscape_restart_off
+               case ('pin')
+                  lset%engine%restart_mode = p_landscape_restart_pin
+               case ('warm')
+                  lset%engine%restart_mode = p_landscape_restart_warm
+               case default
+                  call env%error("Unknown landscape restart policy '"//sec//"'", source)
+               end select
+            else
+               call env%error("The --lopt-restart flag requires off, pin or warm", source)
+            end if
+
          case ('--lscan')
             ! Landscape suite: relaxed or rigid scan (PLAN section 12).  The
             ! flag takes no positional argument; the scanned coordinates and
@@ -2606,6 +2680,41 @@ contains
                end if
             else
                call env%error("The --lscan-max-steps flag requires an integer", source)
+            end if
+
+         case ('--lscan-hess-step')
+            ! Finite difference step of the numerical Hessian of the scan
+            ! points (bohr, CLI redesign sections 6.3 and 7.2); the canonical
+            ! spelling, there is no older one for the scan
+            call select_runtyp(env, 'lscan', '--lscan-hess-step', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  call set_landscape_hess_step(env, lsset%engine, ddum, &
+                     & '--lscan-hess-step', source)
+               else
+                  call env%error("The --lscan-hess-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lscan-hess-step flag requires a number", source)
+            end if
+
+         case ('--lscan-sccacc')
+            ! SCC accuracy of the displaced single points of the numerical
+            ! Hessian of the scan points (CLI redesign section 6.3)
+            call select_runtyp(env, 'lscan', '--lscan-sccacc', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  lsset%engine%hess_acc = ddum
+                  lsset%engine%hess_acc_source = '--lscan-sccacc'
+               else
+                  call env%error("The --lscan-sccacc flag requires a number", source)
+               end if
+            else
+               call env%error("The --lscan-sccacc flag requires a number", source)
             end if
 
          case ('--lscan-hessian')
@@ -3005,15 +3114,37 @@ contains
                call env%error("The --lts-hessian-file flag requires a file name", source)
             end if
 
+         case ('--lts-hess-step')
+            ! Canonical spelling of the finite difference step of the
+            ! confirmation Hessian (bohr, CLI redesign section 7.2);
+            ! `--lts-step` is the older alias and both write the same field
+            ! through the shared setter
+            call select_runtyp(env, 'lts', '--lts-hess-step', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  call set_landscape_hess_step(env, ltset%engine, ddum, &
+                     & '--lts-hess-step', source)
+               else
+                  call env%error("The --lts-hess-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lts-hess-step flag requires a number", source)
+            end if
+
          case ('--lts-step')
-            ! Finite difference step of the confirmation Hessian (bohr); the
-            ! client side of M4 hard constraint 2 (H1).
+            ! Finite difference step of the confirmation Hessian (bohr); alias
+            ! of `--lts-hess-step` (CLI redesign sections 6.2 and 7.2), the
+            ! shared setter applies the alias conflict rule.  Keep the client
+            ! side of M4 hard constraint 2 (H1) working.
             call select_runtyp(env, 'lts', '--lts-step', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
-                  ltset%engine%hess_step = ddum
+                  call set_landscape_hess_step(env, ltset%engine, ddum, &
+                     & '--lts-step', source)
                else
                   call env%error("The --lts-step flag requires a number", source)
                end if
@@ -3030,6 +3161,7 @@ contains
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
                   ltset%engine%hess_acc = ddum
+                  ltset%engine%hess_acc_source = '--lts-sccacc'
                else
                   call env%error("The --lts-sccacc flag requires a number", source)
                end if
@@ -3681,14 +3813,37 @@ contains
                call env%error("The --lirc-hessian-file flag requires a file name", source)
             end if
 
+         case ('--lirc-hess-step')
+            ! Canonical spelling of the finite difference step of the
+            ! numerical Hessian (bohr, CLI redesign section 7.2); the older
+            ! `--lirc-step-hess` is kept as an alias and both write the same
+            ! field through the shared setter.  The canonical name separates
+            ! the FD displacement from `--lirc-step`, the arc length of the
+            ! reaction path
+            call select_runtyp(env, 'lirc', '--lirc-hess-step', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  call set_landscape_hess_step(env, lircset%engine, ddum, &
+                     & '--lirc-hess-step', source)
+               else
+                  call env%error("The --lirc-hess-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lirc-hess-step flag requires a number", source)
+            end if
+
          case ('--lirc-step-hess')
-            ! Finite difference step of the numerical Hessian (bohr)
+            ! Finite difference step of the numerical Hessian (bohr); alias of
+            ! `--lirc-hess-step` (CLI redesign sections 6.2 and 7.2)
             call select_runtyp(env, 'lirc', '--lirc-step-hess', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
-                  lircset%engine%hess_step = ddum
+                  call set_landscape_hess_step(env, lircset%engine, ddum, &
+                     & '--lirc-step-hess', source)
                else
                   call env%error("The --lirc-step-hess flag requires a number", source)
                end if
@@ -3704,6 +3859,7 @@ contains
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
                   lircset%engine%hess_acc = ddum
+                  lircset%engine%hess_acc_source = '--lirc-sccacc'
                else
                   call env%error("The --lirc-sccacc flag requires a number", source)
                end if
@@ -3761,14 +3917,35 @@ contains
                call env%error("The --lvib-hessian-file flag requires a file name", source)
             end if
 
+         case ('--lvib-hess-step')
+            ! Canonical spelling of the finite difference step of the
+            ! numerical Hessian (bohr, CLI redesign section 7.2);
+            ! `--lvib-step` is the older alias and both write the same field
+            ! through the shared setter
+            call select_runtyp(env, 'lvib', '--lvib-hess-step', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) ddum
+               if (idum == 0) then
+                  call set_landscape_hess_step(env, lvset%engine, ddum, &
+                     & '--lvib-hess-step', source)
+               else
+                  call env%error("The --lvib-hess-step flag requires a number", source)
+               end if
+            else
+               call env%error("The --lvib-hess-step flag requires a number", source)
+            end if
+
          case ('--lvib-step')
-            ! Finite difference step of the numerical Hessian (bohr)
+            ! Finite difference step of the numerical Hessian (bohr); alias of
+            ! `--lvib-hess-step` (CLI redesign sections 6.2 and 7.2)
             call select_runtyp(env, 'lvib', '--lvib-step', selected_runtyp, selected_runtyp_flag)
             call args%nextArg(sec)
             if (allocated(sec)) then
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
-                  lvset%engine%hess_step = ddum
+                  call set_landscape_hess_step(env, lvset%engine, ddum, &
+                     & '--lvib-step', source)
                else
                   call env%error("The --lvib-step flag requires a number", source)
                end if
@@ -3784,11 +3961,32 @@ contains
                read(sec, *, iostat=idum) ddum
                if (idum == 0) then
                   lvset%engine%hess_acc = ddum
+                  lvset%engine%hess_acc_source = '--lvib-sccacc'
                else
                   call env%error("The --lvib-sccacc flag requires a number", source)
                end if
             else
                call env%error("The --lvib-sccacc flag requires a number", source)
+            end if
+
+         case ('--lvib-restart')
+            ! Wavefunction restart policy of the engine (CLI redesign section
+            ! 6.3); the frequency task mirror of `--lts-restart`
+            call select_runtyp(env, 'lvib', '--lvib-restart', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               select case (landscape_lowercase(sec))
+               case ('off')
+                  lvset%engine%restart_mode = p_landscape_restart_off
+               case ('pin')
+                  lvset%engine%restart_mode = p_landscape_restart_pin
+               case ('warm')
+                  lvset%engine%restart_mode = p_landscape_restart_warm
+               case default
+                  call env%error("Unknown landscape restart policy '"//sec//"'", source)
+               end select
+            else
+               call env%error("The --lvib-restart flag requires off, pin or warm", source)
             end if
 
          case ('--lvib-odlr')
@@ -4384,6 +4582,48 @@ subroutine set_landscape_irc_algorithm(env, settings, name, owner, source)
    settings%method_was_set = .true.
 
 end subroutine set_landscape_irc_algorithm
+
+!> Set the finite difference step of the numerical Hessian of a task (bohr).
+!>
+!> Shared setter of the two spellings of every task that owns a Hessian step
+!> (CLI redesign sections 6.3 and 7.2): `--lts-step` and `--lts-hess-step`,
+!> `--lirc-step-hess` and `--lirc-hess-step`, `--lvib-step` and
+!> `--lvib-hess-step`; `--lopt-hess-step` and `--lscan-hess-step` are the only
+!> spelling of their task.  The alias rule is the one of the method selectors
+!> (section 4.3): the same value through either spelling is equivalent, a
+!> different value through **another** flag is an error that names the second
+!> flag, and a repeated flag keeps the last value.  The value is compared
+!> numerically, so `--lts-step 0.01 --lts-hess-step 1.0e-2` is the same
+!> request and not a conflict.
+subroutine set_landscape_hess_step(env, ctrl, step, owner, source)
+   !> Computational environment for the error report
+   type(TEnvironment), intent(inout) :: env
+   !> Engine control that carries the finite difference step
+   type(landscape_engine_control), intent(inout) :: ctrl
+   !> Finite difference step from the command line (bohr)
+   real(wp), intent(in) :: step
+   !> Flag that set the step (used by the conflict message)
+   character(len=*), intent(in) :: owner
+   !> Name of error producer
+   character(len=*), intent(in) :: source
+
+   character(len=32) :: requested, previous
+
+   if (allocated(ctrl%hess_step_source)) then
+      if (ctrl%hess_step_source /= owner .and. ctrl%hess_step /= step) then
+         write(requested, '(es14.6)') step
+         write(previous, '(es14.6)') ctrl%hess_step
+         call env%error("conflicting Hessian finite difference steps: "//&
+            & owner//" "//trim(adjustl(requested))//" bohr and "//&
+            & ctrl%hess_step_source//" "//trim(adjustl(previous))//" bohr", &
+            & source)
+         return
+      end if
+   end if
+   ctrl%hess_step = step
+   ctrl%hess_step_source = owner
+
+end subroutine set_landscape_hess_step
 
 !> Read up to four 1-based atom indices from a comma or blank separated list.
 !>

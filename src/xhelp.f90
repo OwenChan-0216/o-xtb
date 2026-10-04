@@ -312,6 +312,26 @@ subroutine help(iunit)
    "    based steps), one of numerical (default, central differences of the", &
    "    electronic gradient) or model (Lindh-D2 model Hessian)",&
    "",&
+   "--lopt-max-steps N",&
+   "    step budget of the minimisation (default 256)",&
+   "",&
+   "--lopt-hess-step VALUE",&
+   "    finite difference step of the numerical Hessian in bohr (default 0.005);", &
+   "    only --lopt-engine rfo builds a numerical Hessian; the other five", &
+   "    engines (including the default lbfgs) never do, and the value is", &
+   "    ignored for --lopt-hessian model or file.  The run echoes the", &
+   "    effective value and marks it as unused in that case.  The canonical", &
+   "    spelling, mirrored by --lscan-hess-step and by --lts-hess-step /", &
+   "    --lirc-hess-step / --lvib-hess-step for the other landscape tasks", &
+   "",&
+   "--lopt-sccacc VALUE",&
+   "    SCC accuracy of the displaced single points of the numerical Hessian", &
+   "    (default 0.3), consumed by the same engine and Hessian source as", &
+   "    --lopt-hess-step", &
+   "",&
+   "--lopt-restart MODE",&
+   "    wavefunction restart policy of the engine, off (default), pin or warm", &
+   "",&
    "--lscan",&
    "    scan an internal coordinate (distance, angle or dihedral) with the landscape", &
    "    task suite (src/landscape); a relaxed scan relaxes each scan point under a", &
@@ -371,6 +391,19 @@ subroutine help(iunit)
    "",&
    "--lscan-max-steps N",&
    "    step budget of the inner relaxation of every scan point (default 256)", &
+   "",&
+   "--lscan-hess-step VALUE",&
+   "    finite difference step of the numerical Hessian of the scan points in", &
+   "    bohr (default 0.005); only an inner minimiser of --lscan-method rfo", &
+   "    builds a numerical Hessian (the default lbfgs never does), a rigid", &
+   "    scan has no inner minimisation at all, and the value is ignored for", &
+   "    --lscan-hessian model or file.  The run echoes the effective value", &
+   "    and marks it as unused in those cases", &
+   "",&
+   "--lscan-sccacc VALUE",&
+   "    SCC accuracy of the displaced single points of the numerical Hessian", &
+   "    of the scan points (default 0.3), consumed by the same inner", &
+   "    minimiser and Hessian source as --lscan-hess-step", &
    "",&
    "--lscan-hessian SOURCE",&
    "    Hessian backend of the scan points, one of numerical (default), model or file",&
@@ -478,8 +511,13 @@ subroutine help(iunit)
    "--lts-hessian-file NAME",&
    "    file read by --lts-hessian file (TURBOMOLE Hessian layout)", &
    "",&
+   "--lts-hess-step VALUE",&
+   "    finite difference step of the numerical confirmation Hessian in bohr", &
+   "    (default 0.005); the canonical name of --lts-step", &
+   "",&
    "--lts-step VALUE",&
-   "    finite difference step of the numerical confirmation Hessian in bohr (default 0.005);", &
+   "    alias of --lts-hess-step: finite difference step of the numerical", &
+   "    confirmation Hessian in bohr (default 0.005);", &
    "    a mode inside 0 +/- 3 cm^-1 is re-decided with 0.002 bohr and sccacc 0.1", &
    "",&
    "--lts-sccacc VALUE",&
@@ -660,8 +698,14 @@ subroutine help(iunit)
    "--lirc-hessian-file NAME",&
    "    file read by --lirc-hessian file (TURBOMOLE Hessian layout)", &
    "",&
+   "--lirc-hess-step VALUE",&
+   "    finite difference step of the numerical Hessian in bohr (default 0.005);", &
+   "    the canonical name of --lirc-step-hess (not to be confused with", &
+   "    --lirc-step, the arc length of the reaction path)", &
+   "",&
    "--lirc-step-hess VALUE",&
-   "    finite difference step of the numerical Hessian in bohr (default 0.005)", &
+   "    alias of --lirc-hess-step: finite difference step of the numerical", &
+   "    Hessian in bohr (default 0.005)", &
    "",&
    "--lirc-sccacc VALUE",&
    "    SCC accuracy of the displaced single points of the Hessian (default 0.3)", &
@@ -685,11 +729,25 @@ subroutine help(iunit)
    "--lvib-hessian-file NAME",&
    "    file read by --lvib-hessian file (TURBOMOLE Hessian layout)", &
    "",&
+   "--lvib-hess-step VALUE",&
+   "    finite difference step of the numerical Hessian in bohr (default 0.005);", &
+   "    the canonical name of --lvib-step", &
+   "",&
    "--lvib-step VALUE",&
-   "    finite difference step of the numerical Hessian in bohr (default 0.005)", &
+   "    alias of --lvib-hess-step: finite difference step of the numerical", &
+   "    Hessian in bohr (default 0.005)", &
    "",&
    "--lvib-sccacc VALUE",&
    "    SCC accuracy of the displaced single points of the numerical Hessian (default 0.3)", &
+   "",&
+   "--lvib-restart MODE",&
+   "    wavefunction restart policy of the engine, off (default), pin or warm.", &
+   "    The finite difference sequence resets the wavefunction to the state it", &
+   "    entered the Hessian with before every displacement, so warm and pin", &
+   "    hand the provider the same start and produce a byte identical", &
+   "    `hessian` file; only off is distinguishable (it records the cold start", &
+   "    wavefunction).  The two spellings are kept, the equivalence is", &
+   "    asserted by the xtb/landscape-lvib-restart-warm check",&
    "",&
    "--lvib-odlr",&
    "    request the ODLR approximation; not implemented, the run reports the request", &

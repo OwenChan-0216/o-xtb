@@ -73,7 +73,7 @@ module xtb_landscape_tasks_irc
    use xtb_setparam, only : get_namespace
    use xtb_landscape_settings, only : landscape_irc_settings, landscape_vib_settings, &
       & landscape_opt_settings, landscape_engine_control, landscape_irc_method_name, &
-      & landscape_restart_name, landscape_hessian_update_name, &
+      & landscape_restart_name, landscape_hessian_update_name, landscape_lowercase, &
       & p_landscape_irc_gs, p_landscape_irc_lqa, p_landscape_irc_hpc, &
       & p_landscape_irc_eulerpc, landscape_log_failed
    use xtb_landscape_results, only : landscape_result, landscape_irc_result, &
@@ -141,6 +141,7 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
    logical :: fail, ok, relaxed_fwd, relaxed_bwd, have_bwd
    integer :: n_scf_fail, nlog, isign_fwd, isign_bwd, atom, cart
    integer :: n_relax_fwd, n_relax_bwd
+   character(len=:), allocatable :: unused_hess
 
    fail = .false.
    result%method = settings%method
@@ -173,6 +174,22 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
       ! are displaced single points or the Lindh-D2 model).
       write(env%unit, '(1x,a,a)') "Hessian source:           ", &
          & trim(settings%hessian_source)
+      ! CLI redesign sections 7.3 and 9.2: every flag that carries a unit must
+      ! echo its effective value and unit, and a knob that no code path of the
+      ! selected method reads must say so.  Both values come from the settings
+      ! object the engine is built from, not from the command line text.  The
+      ! predicate is the measured one of `35-stage2b-fix.md` section T1: every
+      ! integrator builds the initial Hessian of the reaction path from the
+      ! provider, and the provider ignores the finite difference step for
+      ! every other Hessian source.
+      write(env%unit, '(1x,a,es15.6,a)') "Hessian step:             ", &
+         & settings%engine%hess_step, " bohr"
+      write(env%unit, '(1x,a,es15.6)') "Hessian SCC accuracy:     ", &
+         & settings%engine%hess_acc
+      unused_hess = irc_unused_hessian_step(settings)
+      if (len(unused_hess) > 0) then
+         write(env%unit, '(1x,a,a,a)') "(not used: ", unused_hess, ")"
+      end if
       write(env%unit, '(1x,a,f12.3,a)') "electronic temperature:   ", &
          & settings%etemp, " K (frozen for the whole run)"
       ! D2 of the CLI redesign section 8.3: the default integrator is `hpc`,
@@ -1126,5 +1143,30 @@ pure function int_to_string(value) result(string)
    string = trim(buffer)
 
 end function int_to_string
+
+!> Why the finite difference parameters of the numerical Hessian are not used.
+!>
+!> Empty when this run consumes `settings%engine%hess_step` and
+!> `settings%engine%hess_acc`, otherwise a one line reason for the banner.
+!> Every integrator builds the initial Hessian of the reaction path from the
+!> provider, so a numerical source consumes the step; the provider ignores it
+!> for every other source.  Measured on the bent HCN transition state: all four
+!> integrators change `irc.log` with `--lirc-hess-step 0.2` (1 Hessian build),
+!> while `--lirc-hessian model` aborts at the transition state confirmation
+!> before the path is integrated and is byte identical with and without the
+!> step - see `docs/_simplify-recon/35-stage2b-fix.md` section T1.
+function irc_unused_hessian_step(settings) result(reason)
+   !> Reaction path settings
+   type(landscape_irc_settings), intent(in) :: settings
+   !> Empty when the finite difference step reaches a provider, else the reason
+   character(len=:), allocatable :: reason
+
+   reason = ""
+   if (landscape_lowercase(settings%hessian_source) /= 'numerical') then
+      reason = "the Hessian source '"//trim(settings%hessian_source)//&
+         & "' has no finite differences"
+   end if
+
+end function irc_unused_hessian_step
 
 end module xtb_landscape_tasks_irc

@@ -3411,6 +3411,106 @@ add_test("xtb/landscape-method-table"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-method-table
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# ---------------------------------------------------------------------------
+# CLI redesign section 6.3 (stage 2b): the unified name flags
+# ---------------------------------------------------------------------------
+#
+# The block of "unified name" flags of section 6.3 (`--lopt-max-steps`,
+# `--l*-hess-step`, `--l*-sccacc`, `--lopt-restart`, `--lvib-restart`) was
+# found to be missing entirely by finding R40 of the redesign and moved to
+# stage 2b.  Every one of these checks runs **two** flag combinations and
+# compares an observable result of the two runs (the reported budget or
+# energy, or the bytes of an output file), which is exactly the kind of check
+# `landscape_cli_check.py` implements for the meson build; the CMake build
+# drives the same script, as the `--method` checks above already do.
+#
+# `xtb/landscape-opt-knobs`: `--lopt-max-steps 1` exhausts the budget in the
+# first iteration (echo, unconverged, non-zero exit, different energy),
+# `--lopt-hess-step` and `--lopt-sccacc` move the final energy of an RFO run
+# (the default L-BFGS builds no Hessian, measured) and `--lopt-restart pin|
+# warm` changes the trajectory against `off`.
+add_test("xtb/landscape-opt-knobs"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optknobs;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-opt-knobs"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-opt-knobs
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `xtb/landscape-scan-knobs`: `--lscan-hess-step` and `--lscan-sccacc` change
+# the byte image of `xtbscan.log` of an RFO relaxation.
+add_test("xtb/landscape-scan-knobs"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=scanknobs;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-scan-knobs"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-scan-knobs
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `xtb/landscape-hess-step-alias`: the three canonical names of the finite
+# difference step (`--lts-hess-step`, `--lirc-hess-step`, `--lvib-hess-step`)
+# are equivalent to the older spellings given the same value (byte identical
+# output files) **and** the value has to change that output (so the comparison
+# cannot pass because both flags are ignored); a different value through the
+# two spellings aborts naming both flags, and a repeated flag keeps the last
+# value.  The `--lts`/`--lirc` runs need the transition state fixture.
+add_test("xtb/landscape-hess-step-alias"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=hessstepalias;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-hess-step-alias;${LANDSCAPE-HCN}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-hess-step-alias
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `xtb/landscape-restart-knobs`: `--lopt-restart` and `--lvib-restart` are
+# read back by the engine and change the trajectory (`xtb.trj`) and the
+# `hessian` file respectively.
+add_test("xtb/landscape-restart-knobs"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=restartknobs;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-restart-knobs"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-restart-knobs
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `xtb/landscape-hess-step-used`: the effectivity echo of the finite difference
+# parameters (`35-stage2b-fix.md` T1, extended by `37-stage2b-fix2.md` T1/T2 and
+# `39-stage2b-closeout.md` T1).
+# Every task that owns `--l*-hess-step` and `--l*-sccacc` echoes the effective
+# value from the settings object.  `--lopt`, `--lscan` and `--lirc` decide
+# whether the step is consumed before the run; `--lts` and `--lvib` derive the
+# `(not used: ...)` notice from the Hessian builds the engine actually
+# performed, so it is the same fact as the `Hessians` counter.  Cases that
+# catch a predicate written in the wrong direction: `--lts --lts-method prfo
+# --lts-no-verify` still consumes the step, `--lts-method autoneb
+# --lts-no-verify` runs to its natural end and does build a candidate Hessian
+# (the method-name guess reported it as unused), `--lvib-hessian model` ignores
+# the step while `--lvib-hessian numerical` must change the `hessian` file, and
+# a non-numerical Hessian source never consumes it.  The notice covers the
+# whole finite difference family (step **and** sccacc), so the `*-sccacc-only`
+# cases give the accuracy flag alone and require the notice when the run reads
+# neither knob.
+add_test("xtb/landscape-hess-step-used"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=hessused;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-hess-step-used;${LANDSCAPE-HCN};${LANDSCAPE-NH3};${LANDSCAPE-NH3-DOWN}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-hess-step-used
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `xtb/landscape-lvib-restart-warm`: the documented equivalence of
+# `--lvib-restart warm` and `pin` (fix report T2).  The finite difference
+# sequence resets the wavefunction before every displacement, so `warm` and
+# `pin` write a byte identical `hessian` file while `off` differs; the check
+# pins that the equivalence still holds (and that it is not a dead flag).
+add_test("xtb/landscape-lvib-restart-warm"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=lvibrestart;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lvib-restart-warm"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-lvib-restart-warm
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # `--help` and the parser must agree in **both** directions (CLI redesign
 # sections 8.4, 8.6 and 17.4).  `landscape_help_check.py` extracts the two
 # spelling sets from the sources with the rules the script prints itself, and
@@ -3587,6 +3687,12 @@ set_tests_properties(
   "xtb/landscape-method"
   "xtb/landscape-method-native"
   "xtb/landscape-method-table"
+  "xtb/landscape-opt-knobs"
+  "xtb/landscape-scan-knobs"
+  "xtb/landscape-hess-step-alias"
+  "xtb/landscape-restart-knobs"
+  "xtb/landscape-hess-step-used"
+  "xtb/landscape-lvib-restart-warm"
   "xtb/landscape-lopt-engine-echo"
   "xtb/landscape-lirc-default-echo"
   "xtb/landscape-lts-escape-echo"

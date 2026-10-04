@@ -640,6 +640,65 @@ test('landscape method table', python, env: landscape_env, args: [
   nh3_down_xyz,
 ])
 
+# CLI redesign section 6.3 (stage 2b): the "unified name" flags that the
+# stage 2 survey (finding R40) found missing.  Each check runs two flag
+# combinations and compares an observable result of the two runs, so the four
+# modes are implemented once in `landscape_cli_check.py` and the CMake build
+# (`xtb/landscape-opt-knobs` ...) drives the same script.
+#
+# `--lopt-max-steps`, `--lopt-hess-step`, `--lopt-sccacc` and
+# `--lopt-restart` each have to change the minimisation
+# (mirrors `xtb/landscape-opt-knobs`)
+test('landscape opt knobs', python, env: landscape_env, args: [
+  landscape_cli_check, 'optknobs', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-opt-knobs',
+])
+
+# `--lscan-hess-step` and `--lscan-sccacc` change the byte image of
+# `xtbscan.log` (mirrors `xtb/landscape-scan-knobs`)
+test('landscape scan knobs', python, env: landscape_env, args: [
+  landscape_cli_check, 'scanknobs', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-scan-knobs',
+])
+
+# the canonical `--lts-hess-step` / `--lirc-hess-step` / `--lvib-hess-step`
+# names and their older spellings: same value is equivalent (byte identical
+# output files that also differ from the default run), a different value is an
+# error naming both flags, a repeated flag keeps the last value
+# (mirrors `xtb/landscape-hess-step-alias`)
+test('landscape hess step alias', python, env: landscape_env, args: [
+  landscape_cli_check, 'hessstepalias', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-hess-step-alias', hcn_xyz,
+])
+
+# `--lopt-restart` and `--lvib-restart` are read back by the engine and change
+# the trajectory and the `hessian` file (mirrors
+# `xtb/landscape-restart-knobs`)
+test('landscape restart knobs', python, env: landscape_env, args: [
+  landscape_cli_check, 'restartknobs', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-restart-knobs',
+])
+
+# the effectivity echo of `--l*-hess-step` / `--l*-sccacc` (fix reports 35 and
+# 37, close-out report 39): the effective value is echoed from the settings
+# object and marked unused when the selected algorithm or Hessian source does
+# not consume it.  The notice covers the whole finite difference family, so the
+# `*-sccacc-only` cases give the accuracy flag alone (mirrors
+# `xtb/landscape-hess-step-used`)
+test('landscape hess step used', python, env: landscape_env, args: [
+  landscape_cli_check, 'hessused', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-hess-step-used', hcn_xyz, nh3_up_xyz,
+  nh3_down_xyz,
+])
+
+# `--lvib-restart warm` is not distinguishable from `pin` (fix report T2): the
+# `hessian` files are byte identical while `off` differs (mirrors
+# `xtb/landscape-lvib-restart-warm`)
+test('landscape lvib restart warm', python, env: landscape_env, args: [
+  landscape_cli_check, 'lvibrestart', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-cli-lvib-restart-warm',
+])
+
 # the native L-BFGS `--opt` path has to write the element symbols intact
 # (mirrors `xtb/native-opt-lbfgs-symbols`): upstream copied the geometry with
 # an intrinsic `TMolecule` assignment in `src/relaxation_engine.f90`, which

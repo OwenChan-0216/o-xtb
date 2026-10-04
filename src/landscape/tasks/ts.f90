@@ -176,6 +176,20 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
       ! it, so the source is reported for every method.
       write(env%unit, '(1x,a,a)') "Hessian source:           ", &
          & trim(settings%hessian_source)
+      ! CLI redesign sections 7.3 and 9.2: every flag that carries a unit must
+      ! echo its effective value and unit from the settings object the task
+      ! hands to the engine, not from the command line text.  Whether the
+      ! step reaches a build is **not** decidable here (the path searches
+      ! build their confirmation and their candidate Hessians at different
+      ! points of the run, and a run that exhausts its budget never gets
+      ! there), so the unused notice is not guessed from the method name: it
+      ! is derived from the builds the engine actually performed
+      ! (`engine%report_unused_hess_step`, printed with the cost counters at
+      ! the end of the run) - see `37-stage2b-fix2.md` section T1.
+      write(env%unit, '(1x,a,es15.6,a)') "Hessian step:             ", &
+         & settings%engine%hess_step, " bohr"
+      write(env%unit, '(1x,a,es15.6)') "Hessian SCC accuracy:     ", &
+         & settings%engine%hess_acc
       if (settings%method /= p_landscape_ts_dimer) then
          ! MEDIUM-1 of `31-m4-review-round2.md`: the escape from a minimum is
          ! reported with the run so the displacement is visible in the log.
@@ -275,6 +289,7 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
       call landscape_ts_band(env, mol, chk, engine, settings, result)
       if (settings%ljson) call write_json(env, settings, result, engine%n_scf_fail)
       call engine%report(env%unit)
+      call engine%report_unused_hess_step(env%unit)
       call engine%destroy()
       return
    end if
@@ -329,6 +344,7 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    end if
 
    call engine%report(env%unit)
+   call engine%report_unused_hess_step(env%unit)
    call engine%destroy()
 
    if (settings%ljson) call write_json(env, settings, result, n_scf_fail)

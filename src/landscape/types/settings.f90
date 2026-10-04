@@ -332,8 +332,25 @@ module xtb_landscape_settings
       integer :: restart_mode = p_landscape_restart_off
       !> Finite difference step of the numerical Hessian (bohr)
       real(wp) :: hess_step = 5.0e-3_wp
+      !> Flag that set `hess_step`, empty until one was named on the command
+      !> line; the state of the alias conflict check of
+      !> `xtb_prog_main::set_landscape_hess_step` (CLI redesign section 4.3,
+      !> same rule as `landscape_opt_settings%algorithm_source`).  Every task
+      !> that owns a finite difference step has its own engine control, so the
+      !> two spellings of one task (`--lts-step` and `--lts-hess-step`) share
+      !> this field while the tasks do not interfere.
+      character(len=:), allocatable :: hess_step_source
       !> SCC accuracy used while building the numerical Hessian
       real(wp) :: hess_acc = 0.3_wp
+      !> Flag that set `hess_acc`, empty until one was named on the command
+      !> line; the companion of `hess_step_source`.  The two finite
+      !> difference knobs are one family (the numerical provider consumes
+      !> both, the `model`/`file` providers ignore both), so the
+      !> "(not used: ...)" notice of
+      !> `landscape_engine%report_unused_hess_step` appears when the user
+      !> named **either** of them and the run consumed neither.  There is no
+      !> alias conflict check: every task spells its accuracy flag once.
+      character(len=:), allocatable :: hess_acc_source
       !> Finite difference step of the Hessian-vector product (bohr)
       real(wp) :: hvp_step = 5.0e-3_wp
       !> Use the ODLR approximation of the numerical Hessian
