@@ -4064,6 +4064,49 @@ add_test("xtb/landscape-level-axes"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-level-axes
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# `--blas-threads N` (a machine setting, not a run type selector) resolves the
+# thread setter of the linked BLAS at run time.  The check asserts that the
+# flag is silent by default, that it does not conflict with `--sp`, and that
+# the backend reads the requested value back - the falsifier, because the test
+# environment pins `OMP_NUM_THREADS=1` and a request of three can only read
+# back three if the setter was called.
+set(LANDSCAPE-ANTHRACENE "${CMAKE_CURRENT_BINARY_DIR}/landscape_anthracene.xyz")
+file(WRITE "${LANDSCAPE-ANTHRACENE}"
+  "24\nanthracene (anthracene.fixture)\n"
+  "C  1.212000  0.700000  0.000000\nC  0.000000  1.400000  0.000000\n"
+  "C -1.212000  0.700000  0.000000\nC -1.212000 -0.700000  0.000000\n"
+  "C  0.000000 -1.400000  0.000000\nC  1.212000 -0.700000  0.000000\n"
+  "C  3.637000  0.700000  0.000000\nC  2.425000  1.400000  0.000000\n"
+  "C  2.425000 -1.400000  0.000000\nC  3.637000 -0.700000  0.000000\n"
+  "C  6.062000  0.700000  0.000000\nC  4.850000  1.400000  0.000000\n"
+  "C  4.850000 -1.400000  0.000000\nC  6.062000 -0.700000  0.000000\n"
+  "H -2.148000  1.240000  0.000000\nH -2.148000 -1.240000  0.000000\n"
+  "H  0.000000  2.480000  0.000000\nH  0.000000 -2.480000  0.000000\n"
+  "H  2.425000  2.480000  0.000000\nH  2.425000 -2.480000  0.000000\n"
+  "H  4.850000  2.480000  0.000000\nH  4.850000 -2.480000  0.000000\n"
+  "H  7.000000  1.240000  0.000000\nH  7.000000 -1.240000  0.000000\n")
+add_test("xtb/landscape-blas-threads"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=blasthreads;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-blas-threads"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-blas-threads
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The behavioural half of the `--blas-threads` evidence: with
+# `OMP_NUM_THREADS=8` the default OpenBLAS pool of a pthread build is eight as
+# well, so the 66 basis functions of anthracene (66^3 just over the gemm
+# threading threshold) run oversubscribed 8x8.  `--blas-threads 1` measured
+# 14.15-14.95x faster; the assertion asks for the much wider 3x.  The test gets
+# its own environment because the other landscape checks pin one thread.
+add_test("xtb/landscape-blas-threads-timing"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=blastiming;${LANDSCAPE-E2E-XTB};${LANDSCAPE-ANTHRACENE};${CMAKE_CURRENT_BINARY_DIR}/landscape-blas-threads-timing"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-blas-threads-timing
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # The legacy file contract (CLI redesign section 3.9, R4): the suite writes
 # `.xtboptok`/`NOT_CONVERGED`, `xtbopt.log`, `xtblast.xyz` and
 # `compliance.dat` with the upstream semantics, and the three geometry names
@@ -4190,6 +4233,7 @@ set_tests_properties(
   "xtb/landscape-opt-level-bridge"
   "xtb/landscape-cycles-map"
   "xtb/landscape-level-axes"
+  "xtb/landscape-blas-threads"
   "xtb/landscape-file-contract-opt"
   "xtb/landscape-file-contract-opt-fail"
   "xtb/landscape-file-contract-vib"
@@ -4199,4 +4243,19 @@ set_tests_properties(
   "xtb/landscape-native-runtypes-unaffected"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
+# `--blas-threads` timing: the OpenMP x BLAS oversubscription only exists with
+# more than one thread, so this check needs its own environment instead of the
+# `OMP_NUM_THREADS=1` of every other landscape check.  `OPENBLAS_NUM_THREADS` is
+# pinned explicitly: it is the variable the help text tells users to export, it
+# wins over `OMP_NUM_THREADS` inside OpenBLAS, and an inherited value of one
+# would make both sides of the ratio serial and fail the 3x assertion for an
+# environment reason.  `RUN_SERIAL` keeps a `ctest -j` neighbour from distorting
+# the wall clock ratio the check measures.
+set_tests_properties(
+  "xtb/landscape-blas-threads-timing"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=8;OPENBLAS_NUM_THREADS=8"
+  RUN_SERIAL TRUE
 )

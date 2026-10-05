@@ -47,6 +47,8 @@ mode mirrors one CMake test one-to-one:
   irctermination <exe> <input> <rundir> -> xtb/landscape-irc-termination
   ircswap <exe> <input> <rundir>     -> xtb/landscape-irc-swap
   ircosc <exe> <input> <rundir>      -> xtb/landscape-irc-osc-window
+  blasthreads <exe> <input> <rundir>  -> xtb/landscape-blas-threads
+  blasthreads-timing <exe> <input> <rundir> -> xtb/landscape-blas-threads-timing
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
   method <exe> <input> <rundir> <hcn> <nh3> <nh3product>
@@ -107,6 +109,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 
 def decode(raw):
@@ -4627,6 +4630,175 @@ def check_cycles_mapping(exe, inp, rundir):
           "lvib and conflict refused" % (cycles, default))
 
 
+def blas_backend(output, requested):
+    """Check one `--blas-threads` read-back line and return the backend.
+
+    Three renderings are documented (`docs/_simplify-recon/78-blas-threads-
+    flag.md` section 1.1) and any of them is correct for the build under test:
+
+    * `blas threads: N (OpenBLAS, read back M)` - the OpenBLAS form,
+    * `blas threads: N (MKL, read back M)` - the MKL form with its getter,
+    * `blas threads: N (MKL, not readable)` - a setter without a getter,
+    * the warning `no OpenBLAS or MKL symbol found` - a reference BLAS, or a
+      statically linked BLAS whose symbol never enters the dynamic scope.
+
+    Whenever a count is printed back it must equal the requested one: the test
+    environment pins `OMP_NUM_THREADS=1`, so the pool already is one and only a
+    setter that ran can report the request.  The function returns the backend
+    label of the read-back form (`'OpenBLAS'`, `'MKL'`, or `None` for the
+    warning) so the caller can require the same backend in a second run.
+    """
+    match = re.search(
+        r"blas threads: (\d+) \((OpenBLAS|MKL), read back (\d+)\)", output
+    )
+    if match:
+        if int(match.group(1)) != requested:
+            fail("the read-back line reports a request of %s, not %d"
+                 % (match.group(1), requested), output)
+        if int(match.group(3)) != requested:
+            fail("--blas-threads %d did not read back %d (backend reported "
+                 "%s): with OMP_NUM_THREADS=1 the pool already is one, so "
+                 "only a setter that ran can report the requested value"
+                 % (requested, requested, match.group(3)), output)
+        return match.group(2)
+    if re.search(r"blas threads: %d \(MKL, not readable\)" % requested, output):
+        return "MKL"
+    if re.search(r"no OpenBLAS or MKL symbol found", output):
+        return None
+    fail("--blas-threads %d printed none of the documented lines (an OpenBLAS "
+         "or MKL read-back, `(MKL, not readable)`, or the no-symbol warning)"
+         % requested, output)
+
+
+def check_blas_threads(exe, inp, rundir):
+    """`--blas-threads N` sets the BLAS pool and the setting is observable.
+
+    Mirrors `xtb/landscape-blas-threads`.  `--blas-threads` goes through
+    `dlopen(NULL, RTLD_NOW)` + `dlsym`, so the printed line is the proof that
+    the runtime setter of the linked backend really ran:
+
+    * a plain `--gfn 2 --sp` prints no `blas threads:` line at all - the
+      default leaves the backend untouched (no banner, no behaviour change),
+
+    * `--sp --blas-threads 1` stays a single point: the flag is a machine
+      setting and must not go through `select_runtyp`, where it would be
+      reported as a run type conflict,
+
+    * the requested value is read back from the backend, so
+      `blas threads: 1 (OpenBLAS, read back 1)` has to appear,
+
+    * the falsifier: the test environment pins `OMP_NUM_THREADS=1`, so the
+      process pool starts at one and a request of three can only read back
+      three if the setter was called.  An implementation that resolves the
+      symbol but skips the call reads back one and fails here,
+
+    * an invalid value names the flag instead of claiming that nothing was
+      provided (the branch had no coverage before).
+
+    `blas_backend` accepts the three documented fallbacks so that a build
+    linked against MKL or the reference BLAS does not turn the registered
+    check red; the build under test links OpenBLAS and therefore exercises the
+    strict read-back form.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+
+    status, plain = run(exe, inp, ["--gfn", "2", "--sp", "--norestart"], rundir)
+    if status != 0:
+        fail("xtb --gfn 2 --sp terminated with status %d" % status, plain)
+    if re.search(r"blas threads:", plain):
+        fail("--gfn 2 --sp without --blas-threads printed a 'blas threads:' "
+             "line; the default must not touch the backend", plain)
+
+    status, one = run(
+        exe, inp,
+        ["--gfn", "2", "--sp", "--blas-threads", "1", "--norestart"],
+        rundir,
+    )
+    if status != 0:
+        fail("--sp --blas-threads 1 terminated with status %d (run type "
+             "conflict?)" % status, one)
+    backend = blas_backend(one, 1)
+
+    status, three = run(
+        exe, inp,
+        ["--gfn", "2", "--sp", "--blas-threads", "3", "--norestart"],
+        rundir,
+    )
+    if status != 0:
+        fail("--blas-threads 3 terminated with status %d" % status, three)
+    if blas_backend(three, 3) != backend:
+        fail("the symbol lookup changed between two runs of the same binary "
+             "(%r then %r)" % (backend, blas_backend(three, 3)), three)
+
+    check_error(exe, inp, rundir,
+                "--blas-threads needs at least one thread",
+                ["--gfn", "2", "--sp", "--blas-threads", "0", "--norestart"])
+    check_error(exe, inp, rundir,
+                "--blas-threads needs at least one thread",
+                ["--gfn", "2", "--sp", "--blas-threads", "-1", "--norestart"])
+    for bad in ("abc", "1.5"):
+        check_error(exe, inp, rundir,
+                    "--blas-threads needs an integer >= 1",
+                    ["--gfn", "2", "--sp", "--blas-threads", bad,
+                     "--norestart"])
+
+    print("blas threads: silent by default, no conflict with --sp, the backend "
+          "reports the requested value back, and invalid values name the flag")
+
+
+def check_blas_threads_timing(exe, inp, rundir):
+    """`--blas-threads 1` removes the OpenMP x BLAS oversubscription.
+
+    Mirrors `xtb/landscape-blas-threads-timing`.  The test runs with
+    `OMP_NUM_THREADS=8` and - crucially - an explicitly pinned
+    `OPENBLAS_NUM_THREADS=8`: that is the variable the `--help` block tells
+    users to export, and an inherited value of one would make both sides of the
+    ratio serial and fail the assertion for an environment reason.  The test is
+    `RUN_SERIAL` in CMake because the ratio is a wall clock measurement that a
+    parallel `ctest -j` neighbour would distort.  With the pool at eight the
+    GFN2 single point of a system just over the gemm threading threshold
+    (anthracene, 24 atoms, 66 basis functions, 66^3 > 262144) is oversubscribed
+    8x8.  Measured: 14.15-14.95x faster with `--blas-threads 1`
+    (`docs/_simplify-recon/80-blas-threads-validation.md`); the assertion asks
+    for 3x, a margin wide enough for a loaded machine.  A machine with fewer
+    than four CPUs has almost no pool to oversubscribe, so the check is skipped
+    there.
+    """
+    if (os.cpu_count() or 1) < 4:
+        print("blas threads timing: skipped, the machine has fewer than four "
+              "CPUs")
+        return
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+
+    def measure(args, repeats=2):
+        best = None
+        for _ in range(repeats):
+            start = time.monotonic()
+            status, output = run(
+                exe, inp,
+                ["--gfn", "2", "--sp", "--norestart"] + args,
+                rundir,
+            )
+            elapsed = time.monotonic() - start
+            if status != 0:
+                fail("the timing run %s failed with status %d"
+                     % (" ".join(args) or "(default)", status), output)
+            best = elapsed if best is None else min(best, elapsed)
+        return best
+
+    measure(["--blas-threads", "1"])  # warm up the page cache
+    default = measure([])
+    limited = measure(["--blas-threads", "1"])
+    if limited * 3.0 > default:
+        fail("--blas-threads 1 took %.3f s against the default %.3f s: less "
+             "than the required 3x speedup (OMP_NUM_THREADS=8, anthracene)"
+             % (limited, default))
+    print("blas threads timing: %.3f s default vs %.3f s with "
+          "--blas-threads 1 (%.1fx)" % (default, limited, default / limited))
+
+
 def check_level_axes(exe, inp, rundir):
     """A convergence level drives `e_tol`, `acc` and the step budget (3.5/R5).
 
@@ -4870,6 +5042,10 @@ def main():
         check_cycles_mapping(exe, inp, rundir)
     elif mode == "levelaxes":
         check_level_axes(exe, inp, rundir)
+    elif mode == "blasthreads":
+        check_blas_threads(exe, inp, rundir)
+    elif mode == "blastiming":
+        check_blas_threads_timing(exe, inp, rundir)
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

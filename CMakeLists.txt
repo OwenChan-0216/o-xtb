@@ -83,6 +83,22 @@ endif()
 find_package("LAPACK" REQUIRED)
 find_package("BLAS" REQUIRED)
 
+# `src/prog/main.F90` reaches the BLAS thread setter of the running process
+# through `dlopen`/`dlsym` (`--blas-threads`).  glibc 2.34 folded libdl into
+# libc, so the symbol is probed first and the extra library is only added where
+# the dynamic loader is not part of the standard libraries.
+include(CheckSymbolExists)
+check_symbol_exists(dlopen "dlfcn.h" XTB_DLOPEN_IN_LIBC)
+if(NOT XTB_DLOPEN_IN_LIBC)
+  find_library(XTB_DL_LIBRARY NAMES dl)
+  if(XTB_DL_LIBRARY)
+    set(XTB_DL_LIBRARIES "${XTB_DL_LIBRARY}")
+  else()
+    message(WARNING "dlopen/dlsym were not found: --blas-threads will report "
+      "that no OpenBLAS or MKL symbol is available")
+  endif()
+endif()
+
 
 if(NOT EXISTS "${PROJECT_BINARY_DIR}/include")
    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/include")
@@ -233,6 +249,7 @@ target_link_libraries(
    ${PROJECT_NAME}-exe
    PRIVATE
    "lib-${PROJECT_NAME}-static"
+   ${XTB_DL_LIBRARIES}
 )
 
 set_target_properties(

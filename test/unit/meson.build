@@ -140,6 +140,13 @@ endif
 # their runtime (PLAN appendix A).  The error branches keep the plain
 # environment, they never reach a calculation.
 landscape_env = xtbenv + ['OMP_NUM_THREADS=1']
+# The `--blas-threads` timing check is the one landscape test that needs more
+# than one thread: the OpenMP x BLAS oversubscription it measures only exists
+# with a multi thread pool.  `OPENBLAS_NUM_THREADS` is pinned explicitly because
+# it is the variable the help text tells users to export and it wins over
+# `OMP_NUM_THREADS` inside OpenBLAS, so an inherited value of one would make the
+# measurement serial on both sides.
+blas_timing_env = xtbenv + ['OMP_NUM_THREADS=8', 'OPENBLAS_NUM_THREADS=8']
 
 # CLI level smoke test of the new `--lopt` run type.  The water input is
 # generated in the build directory with the Python interpreter meson always
@@ -932,6 +939,28 @@ test('landscape cycles map', python, env: landscape_env, args: [
 test('landscape level axes', python, env: landscape_env, args: [
   landscape_cli_check, 'levelaxes', xtb_exe, h2o_xyz,
   landscape_cli_dir / 'landscape-level-axes',
+])
+# `--blas-threads N` (a machine setting, not a run type selector): silent by
+# default, no conflict with `--sp`, and the backend reads the requested value
+# back.  The timing needs a system just over the gemm threading threshold, so
+# it uses anthracene (24 atoms, 66 basis functions, 66^3 > 262144).
+anthracene_xyz = meson.current_build_dir() / 'landscape_anthracene.xyz'
+run_command(
+  python, '-c',
+  'import sys; open(sys.argv[1], "w").write("24\\nanthracene (anthracene.fixture)\\nC  1.212000  0.700000  0.000000\\nC  0.000000  1.400000  0.000000\\nC -1.212000  0.700000  0.000000\\nC -1.212000 -0.700000  0.000000\\nC  0.000000 -1.400000  0.000000\\nC  1.212000 -0.700000  0.000000\\nC  3.637000  0.700000  0.000000\\nC  2.425000  1.400000  0.000000\\nC  2.425000 -1.400000  0.000000\\nC  3.637000 -0.700000  0.000000\\nC  6.062000  0.700000  0.000000\\nC  4.850000  1.400000  0.000000\\nC  4.850000 -1.400000  0.000000\\nC  6.062000 -0.700000  0.000000\\nH -2.148000  1.240000  0.000000\\nH -2.148000 -1.240000  0.000000\\nH  0.000000  2.480000  0.000000\\nH  0.000000 -2.480000  0.000000\\nH  2.425000  2.480000  0.000000\\nH  2.425000 -2.480000  0.000000\\nH  4.850000  2.480000  0.000000\\nH  4.850000 -2.480000  0.000000\\nH  7.000000  1.240000  0.000000\\nH  7.000000 -1.240000  0.000000\\n")',
+  anthracene_xyz,
+  check: true,
+)
+test('landscape blas threads', python, env: landscape_env, args: [
+  landscape_cli_check, 'blasthreads', xtb_exe, h2o_xyz,
+  landscape_cli_dir / 'landscape-blas-threads',
+])
+# `is_parallel: false` because the assertion is a wall clock ratio that a
+# parallel `ctest -j`/`meson test -j` neighbour would distort.
+test('landscape blas threads timing', python, env: blas_timing_env,
+  is_parallel: false, args: [
+  landscape_cli_check, 'blastiming', xtb_exe, anthracene_xyz,
+  landscape_cli_dir / 'landscape-blas-threads-timing',
 ])
 # stage 3b: the legacy file contract (redesign section 3.9, R4) and the
 # `--ohess` failure path (section 3.9, T2)

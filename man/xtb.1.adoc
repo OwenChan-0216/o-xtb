@@ -933,6 +933,11 @@ GENERAL
 *-P, --parallel* 'INT'::
      number of parallel processes
 
+*--blas-threads* 'N'::
+     set the number of threads used by the linear algebra backend (OpenBLAS or
+     MKL) at run time and print the value read back; without the flag the
+     backend is left untouched
+
 *--define*::
      performs automatic check of input and terminate
 
@@ -985,6 +990,29 @@ very large systems (about 500 atoms upwards), where the serial matrix work
 dominates, `OMP_WAIT_POLICY=PASSIVE` with the pool left at the thread count
 measured slightly better. `MKL_NUM_THREADS` is ignored by a build linked against
 OpenBLAS and `OPENBLAS_DEFAULT_NUM_THREADS` measured a no-op.
+
+The same limit can be requested from inside the program, without any
+environment variable, with *--blas-threads* 'N': it calls the OpenBLAS (or
+MKL) runtime API through `dlopen`/`dlsym`, prints the thread count it read back
+from the backend and warns with `no OpenBLAS or MKL symbol found` when the
+linked backend exports no such symbol. That warning also covers a
+*statically* linked BLAS: its symbols exist only in `.symtab`, which is never
+part of the dynamic lookup scope, so the flag has no effect there although the
+symbol is present in the binary. Without the flag `xtb(1)` changes
+nothing. The runtime API matters because a pthread OpenBLAS sizes its pool in
+an ELF constructor that runs before `main()`, so a program cannot set it
+through the environment any more.
+
+Both API pairs are resolved by symbol name: `openblas_set_num_threads` with its
+getter `openblas_get_num_threads`, and the oneMKL pair `mkl_set_num_threads` /
+`mkl_get_max_threads` (the function `threadpoolctl` reads MKL's thread count
+with). MKL support is therefore written against the documented oneMKL names; no
+MKL is installed on the machine this option was developed on, so the MKL branch has
+never been executed against a real oneMKL; it was exercised with stub symbols only,
+and the OpenBLAS branch is the one verified by running it.
+*--blas-threads* and *-P, --parallel* are different knobs (*--parallel* sets the
+OpenMP thread count and, under an MKL build, the MKL pool as well); where both
+reach the same pool the flag that appears last on the command line wins.
 
 LOCAL FILES
 -----------

@@ -962,6 +962,11 @@ subroutine help(iunit)
    "-P, --parallel INT",&
    "    number of parallel processes",&
    "",&
+   "--blas-threads N",&
+   "    set the thread count of the linear algebra backend (OpenBLAS or MKL)",&
+   "    at run time and print the value read back; without the flag the",&
+   "    backend is left untouched (default)",&
+   "",&
    "--define",&
    "    performs automatic check of input and terminate",&
    "",&
@@ -1016,6 +1021,25 @@ subroutine help(iunit)
    "OMP_NUM_THREADS, the setting to use is",&
    "",&
    "export OPENBLAS_NUM_THREADS=1",&
+   "",&
+   "The same limit can be requested from inside the program, without any",&
+   "environment variable:",&
+   "",&
+   "xtb mol.xyz --blas-threads 1",&
+   "",&
+   "It resolves the OpenBLAS (or MKL) runtime API with dlopen/dlsym, calls it and",&
+   "prints the value read back; it does nothing at all unless the flag is given.",&
+   "A backend that exports no such symbol - the reference BLAS, or a statically",&
+   "linked BLAS, whose symbols are invisible to dlsym - is reported as 'no",&
+   "OpenBLAS or MKL symbol found' and the run continues.  Both API pairs are",&
+   "resolved by symbol name (openblas_set_num_threads and its getter, and the",&
+   "oneMKL pair mkl_set_num_threads / mkl_get_max_threads that threadpoolctl",&
+   "reads); this build links OpenBLAS, so the MKL branch has not been run here",&
+   "against a real oneMKL and is documented from the oneMKL names only.",&
+   "",&
+   "-P and --parallel set the OpenMP thread count (and, under an MKL build, the",&
+   "MKL pool as well), while --blas-threads writes the BLAS pool; where both",&
+   "reach the same knob the flag that appears last on the command line wins.",&
    "",&
    "For very large systems (about 500 atoms upwards), where the serial matrix",&
    "work dominates, OMP_WAIT_POLICY=PASSIVE with the pool left at <NCORE>",&

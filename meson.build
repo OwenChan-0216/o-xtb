@@ -138,10 +138,22 @@ xtb_dep_static = declare_dependency(
   version: meson.project_version(),
 )
 
+# `src/prog/main.F90` reaches the BLAS thread setter of the running process
+# through `dlopen`/`dlsym` (`--blas-threads`).  glibc 2.34 folded libdl into
+# libc, so probe first and only add the dynamic loader where it is needed.
+xtb_exe_deps = [xtb_dep_static]
+if not cc.links(
+  '''#include <dlfcn.h>
+     int main(void) { void *h = dlopen(0, 2); return h == 0; }''',
+  name: 'dlopen in libc',
+)
+  xtb_exe_deps += cc.find_library('dl', required: false)
+endif
+
 xtb_exe = executable(
   meson.project_name(),
   sources: prog,
-  dependencies: xtb_dep_static,
+  dependencies: xtb_exe_deps,
   link_language: 'fortran',
   install: install,
   fortran_args: [
