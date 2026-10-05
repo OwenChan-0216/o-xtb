@@ -1014,6 +1014,34 @@ and the OpenBLAS branch is the one verified by running it.
 OpenMP thread count and, under an MKL build, the MKL pool as well); where both
 reach the same pool the flag that appears last on the command line wins.
 
+`OMP_STACKSIZE` sets the stack size of the OpenMP worker threads - not the stack
+of the main thread, and not the same setting as `ulimit -s`, although the
+process stack limit does size the worker stacks too: measured, the worker threads
+get 2 MiB while `ulimit -s` is `unlimited` (glibc falls back to the pthread
+default) and the stock `ulimit -s 8192` gives them 8 MiB, so the `unlimited`
+setting is the smaller of the two. This matters because the GFN0 charge model can
+need a worker stack that grows with the system size: in the OpenMP loop over the
+Coulomb derivative `getCoulombDerivsCluster`, the array reduction
+`reduction(+:djdr, djdtr, djdL)` makes the compiler place each thread's private
+copy of the reduction arrays on the thread stack, `24*nat*(nat+1) + 96*(nat+1)`
+bytes for `nat` atoms, about `24*nat^2` bytes - 6 060 096 bytes, about 6 MB, at
+500 atoms. When that does not fit, the thread writes into its guard page and the
+process dies with `SIGSEGV`. There is no warning and no usable backtrace:
+measured, the run is completely silent at the smallest sizes that crash (0 bytes
+on stderr), and the single frame the runtime resolves is `gomp_thread_start`
+inside libgomp. The size at which this happens is a property of the environment
+and not of the code: measured with two threads, the first size that crashes is
+about 290 atoms with a 2 MiB worker stack and about 588 atoms with the stock
+8 MiB one, while the formula above is the portable statement. `--gfn 0` reaches
+the limit first (GFN1, GFN2 and GFN-FF ran clean at 500 and 598 atoms, and GFN2
+also at 1001 atoms, with the same thread counts), but this is a stack size issue
+and not a method issue: with `ulimit -s 4096` even a single threaded run of the
+same system crashes. The workaround is `export OMP_STACKSIZE=512M`, or a larger
+process stack limit such as `ulimit -s 65536`; it was verified at 290 and 500
+atoms and with the official 6.7.1 binary, where the parallel run then reproduces
+the serial energy. A fixed generous value is enough, because the requirement
+grows with the atom count; *--help* suggests `export OMP_STACKSIZE=4G`.
+
 LOCAL FILES
 -----------
 
