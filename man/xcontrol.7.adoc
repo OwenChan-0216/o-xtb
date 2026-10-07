@@ -2,6 +2,8 @@ XCONTROL(7)
 ===========
 :doctype: manpage
 
+// Modified by the o-xtb landscape task suite, 2026.
+
 NAME
 ----
 xcontrol - instruction file for `xtb(1)` version 6.0 and newer

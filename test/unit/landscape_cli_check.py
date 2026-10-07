@@ -1,9 +1,26 @@
 #!/usr/bin/env python3
-"""CLI level checks of the landscape suite for the meson build.
+#
+# This file is part of xtb.
+#
+# Copyright (C) 2026 xtb contributors
+#
+# xtb is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# xtb is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with xtb.  If not, see <https://www.gnu.org/licenses/>.
+"""CLI level checks of the landscape suite.
 
 The CMake build drives these checks with small `cmake -P` scripts
-(`test/unit/CMakeLists.txt`); meson cannot inspect the output of a test, so the
-same checks are implemented here and invoked as meson test programs.  Every
+(`test/unit/CMakeLists.txt`); a `cmake -P` script cannot inspect the output of a
+test, so the checks live here and are invoked as test programs.  Every
 mode mirrors one CMake test one-to-one:
 
   energy <exe> <input> <rundir>       -> xtb/landscape-opt-energy
@@ -102,8 +119,8 @@ suite tasks and are implemented here once for both builds; their modes are
                                         xtb/landscape-cycles-map,
                                         xtb/landscape-level-axes
 
-The environment (XTBPATH) is inherited from the meson test environment, exactly
-like in the CMake build.
+The environment (XTBPATH) is inherited from the test environment, exactly as in
+the rest of the suite.
 """
 
 import json
