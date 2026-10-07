@@ -21,6 +21,8 @@ mode mirrors one CMake test one-to-one:
   strictunknown <exe> <input> <rundir> -> xtb/landscape-strict-unknown
   color  <exe> <input> <rundir>       -> xtb/landscape-color
   gfn    <exe> <input> <rundir>       -> xtb/landscape-gfn-value
+  dockgfn <exe> <inputA> <rundir> <inputB>
+                                     -> xtb/landscape-dock-gfn-value
   echo <exe> <input> <rundir> <case>
                                      -> xtb/landscape-fc-echo,
                                          xtb/landscape-lopt-engine-echo,
@@ -799,6 +801,146 @@ def check_gfn(exe, inp, rundir):
             fail("an xcontrol $gfn method=%s did not match --gfn %s"
                  % (value, value), output)
         print("xcontrol $gfn method=%s matches --gfn %s" % (value, value))
+
+
+def check_dock_gfn(exe, mol_a, rundir, mol_b):
+    """`oxtb dock` validates its `--gfn` with the shared decoder.
+
+    Mirrors `xtb/landscape-dock-gfn-value`.  `dock` is a submodule of its own:
+    `src/prog/primary.f90` dispatches on `argv[1]` and never enters `xtbMain`,
+    so the strict `--gfn` of the main program cannot see the docking command
+    line.  `src/prog/dock.f90` had four bare `if` statements instead, without
+    an `else`: every value they did not match left `optlvl` at its GFN2 default
+    and the run silently computed GFN2 - including the legal `--gfn FF` of the
+    main program, i.e. one flag with two meanings depending on the submodule.
+
+    The two entries of the docking module (`--gfn <value>` and its documented
+    spelling `--optlvl gfn <value>`) now call the same
+    `gfn_method_from_literal`/`gfn_method_error_message` pair as the main
+    program, and this check pins the aligned behaviour on both:
+
+    * an unknown spelling aborts with the shared list of valid values;
+    * `0` aborts with the docking message `GFN0 is not supported for docking`
+      and *not* with the shared text: GFN0 is a docking restriction, not an
+      unknown spelling;
+    * `1`, `2` and `ff` select their method, case insensitively, so `FF` is
+      GFN-FF exactly as in the main program, and the no-`--gfn` default stays
+      GFN2.
+
+    `--fast` shrinks the search (`maxgen 7`, `n_opt 4`, measured 0.5 s instead
+    of 16 s) and is orthogonal to the flag under test; the method line is
+    printed before the search starts.  Every run is bounded by a timeout, so a
+    hang cannot block the suite.
+    """
+    valid_hint = ("valid values are 0 (GFN0-xTB), 1 (GFN1-xTB), "
+                  "2 (GFN2-xTB) and ff (GFN-FF)")
+    method_line = re.compile(r"Method for final opts\.\s*:\s*(\S+)")
+
+    def dock(args, label):
+        directory = os.path.join(rundir, label)
+        shutil.rmtree(directory, ignore_errors=True)
+        os.makedirs(directory, exist_ok=True)
+        try:
+            proc = subprocess.run(
+                [exe, "dock", mol_a, mol_b] + args,
+                cwd=directory,
+                capture_output=True,
+                text=False,
+                timeout=300,
+            )
+        except subprocess.TimeoutExpired:
+            fail("dock %s did not finish" % " ".join(args))
+        return proc.returncode, decode(proc.stdout) + decode(proc.stderr)
+
+    def method(output):
+        match = method_line.search(output)
+        return match.group(1) if match else None
+
+    # (1) every illegal spelling is refused by both entries with the shared text
+    for value in ("zzz", "ffn", "02", "2.0"):
+        status, output = dock(["--gfn", value, "--fast"],
+                              "illegal-gfn-" + re.sub(r"[^A-Za-z0-9]+", "_", value))
+        if status == 0:
+            fail("dock --gfn %r was accepted" % value, output)
+        if "unknown method" not in output or valid_hint not in output:
+            fail("dock --gfn %r did not print the shared refusal" % value, output)
+        print("dock --gfn %r refused with status %d" % (value, status))
+
+    status, output = dock(["--optlvl", "gfn", "zzz", "--fast"], "illegal-optlvl")
+    if status == 0:
+        fail("dock --optlvl gfn zzz was accepted", output)
+    if "unknown method" not in output or valid_hint not in output:
+        fail("dock --optlvl gfn zzz did not print the shared refusal", output)
+    print("dock --optlvl gfn zzz refused with status %d" % status)
+
+    # (2) the missing argument is an error on both entries, like in the main
+    # program, and not a silent default either
+    for args, label in ((["--fast", "--gfn"], "missing-gfn"),
+                        (["--fast", "--optlvl", "gfn"], "missing-optlvl")):
+        status, output = dock(args, label)
+        if status == 0:
+            fail("dock %s was accepted" % " ".join(args), output)
+        if "No method provided for --gfn option" not in output:
+            fail("dock %s did not name the missing method" % " ".join(args),
+                 output)
+        print("dock %s refused with status %d" % (" ".join(args), status))
+
+    # (3) GFN0 keeps the docking message: the literal is a legal one, the
+    # restriction is the docking module's own
+    for args, label in ((["--gfn", "0", "--fast"], "gfn0"),
+                        (["--optlvl", "gfn", "0", "--fast"], "optlvl-gfn0")):
+        status, output = dock(args, label)
+        if status == 0:
+            fail("dock %s was accepted" % " ".join(args), output)
+        if "GFN0 is not supported for docking" not in output:
+            fail("dock %s lost the docking GFN0 message" % " ".join(args),
+                 output)
+        if "unknown method" in output:
+            fail("dock %s answered GFN0 with the shared refusal"
+                 % " ".join(args), output)
+        print("dock %s refused with the docking GFN0 message" % " ".join(args))
+
+    # (4) the legal spellings select their method; `Ff` pins the case
+    # insensitivity of the shared decoder on the docking route (`ff` is the
+    # only literal that has letters, `GFN2` is not a legal spelling on either
+    # route).  The energy of the lowest interaction is read as well: on this
+    # fixture GFN1, GFN2 and GFN-FF give -4.96, -5.17 and -6.47 kcal/mol, so
+    # `FF` equal to `ff` and different from `2` proves that the four `if`
+    # statements of the old code did not merely mislabel the result.
+    energy_line = re.compile(r"Lowest Interaction Energy: +(-?[0-9]+\.[0-9]+)")
+    energies = {}
+    for args, expected, label in (([], "gfn2", "default"),
+                                  (["--gfn", "1"], "gfn1", "gfn1"),
+                                  (["--gfn", "2"], "gfn2", "gfn2"),
+                                  (["--gfn", "ff"], "gfnff", "gfnff"),
+                                  (["--gfn", "FF"], "gfnff", "gfnff-upper"),
+                                  (["--gfn", "Ff"], "gfnff", "gfnff-mixed"),
+                                  (["--optlvl", "gfn", "1"], "gfn1", "optlvl-gfn1")):
+        status, output = dock(args + ["--fast"], "legal-" + label)
+        if status != 0:
+            fail("dock %s failed with status %d" % (" ".join(args), status),
+                 output)
+        selected = method(output)
+        if selected != expected:
+            fail("dock %s selected %r instead of %r"
+                 % (" ".join(args), selected, expected), output)
+        match = energy_line.search(output)
+        if not match:
+            fail("dock %s printed no lowest interaction energy"
+                 % " ".join(args), output)
+        energies[label] = match.group(1)
+        print("dock %s -> %s (%s kcal/mol)"
+              % (" ".join(args) or "(no --gfn)", selected, energies[label]))
+
+    if energies["gfnff"] != energies["gfnff-upper"]:
+        fail("dock --gfn ff (%s) and --gfn FF (%s) differ"
+             % (energies["gfnff"], energies["gfnff-upper"]))
+    if energies["gfn1"] == energies["gfn2"]:
+        fail("GFN1 and GFN2 give the same energy on the fixture, so the method "
+             "check cannot falsify a wrong dispatch")
+    if energies["gfnff"] in (energies["gfn1"], energies["gfn2"]):
+        fail("GFN-FF gives the energy of GFN1 or GFN2 on the fixture, so the "
+             "method check cannot falsify a wrong dispatch")
 
 
 def compare_enum_case(exe, inp, rundir, label, result, pattern, upper, lower):
@@ -5090,6 +5232,10 @@ def main():
         check_color(exe, inp, rundir)
     elif mode == "gfn":
         check_gfn(exe, inp, rundir)
+    elif mode == "dockgfn":
+        if len(rest) < 1:
+            fail("the dockgfn mode needs the second geometry")
+        check_dock_gfn(exe, inp, rundir, rest[0])
     elif mode == "echo":
         if len(rest) < 1:
             fail("the echo mode needs a case name")

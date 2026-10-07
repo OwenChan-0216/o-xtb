@@ -4240,6 +4240,27 @@ add_test("xtb/landscape-gfn-value"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-gfn-value
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# `oxtb dock` carries its own argument parser in `src/prog/dock.f90`, and
+# `src/prog/primary.f90` dispatches on `argv[1]`, so a docking command line
+# never enters `xtbMain` and the strict `--gfn` of the main program cannot see
+# it.  The docking copy was four bare `if` statements without an `else`, so
+# `--gfn zzz`, `ffn`, `02`, `2.0` - and the legal `--gfn FF` of the main
+# program - silently ran the GFN2 default: one flag, two meanings, depending on
+# the submodule.  Both docking entries (`--gfn <value>` and its documented
+# spelling `--optlvl gfn <value>`) now call the shared
+# `gfn_method_from_literal`/`gfn_method_error_message` pair, and GFN0 keeps its
+# own docking message instead of the shared one (GFN0 is a docking restriction,
+# not an unknown spelling).  The check runs the documented `oxtb dock <a> <b>`
+# with two waters and `--fast` (`maxgen 7`, `n_opt 4`), which keeps the whole
+# check at a few seconds.
+add_test("xtb/landscape-dock-gfn-value"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=dockgfn;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-dock-gfn-value;${LANDSCAPE-H2O}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-dock-gfn-value
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # 340x OpenMP anti-scaling of many small single points out of the picture
 # (AGENTS.md section 6.8).  The stage 1 CLI checks of the same family
@@ -4307,6 +4328,7 @@ set_tests_properties(
   "xtb/landscape-vib-compliance-skip"
   "xtb/landscape-native-runtypes-unaffected"
   "xtb/landscape-gfn-value"
+  "xtb/landscape-dock-gfn-value"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

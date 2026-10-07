@@ -17,6 +17,8 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+! Modified by the o-xtb landscape task suite, 2026.
+
 ! Molecule A and B contain always the CMA transformed coords.
 ! Every structure is saved as array(1:6) where (1:3) are the
 ! translation of B starting at the origin and (4:6) are the
@@ -508,10 +510,7 @@ contains
             case ('gfn')
                call args%nextArg(trd)
                if (allocated(trd)) then
-                  if (trd == '0') then; optlvl = 'gfn0'; call set_gfn(env, 'method', '0'); end if
-                  if (trd == '1') then; optlvl = 'gfn1'; call set_gfn(env, 'method', '1'); end if
-                  if (trd == '2') then; optlvl = 'gfn2'; call set_gfn(env, 'd4', 'true'); end if
-                  if (trd == 'ff') optlvl = 'gfnff'
+                  call set_method_from_literal(env, trd)
                else
                   call env%error("No method provided for --gfn option", source)
                end if
@@ -538,10 +537,7 @@ contains
          case ('--gfn')
             call args%nextArg(trd)
             if (allocated(trd)) then
-               if (trd == '0') then; optlvl = 'gfn0'; call set_gfn(env, 'method', '0'); end if
-               if (trd == '1') then; optlvl = 'gfn1'; call set_gfn(env, 'method', '1'); end if
-               if (trd == '2') then; optlvl = 'gfn2'; call set_gfn(env, 'd4', 'true'); end if
-               if (trd == 'ff') optlvl = 'gfnff'
+               call set_method_from_literal(env, trd)
             else
                call env%error("No method provided for --gfn option", source)
             end if
@@ -661,6 +657,52 @@ contains
       end do
 
    end subroutine parseArguments
+
+   !> Select the method of the final optimisations from one `--gfn` literal.
+   !!
+   !! `--gfn <value>` and its documented spelling `--optlvl gfn <value>` both
+   !! reach this routine, so the two entries cannot drift apart.  The literal is
+   !! decoded by `gfn_method_from_literal` of `xtb_setmod` - the same routine
+   !! that validates `--gfn` in the main program and `$gfn method=` in an
+   !! xcontrol file - and an unknown value is refused with the shared message.
+   !! The four bare `if` statements this replaces had no `else`, so an unknown
+   !! value silently kept the GFN2 default of `optlvl` and the run computed a
+   !! method the caller had not asked for.
+   !!
+   !! GFN0 is a docking restriction rather than a spelling: the literal is
+   !! accepted here like any other method and `xtbDock` refuses it later with
+   !! the docking message, so that text stays the one users see.
+   !!
+   !! @param[in]    env    calculation environment
+   !! @param[in]    value  method as typed after `--gfn` / `--optlvl gfn`
+   subroutine set_method_from_literal(env, value)
+
+      !> Name of error producer
+      character(len=*), parameter :: source = "prog_docking_parseArguments"
+
+      !> Calculation environment
+      type(TEnvironment), intent(inout) :: env
+
+      !> Method literal of the command line
+      character(len=*), intent(in) :: value
+
+      select case (gfn_method_from_literal(value))
+      case (0)
+         optlvl = 'gfn0'
+         call set_gfn(env, 'method', '0')
+      case (1)
+         optlvl = 'gfn1'
+         call set_gfn(env, 'method', '1')
+      case (2)
+         optlvl = 'gfn2'
+         call set_gfn(env, 'd4', 'true')
+      case (p_gfn_method_ff)
+         optlvl = 'gfnff'
+      case default
+         call env%error(gfn_method_error_message(value), source)
+      end select
+
+   end subroutine set_method_from_literal
 
    !> Header for this submodule
    subroutine dockingHeader(unit)
