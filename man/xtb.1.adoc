@@ -984,14 +984,29 @@ since the `XTBHOME` variable is not used in production runs.
 `OMP_NUM_THREADS` sets the number of OpenMP threads. A threaded BLAS is the
 largest performance trap on multi core machines: the OpenMP threads and the BLAS
 thread pool multiply, and an idle pool spins between calls. Measured on a 24 atom
-GFN2 single point at eight threads: 0.69 s with the pool at eight threads,
-0.019 s with the pool at one and 0.019 s with a single OpenMP thread, so the pool
-and not the thread count was the problem. On a machine whose pthread OpenBLAS
-build sizes its pool from `OMP_NUM_THREADS`, set `OPENBLAS_NUM_THREADS=1`. For
-very large systems (about 500 atoms upwards), where the serial matrix work
-dominates, `OMP_WAIT_POLICY=PASSIVE` with the pool left at the thread count
-measured slightly better. `MKL_NUM_THREADS` is ignored by a build linked against
-OpenBLAS and `OPENBLAS_DEFAULT_NUM_THREADS` measured a no-op.
+GFN2 single point at `OMP_NUM_THREADS=8`, the settings that recover the loss
+differ in strength, and the strongest one comes first:
+
+. *before the process starts*, `export OPENBLAS_NUM_THREADS=1` (19 ms). The
+  environment variable is consumed while the OpenBLAS pool is created, in an ELF
+  constructor that runs before `main()`, so the shell has to export it - the
+  program cannot set it in time.
+. Next, *--blas-threads* 'N' together with `OMP_WAIT_POLICY=PASSIVE` or
+  `GOMP_SPINCOUNT=0` (25 ms / 23 ms; both are read at start-up as well). The flag
+  alone measures 102 ms, 5.4x the environment variable: it resizes the work
+  partition of the pool through the runtime API, but the pool itself was already
+  built at eight threads before `main()`, and what remains is the OpenMP teams
+  spinning between the calls, which is exactly what the wait policy and the spin
+  count control. Leaving everything at its default measures 663 ms.
+. The larger the system, the smaller the gap: at 501 atoms, where the serial
+  matrix work dominates, *--blas-threads 1* measures 1.8x the
+  `OPENBLAS_NUM_THREADS=1` time (1285 ms against 705 ms). On a large system the
+  pool should therefore stay threaded - pinning it to one thread is a loss
+  there - and `OMP_WAIT_POLICY=PASSIVE` with the pool left at the thread count
+  measured best.
+
+`MKL_NUM_THREADS` is ignored by a build linked against OpenBLAS and
+`OPENBLAS_DEFAULT_NUM_THREADS` measured a no-op.
 
 The same limit can be requested from inside the program, without any
 environment variable, with *--blas-threads* 'N': it calls the OpenBLAS (or
@@ -1000,10 +1015,7 @@ from the backend and warns with `no OpenBLAS or MKL symbol found` when the
 linked backend exports no such symbol. That warning also covers a
 *statically* linked BLAS: its symbols exist only in `.symtab`, which is never
 part of the dynamic lookup scope, so the flag has no effect there although the
-symbol is present in the binary. Without the flag `xtb(1)` changes
-nothing. The runtime API matters because a pthread OpenBLAS sizes its pool in
-an ELF constructor that runs before `main()`, so a program cannot set it
-through the environment any more.
+symbol is present in the binary. Without the flag `xtb(1)` changes nothing.
 
 Both API pairs are resolved by symbol name: `openblas_set_num_threads` with its
 getter `openblas_get_num_threads`, and the oneMKL pair `mkl_set_num_threads` /

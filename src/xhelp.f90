@@ -1016,13 +1016,24 @@ subroutine help(iunit)
    "",&
    "A threaded BLAS is the largest performance trap on multi core machines: the",&
    "OpenMP threads and the BLAS thread pool multiply, and an idle pool spins",&
-   "between the calls.  Measured here on a 24 atom GFN2 single point at eight",&
-   "threads: 0.69 s with the pool at eight, 0.019 s with the pool at one, and",&
-   "0.019 s with a single OpenMP thread - the pool, not the thread count, was",&
-   "the problem.  On a machine whose pthread OpenBLAS build sizes its pool from",&
-   "OMP_NUM_THREADS, the setting to use is",&
+   "between the calls.  Measured here on a 24 atom GFN2 single point at",&
+   "OMP_NUM_THREADS=8, these are the settings that recover the loss, in this",&
+   "order of effect:",&
    "",&
-   "export OPENBLAS_NUM_THREADS=1",&
+   "  1) export OPENBLAS_NUM_THREADS=1        19 ms   strongest",&
+   "  2) --blas-threads 1                     102 ms   5.4x slower than 1)",&
+   "     + OMP_WAIT_POLICY=PASSIVE            25 ms   about 1.3x",&
+   "     + GOMP_SPINCOUNT=0                   23 ms",&
+   "     no flag (pool left at eight)         663 ms",&
+   "",&
+   "OPENBLAS_NUM_THREADS is consumed while the OpenBLAS pool is created, in an",&
+   "ELF constructor that runs before main, so the shell has to export it before",&
+   "the process starts - the program cannot set it in time (OMP_WAIT_POLICY and",&
+   "GOMP_SPINCOUNT are read at start-up as well).  --blas-threads resizes the",&
+   "work partition of that pool from inside the run, but the pool itself was",&
+   "already built at eight threads, and what remains is the OpenMP teams",&
+   "spinning between the calls, which the wait policy and the spin count",&
+   "control.",&
    "",&
    "The same limit can be requested from inside the program, without any",&
    "environment variable:",&
@@ -1043,11 +1054,14 @@ subroutine help(iunit)
    "MKL pool as well), while --blas-threads writes the BLAS pool; where both",&
    "reach the same knob the flag that appears last on the command line wins.",&
    "",&
-   "For very large systems (about 500 atoms upwards), where the serial matrix",&
-   "work dominates, OMP_WAIT_POLICY=PASSIVE with the pool left at <NCORE>",&
-   "measured slightly better.  MKL_NUM_THREADS and OPENBLAS_DEFAULT_NUM_THREADS",&
-   "do not help: the first is ignored by a build linked against OpenBLAS, the",&
-   "second measured a no-op here.",&
+   "The larger the system, the smaller the gap: at 501 atoms --blas-threads 1",&
+   "measures 1.8x the OPENBLAS_NUM_THREADS=1 time (1285 ms against 705 ms), as",&
+   "the serial matrix work comes to dominate.  So on a large system the pool",&
+   "should stay threaded: pinning it to one thread is a loss there, and",&
+   "OMP_WAIT_POLICY=PASSIVE with the pool left at the thread count measured",&
+   "best.  MKL_NUM_THREADS and",&
+   "OPENBLAS_DEFAULT_NUM_THREADS do not help: the first is ignored by a build",&
+   "linked against OpenBLAS, the second measured a no-op here.",&
    "",&
    "Output Conventions:",&
    "",&

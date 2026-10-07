@@ -37,6 +37,17 @@ project(
 # symbol prefix of the sources is deliberately not renamed).
 set(XTB_EXE_NAME "oxtb")
 
+# Base name of the installed libraries (`liboxtb.a`, `liboxtb.so.6.7.1`).
+# The project is still called `o-xtb` and the command still `oxtb`; only the
+# *artifact* name is shortened.  It has to be set explicitly because CMake
+# derives a library name from `${PROJECT_NAME}`, which would produce the
+# awkward `libo-xtb.*`.  The library **file name** is a published interface
+# (the `xtb-python` wheel opens `libxtb.so` by name, and distribution recipes
+# reference the archive directly), so the install step additionally creates
+# compatibility symlinks under the historical `libxtb.*` names - see the
+# `XTB_COMPAT_LINKS` block below the installation rules.
+set(XTB_LIB_NAME "oxtb")
+
 # Follow GNU conventions for installing directories
 include(GNUInstallDirs)
 
@@ -190,7 +201,7 @@ set_target_properties(
    Fortran_MODULE_DIRECTORY "${PROJECT_BINARY_DIR}/include"
    ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
    POSITION_INDEPENDENT_CODE ON
-   OUTPUT_NAME "${PROJECT_NAME}"
+   OUTPUT_NAME "${XTB_LIB_NAME}"
  )
 
 
@@ -229,7 +240,7 @@ if (WITH_OBJECT)
       PROPERTIES
       Fortran_MODULE_DIRECTORY "${PROJECT_BINARY_DIR}/include"
       LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
-      OUTPUT_NAME "${PROJECT_NAME}"
+      OUTPUT_NAME "${XTB_LIB_NAME}"
       VERSION "${PROJECT_VERSION}"
       SOVERSION "${PROJECT_VERSION_MAJOR}"
    )
@@ -351,6 +362,38 @@ else()
       INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
    )
 endif()
+
+# Compatibility library names, see `XTB_LIB_NAME` above.  Consumers that
+# resolve the library by **file name** expect the historical `libxtb.*`: the
+# `xtb-python` wheel loads `libxtb.so`, and recipes test for or link against
+# `libxtb.a`.  The C API (`include/xtb.h`, the `xtb_*` symbols) is unchanged,
+# so a symlink is a drop-in and no consumer has to be rebuilt.  These links are
+# a transition aid only: **remove them** once no supported consumer resolves
+# the library by file name.  (`libxtb.*` was the artifact name for the whole
+# upstream history; `libo-xtb.*` existed only between the `o-xtb` rename and
+# this change, so that interim spelling gets no link.)
+set(XTB_COMPAT_LINKS "libxtb.a=lib${XTB_LIB_NAME}.a")
+if(WITH_OBJECT)
+   list(APPEND XTB_COMPAT_LINKS "libxtb.so=lib${XTB_LIB_NAME}.so")
+endif()
+install(CODE "
+   set(_xtb_libdir \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}\")
+   foreach(_xtb_compat IN ITEMS ${XTB_COMPAT_LINKS})
+      string(REPLACE \"=\" \";\" _xtb_pair \"\${_xtb_compat}\")
+      list(GET _xtb_pair 0 _xtb_link)
+      list(GET _xtb_pair 1 _xtb_target)
+      message(STATUS \"Installing compatibility symlink: \${_xtb_link} -> \${_xtb_target}\")
+      execute_process(
+         COMMAND \"${CMAKE_COMMAND}\" -E create_symlink
+                 \"\${_xtb_target}\" \"\${_xtb_libdir}/\${_xtb_link}\"
+         RESULT_VARIABLE _xtb_link_result
+      )
+      if(NOT _xtb_link_result EQUAL 0)
+         message(WARNING \"could not create the compatibility symlink \${_xtb_link}\")
+      endif()
+   endforeach()
+")
+unset(XTB_COMPAT_LINKS)
 
 # CMake package files
 include(CMakePackageConfigHelpers)
