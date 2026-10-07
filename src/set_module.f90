@@ -103,6 +103,19 @@ module xtb_setmod
    integer,private,parameter :: p_str_length = 48
    integer,private,parameter :: p_arg_length = 48
 
+!> The GFN method values `--gfn` and the xcontrol `$gfn method` key accept.
+!!
+!! Only these four literals are legal; `02`, `+2`, `2.0` and `' 2'` are not
+!! methods, so an unknown spelling has to be refused on both routes instead of
+!! falling through to the GFN2 default on one of them.  `gfn_method_from_literal`
+!! and `gfn_method_error_message` are the only readers of these constants, so
+!! the command line and the xcontrol file cannot drift apart.
+integer, parameter :: p_gfn_method_ff = -2
+integer, parameter :: p_gfn_method_unknown = -1
+
+character(len=*), parameter :: gfn_method_hint = &
+   & "0 (GFN0-xTB), 1 (GFN1-xTB), 2 (GFN2-xTB) and ff (GFN-FF)"
+
    public
 
    abstract interface
@@ -1563,15 +1576,63 @@ subroutine set_pcem(env,key,val)
    end select
 end subroutine set_pcem
 
+!> Decode one `--gfn` / `$gfn method` value.
+!!
+!! The four legal literals, the refusal text and this decoder are the single
+!! source of truth shared by the `--gfn` branch of `xtbMain` and by `set_gfn`;
+!! see `p_gfn_method_ff`, `p_gfn_method_unknown` and `gfn_method_hint` in the
+!! specification part of this module.
+!!
+!! @param[in]  val  value as typed on the command line or in the xcontrol file
+!! @return          0, 1 or 2 for the numbered methods, `p_gfn_method_ff` for
+!!                  `ff` (case insensitive, surrounding blanks ignored) and
+!!                  `p_gfn_method_unknown` for anything else
+pure function gfn_method_from_literal(val) result(method)
+   character(len=*), intent(in) :: val
+   integer :: method
+   ! `val` folded to lower case without the standard's quote handling: `"ff"`
+   ! has to be refused exactly like `"0"`
+   character(len=len_trim(val)) :: lower
+   integer :: i, code
+
+   lower = val(1:len_trim(val))
+   do i = 1, len(lower)
+      code = iachar(lower(i:i))
+      if (code >= iachar('A') .and. code <= iachar('Z')) then
+         lower(i:i) = achar(code + iachar('a') - iachar('A'))
+      end if
+   end do
+
+   select case (lower)
+   case ('0'); method = 0
+   case ('1'); method = 1
+   case ('2'); method = 2
+   case ('ff'); method = p_gfn_method_ff
+   case default; method = p_gfn_method_unknown
+   end select
+
+end function gfn_method_from_literal
+
+!> The refusal message for a value `gfn_method_from_literal` rejected.
+!!
+!! @param[in]  val  the rejected value, named verbatim in the message
+!! @return          the message both callers hand to `env%error`
+pure function gfn_method_error_message(val) result(message)
+   character(len=*), intent(in) :: val
+   character(len=:), allocatable :: message
+
+   message = "unknown method '"//trim(val)//"'; valid values are "//gfn_method_hint
+
+end function gfn_method_error_message
+
 subroutine set_gfn(env,key,val)
-   use xtb_mctc_strings, only : lowercase
    implicit none
    character(len=*), parameter :: source = 'set_gfn'
    type(TEnvironment), intent(inout) :: env
    character(len=*),intent(in) :: key
    character(len=*),intent(in) :: val
    integer  :: err
-   integer  :: idum
+   integer  :: method
    real(wp) :: ddum
    logical  :: ldum
    logical,save :: set1 = .true.
@@ -1585,24 +1646,21 @@ subroutine set_gfn(env,key,val)
    case('version','method')
       if (key.eq.'version') &
          call env%warning("Don't use the 'version' key, since it is confusing",source)
-      if (lowercase(trim(val)) == 'ff') then
+      method = gfn_method_from_literal(val)
+      select case (method)
+      case (0, 1, 2)
+         if (set1) set%gfn_method = method
+         set1 = .false.
+      case (p_gfn_method_ff)
          if (set1) call set_exttyp('ff')
-         set1=.false.
-         return
-      endif
-      if (getValue(env,val,idum)) then
-         if ((idum.ge.0).and.(idum.le.2)) then
-            if (set1) set%gfn_method = idum
-            set1 = .false.
-            return
-         endif
-      endif
-      ! An unknown method must never fall through to the GFN2 default: the
-      ! value is either one of the methods the code understands or a request
-      ! that has to be refused with the list of valid values.
-      call env%error("unknown method '"//trim(val)//"'; valid values are "//&
-         & "0 (GFN0-xTB), 1 (GFN1-xTB), 2 (GFN2-xTB) and ff (GFN-FF)",source)
-      set1 = .false.
+         set1 = .false.
+      case default
+         ! An unknown method must never fall through to the GFN2 default: the
+         ! value is either one of the methods the code understands or a request
+         ! that has to be refused with the list of valid values.
+         call env%error(gfn_method_error_message(val),source)
+         set1 = .false.
+      end select
    case('d4')
       if (getValue(env,val,ldum).and.set2) set%newdisp = ldum
       set2 = .false.

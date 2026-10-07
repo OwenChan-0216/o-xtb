@@ -2049,25 +2049,25 @@ contains
                ! Only the four documented methods are accepted.  An unknown
                ! value used to fall through to the GFN2 default without an
                ! error, so the run silently computed a different method than
-               ! the caller asked for.
-               select case (landscape_lowercase(sec))
-               case ('0')
+               ! the caller asked for.  The decoder is shared with the
+               ! xcontrol `$gfn method` key, so the two routes cannot drift.
+               select case (gfn_method_from_literal(sec))
+               case (0)
                   call set_gfn(env, 'method', sec)
                   call set_exttyp('eht')
                   tblite%method = "gfn0"
-               case ('1')
+               case (1)
                   call set_gfn(env, 'method', sec)
                   tblite%method = "gfn1"
-               case ('2')
+               case (2)
                   call set_gfn(env, 'method', sec)
                   tblite%method = "gfn2"
-               case ('ff')
+               case (p_gfn_method_ff)
                   call set_gfn(env, 'method', sec)
                   call set_exttyp('ff')
                   tblite%method = "gfnff"
                case default
-                  call env%error("unknown method '"//trim(sec)//"'; valid values are "//&
-                     & "0 (GFN0-xTB), 1 (GFN1-xTB), 2 (GFN2-xTB) and ff (GFN-FF)", source)
+                  call env%error(gfn_method_error_message(sec), source)
                end select
             else
                call env%error("No method provided for --gfn option", source)

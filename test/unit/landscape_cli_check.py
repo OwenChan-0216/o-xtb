@@ -700,8 +700,11 @@ def check_gfn(exe, inp, rundir):
       `ff` bitwise equal to `--gfnff` and the no-`--gfn` default bitwise equal
       to `--gfn 2`, so neither equivalence can be redefined silently later.
 
-    The `$gfn method=1` control proves the xcontrol error is specific to the
-    illegal value and did not simply make every `$gfn` block fatal.
+    Both routes of `set_gfn` share one literal decoder, so the same spellings
+    are refused on the command line and in the xcontrol file.  The `02` and
+    `+2` controls are the point of the xcontrol half: the old integer parser
+    accepted them, i.e. the xcontrol route ran GFN2 while the command line
+    already refused the same text.
     """
     valid_hint = ("valid values are 0 (GFN0-xTB), 1 (GFN1-xTB), "
                   "2 (GFN2-xTB) and ff (GFN-FF)")
@@ -759,33 +762,43 @@ def check_gfn(exe, inp, rundir):
     print("gfn values: gfn0 %s, gfn1 %s, gfn2 %s, gfnff %s"
           % (energies["0"], energies["1"], energies["2"], gfnff))
 
-    # (3) the xcontrol route validates the same way
-    xcontrol = os.path.join(rundir, "gfn_method.inp")
-    xdir = os.path.join(rundir, "xcontrol")
-    with open(xcontrol, "w") as handle:
-        handle.write("$gfn\n   method=zzz\n$end\n")
-    shutil.rmtree(xdir, ignore_errors=True)
-    status, output = run(
-        exe, inp, ["--sp", "--input", xcontrol, "--norestart"], xdir
-    )
-    if status == 0:
-        fail("an xcontrol $gfn method=zzz was accepted", output)
-    if "unknown method" not in output or valid_hint not in output:
-        fail("the xcontrol $gfn method=zzz did not list the valid values",
-             output)
-    with open(xcontrol, "w") as handle:
-        handle.write("$gfn\n   method=1\n$end\n")
-    shutil.rmtree(xdir, ignore_errors=True)
-    status, output = run(
-        exe, inp, ["--sp", "--input", xcontrol, "--norestart"], xdir
-    )
-    if status != 0:
-        fail("an xcontrol $gfn method=1 failed with status %d" % status,
-             output)
-    match = re.search(r"TOTAL ENERGY +(-?[0-9]+\.[0-9]+)", output)
-    if not match or match.group(1) != energies["1"]:
-        fail("an xcontrol $gfn method=1 did not select GFN1-xTB", output)
-    print("xcontrol $gfn: method=zzz refused, method=1 selects GFN1-xTB")
+    # (3) the xcontrol route validates the same way and, for every legal
+    # literal, selects the method whose energy `--gfn` produced above.  The
+    # illegal spellings include values that are integers to a lenient parser -
+    # `02` and `+2` used to slip through on this route alone - so the two
+    # spellings of `2` are the alignment this check exists for.
+    def xcontrol(value, label):
+        xcontrol_file = os.path.join(rundir, "gfn-%s.inp" % label)
+        directory = os.path.join(rundir, "xcontrol-" + label)
+        with open(xcontrol_file, "w") as handle:
+            handle.write("$gfn\n   method=%s\n$end\n" % value)
+        shutil.rmtree(directory, ignore_errors=True)
+        return run(
+            exe, inp, ["--sp", "--input", xcontrol_file, "--norestart"],
+            directory,
+        )
+
+    for value in ("zzz", "02", "+2", "2.0", "' 2'"):
+        label = "illegal-" + re.sub(r"[^A-Za-z0-9]+", "_", value)
+        status, output = xcontrol(value, label)
+        if status == 0:
+            fail("an xcontrol $gfn method=%s was accepted" % value, output)
+        if "unknown method" not in output or valid_hint not in output:
+            fail("the xcontrol $gfn method=%s did not list the valid values"
+                 % value, output)
+        print("xcontrol $gfn method=%s refused with status %d"
+              % (value, status))
+
+    for value in ("0", "1", "2", "ff"):
+        status, output = xcontrol(value, "legal-" + value)
+        if status != 0:
+            fail("an xcontrol $gfn method=%s failed with status %d"
+                 % (value, status), output)
+        match = re.search(r"TOTAL ENERGY +(-?[0-9]+\.[0-9]+)", output)
+        if not match or match.group(1) != energies[value]:
+            fail("an xcontrol $gfn method=%s did not match --gfn %s"
+                 % (value, value), output)
+        print("xcontrol $gfn method=%s matches --gfn %s" % (value, value))
 
 
 def compare_enum_case(exe, inp, rundir, label, result, pattern, upper, lower):
