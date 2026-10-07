@@ -1018,15 +1018,14 @@ subroutine help(iunit)
    "",&
    "A threaded BLAS is the largest performance trap on multi core machines: the",&
    "OpenMP threads and the BLAS thread pool multiply, and an idle pool spins",&
-   "between the calls.  Measured here on a 24 atom GFN2 single point at",&
-   "OMP_NUM_THREADS=8, these are the settings that recover the loss, in this",&
-   "order of effect:",&
+   "between the calls.  Measured on a 24 atom anthracene GFN2 single point at",&
+   "OMP_NUM_THREADS=8, five runs with the minimum taken on an idle machine,",&
+   "these are the settings that recover the loss, in this order of effect:",&
    "",&
-   "  1) export OPENBLAS_NUM_THREADS=1        19 ms   strongest",&
-   "  2) --blas-threads 1                     102 ms   5.4x slower than 1)",&
-   "     + OMP_WAIT_POLICY=PASSIVE            25 ms   about 1.3x",&
-   "     + GOMP_SPINCOUNT=0                   23 ms",&
-   "     no flag (pool left at eight)         663 ms",&
+   "  1) export OPENBLAS_NUM_THREADS=1        12 ms   strongest",&
+   "  2) --blas-threads 1                     99 ms   8.3x slower than 1)",&
+   "     + OMP_WAIT_POLICY=PASSIVE            20 ms   1.7x slower than 1)",&
+   "     no flag (pool left at eight)         583 ms",&
    "",&
    "OPENBLAS_NUM_THREADS is consumed while the OpenBLAS pool is created, in an",&
    "ELF constructor that runs before main, so the shell has to export it before",&
@@ -1056,12 +1055,12 @@ subroutine help(iunit)
    "MKL pool as well), while --blas-threads writes the BLAS pool; where both",&
    "reach the same knob the flag that appears last on the command line wins.",&
    "",&
-   "The larger the system, the smaller the gap: at 501 atoms --blas-threads 1",&
-   "measures 1.8x the OPENBLAS_NUM_THREADS=1 time (1285 ms against 705 ms), as",&
-   "the serial matrix work comes to dominate.  So on a large system the pool",&
-   "should stay threaded: pinning it to one thread is a loss there, and",&
-   "OMP_WAIT_POLICY=PASSIVE with the pool left at the thread count measured",&
-   "best.  MKL_NUM_THREADS and",&
+   "The gain falls with system size - about 49x at 24 atoms against about 2.8x",&
+   "at 501 atoms - but OPENBLAS_NUM_THREADS=1 stays the fastest setting at both",&
+   "scales measured here: at 501 atoms it measures 656 ms against 1827 ms with",&
+   "the pool left at the thread count, while --blas-threads 1 with",&
+   "OMP_WAIT_POLICY=PASSIVE measures 699 ms and --blas-threads 1 alone 946 ms.",&
+   "MKL_NUM_THREADS and",&
    "OPENBLAS_DEFAULT_NUM_THREADS do not help: the first is ignored by a build",&
    "linked against OpenBLAS, the second measured a no-op here.",&
    "",&

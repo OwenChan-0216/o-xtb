@@ -4347,3 +4347,22 @@ set_tests_properties(
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=8;OPENBLAS_NUM_THREADS=8"
   RUN_SERIAL TRUE
 )
+
+# Guard for the historical `libxtb.*` compatibility links (see the
+# `XTB_COMPAT_LINKS` block of the top-level `CMakeLists.txt`).  Those symlinks
+# are what keeps a file-name consumer of the old library name working, and
+# `grep -rn libxtb test/` used to return nothing - a removed block or a renamed
+# target left no test red.  The check installs the built tree into a scratch
+# prefix with the real install rules (`cmake --install`, ~0.05 s here; no
+# rebuild and no reconfigure) and asserts `libxtb.a` (and `libxtb.so` when
+# `WITH_OBJECT`) exists as a symlink to the current `liboxtb.*` artifact.
+# Removing the compatibility block makes it fail.
+add_test("xtb/landscape-compat-links"
+  ${CMAKE_COMMAND}
+  -DBUILD_DIR=${PROJECT_BINARY_DIR}
+  -DINSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
+  -DLIB_NAME=${XTB_LIB_NAME}
+  -DWITH_OBJECT=${WITH_OBJECT}
+  -DCONFIG=${CMAKE_BUILD_TYPE}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-compat-links
+  -P "${CMAKE_CURRENT_SOURCE_DIR}/landscape_compat_links_check.cmake")
