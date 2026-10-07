@@ -166,6 +166,54 @@ file(WRITE "${LANDSCAPE-H2O}"
   "3\nwater\nO  0.0000000  0.0000000  0.0000000\n"
   "H  0.0000000  0.0000000  0.9600000\n"
   "H  0.9300000  0.0000000 -0.2400000\n")
+
+# The executable-relative `XTBPATH` fallback of `xtb_type_environment`.
+#
+# GFN0-xTB is the only method without a compiled-in parameter set
+# (`param_gfn0-xtb.txt` has no branch in `use_parameterset`), so `--gfn 0`
+# doubles as the falsifier: as long as the fallback is missing the run aborts
+# with "Parameter file param_gfn0-xtb.txt not found!".  The test assembles a
+# relocated install tree - a copy of the executable in `bin/` and the
+# parameters in `../share/o-xtb` - in a scratch directory, starts it there
+# with `XTBPATH` *removed* from the environment and requires the energy that
+# an explicit `XTBPATH` produces.  The copy is what makes the case a moved
+# install: the running binary is not the build tree executable, so the CMake
+# build-tree parameter copy cannot satisfy it.
+set(LANDSCAPE-XTBPATH-RUNDIR "${CMAKE_CURRENT_BINARY_DIR}/xtbpath-default")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/xtbpath_default_check.cmake" [=[
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}/bin" "${RUNDIR}/share/o-xtb")
+file(COPY "${EXE}" DESTINATION "${RUNDIR}/bin")
+foreach(param IN ITEMS param_gfn0-xtb.txt param_gfn1-xtb.txt
+                          param_gfn1-si-xtb.txt param_gfn2-xtb.txt
+                          param_ipea-xtb.txt .param_gfnff.xtb)
+  file(COPY "${SRCDIR}/${param}" DESTINATION "${RUNDIR}/share/o-xtb")
+endforeach()
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -E env --unset=XTBPATH
+          "${RUNDIR}/bin/${NAME}" "${INPUT}" --gfn 0 --sp --norestart
+          --namespace xtbpathdefault
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "oxtb --gfn 0 without XTBPATH failed (status ${status})\n${output}")
+endif()
+if(NOT output MATCHES "-4\\.366816412151")
+  message(FATAL_ERROR
+    "GFN0 energy without XTBPATH differs from the explicit XTBPATH value\n${output}")
+endif()
+]=])
+add_test("xtb/xtbpath-default"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DNAME=${XTB_EXE_NAME}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DSRCDIR=${PROJECT_SOURCE_DIR}
+  -DRUNDIR=${LANDSCAPE-XTBPATH-RUNDIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/xtbpath_default_check.cmake")
 # The bent HCN fixture of the `--lts`/`--lirc` tests.  It is created here,
 # before the `--lirc` cases of the enumeration test that need a transition
 # state as their input (the water minimum aborts the reaction path before it

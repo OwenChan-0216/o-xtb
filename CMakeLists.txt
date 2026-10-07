@@ -285,6 +285,30 @@ target_include_directories(
    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
 )
 
+# The parameter files the executable needs at run time.  They are referenced
+# twice below: copied into the build tree so the executable finds them from
+# the build directory, and installed into `<prefix>/share/o-xtb`.
+set(
+  xtb_param_files
+  "${PROJECT_SOURCE_DIR}/param_gfn0-xtb.txt"
+  "${PROJECT_SOURCE_DIR}/param_gfn1-xtb.txt"
+  "${PROJECT_SOURCE_DIR}/param_gfn1-si-xtb.txt"
+  "${PROJECT_SOURCE_DIR}/param_gfn2-xtb.txt"
+  "${PROJECT_SOURCE_DIR}/param_ipea-xtb.txt"
+  "${PROJECT_SOURCE_DIR}/.param_gfnff.xtb"
+)
+
+# Build tree copy of the installed data directory.  The run time fallback of
+# `xtb_type_environment` derives it from the executable path (`<bindir>/../
+# share/o-xtb`, here `<builddir>/share/o-xtb` because the executable sits in
+# the build root), so `--gfn 0` - the one method without a compiled-in
+# parameter set - works from the build tree without `XTBPATH` as well.
+file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/share/${PROJECT_NAME}")
+file(COPY
+  ${xtb_param_files}
+  DESTINATION "${PROJECT_BINARY_DIR}/share/${PROJECT_NAME}"
+)
+
 ######################
 # Installation rules #
 ######################
@@ -308,12 +332,7 @@ endif()
 # xtb-parameters 
 install(
    FILES
-   "${PROJECT_SOURCE_DIR}/param_gfn0-xtb.txt"
-   "${PROJECT_SOURCE_DIR}/param_gfn1-xtb.txt"
-   "${PROJECT_SOURCE_DIR}/param_gfn1-si-xtb.txt"
-   "${PROJECT_SOURCE_DIR}/param_gfn2-xtb.txt"
-   "${PROJECT_SOURCE_DIR}/param_ipea-xtb.txt"
-   "${PROJECT_SOURCE_DIR}/.param_gfnff.xtb"
+   ${xtb_param_files}
    DESTINATION
    "${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}"
 )
