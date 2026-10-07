@@ -14,6 +14,8 @@
 # You should have received a copy of the Lesser GNU General Public License
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+# Modified by the o-xtb landscape task suite, 2026.
+
 # Some user-configurable features
 option(WITH_OpenMP "Enable support for shared memory parallelisation with OpenMP" TRUE)
 option(WITH_TBLITE "Use tblite library as backend for xTB" TRUE)

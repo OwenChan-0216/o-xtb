@@ -14,6 +14,8 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+! Modified by the o-xtb landscape task suite, 2026.
+
 !> Driver for unit testing
 program tester
    use, intrinsic :: iso_fortran_env, only : error_unit

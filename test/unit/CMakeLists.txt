@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+# Modified by the o-xtb landscape task suite, 2026.
+
 # allocate dir
 set(dir "${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -948,7 +950,7 @@ add_test("xtb/landscape-scan-cli"
 # requested point (a point without an energy is omitted).
 #
 # `test/unit/landscape_cli_check.py` implements exactly the same conditions
-# for the meson build (test `landscape scan failed point`).
+# as a standalone script (test `landscape scan failed point`).
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scan_fail.cmake" [=[
 file(MAKE_DIRECTORY "${RUNDIR}")
 execute_process(
@@ -3585,8 +3587,8 @@ add_test("xtb/landscape-e2e-maple"
 # The three CLI checks of the `-O2`/silent-defect round
 # (`docs/_simplify-recon/04-o2-and-silent-defects-fix.md`): they compare floating
 # point values (a displacement, two thermochemistry totals) and write their own
-# xcontrol files, so they run through `landscape_cli_check.py` like the meson
-# tests of the same name instead of a `cmake -P` script.
+# xcontrol files, so they run through `landscape_cli_check.py` instead of a
+# `cmake -P` script.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake" [=[
 file(MAKE_DIRECTORY "${RUNDIR}")
 execute_process(
@@ -3669,8 +3671,8 @@ add_test("xtb/landscape-method-table"
 # stage 2b.  Every one of these checks runs **two** flag combinations and
 # compares an observable result of the two runs (the reported budget or
 # energy, or the bytes of an output file), which is exactly the kind of check
-# `landscape_cli_check.py` implements for the meson build; the CMake build
-# drives the same script, as the `--method` checks above already do.
+# `landscape_cli_check.py` implements; the CMake build drives the same script,
+# as the `--method` checks above already do.
 #
 # `xtb/landscape-opt-knobs`: `--lopt-max-steps 1` exhausts the budget in the
 # first iteration (echo, unconverged, non-zero exit, different energy),
@@ -3955,7 +3957,7 @@ add_test("xtb/landscape-opt-native-exit"
 
 # The three guards of section 3.8.  The PBC case needs a periodic input, the
 # other two build their own xcontrol file (the periodic fixture is the one the
-# `xtb/Info` smoke test and the meson build use).
+# `xtb/Info` smoke test uses).
 add_test("xtb/landscape-opt-scanblock"
   ${CMAKE_COMMAND}
   -DPYTHON=${Python3_EXECUTABLE}

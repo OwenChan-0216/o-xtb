@@ -15,6 +15,8 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+! Modified by the o-xtb landscape task suite, 2026.
+
 !> implementation of different relaxation procedures, every relax algorithm
 !  comes with its own parameter class (most are general parameters like thresholds)
 module xtb_relaxation_engine

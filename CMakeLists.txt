@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+# Modified by the o-xtb landscape task suite, 2026.
+
 cmake_minimum_required(VERSION 3.17)
 option(WITH_OBJECT "To build using object library" TRUE)
 option(INSTALL_MODULES "Install Fortran module files to include directory." FALSE)
@@ -298,6 +300,26 @@ install(
    "${PROJECT_SOURCE_DIR}/.param_gfnff.xtb"
    DESTINATION
    "${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}"
+)
+
+# Manual pages.
+# The manual pages are shipped as AsciiDoc sources. Rendering them into real
+# `man` pages needs an external AsciiDoc tool chain that this build does not
+# require, so the sources are installed as they are; see
+# `test/unit/landscape_man_check.py`, which validates the sources structurally
+# in place of the missing renderer.
+install(
+   FILES
+   "${PROJECT_SOURCE_DIR}/man/xtb.1.adoc"
+   DESTINATION
+   "${CMAKE_INSTALL_MANDIR}/man1"
+)
+
+install(
+   FILES
+   "${PROJECT_SOURCE_DIR}/man/xcontrol.7.adoc"
+   DESTINATION
+   "${CMAKE_INSTALL_MANDIR}/man7"
 )
 
 # Build output artifacts

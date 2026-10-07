@@ -1,6 +1,8 @@
+<!-- Modified by the o-xtb landscape task suite, 2026. -->
+
 # Contributing to xTB
 
-> **Important**: please sign off *all* your commits. To avoid commiting unsigned changes you can use the Python script `scripts/install-hooks.py` to install a commit hook to check whether you signed off.
+> **Important**: please sign off *all* your commits (use `git commit -s`). Unsigned commits are rejected by the DCO check configured in `.github/dco.yml`.
 
 First off, thank you for considering contributing to `xtb`.
 Please take a moment to review this guidelines to make the contribution process

@@ -1,3 +1,5 @@
+# Modified by the o-xtb landscape task suite, 2026.
+
 # Prerequisites
 *.d
 
@@ -62,6 +64,14 @@ xtbopt.xyz
 xtbopt.sdf
 xtbopt.coord
 xtbopt.log
+xtb.trj
+xtbtopo.mol
+vibspectrum
+vib_normal_modes
+xtbscan.log
+irc.log
+irc_*.xyz
+landscape_*.json
 
 
 # python build artefacts

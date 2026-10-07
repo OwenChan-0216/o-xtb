@@ -2,6 +2,8 @@ XTB(1)
 ======
 :doctype: manpage
 
+// Modified by the o-xtb landscape task suite, 2026.
+
 NAME
 ----
 
