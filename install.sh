@@ -50,6 +50,17 @@
 # would otherwise keep writing into the user's PATH after a build.  This
 # script registers explicitly in its own step instead.
 #
+# -Wl,-u,pthread_mutex_destroy is not cosmetic.  libgfortran's exit handler
+# calls pthread_mutex_destroy through a weak reference that is guarded by a
+# proxy symbol (__pthread_key_create in gthr-posix.h).  Under -static a weak
+# reference cannot pull a member out of libc.a, so if anything in the link
+# references the guard but nothing references pthread_mutex_destroy, the guard
+# reads true and the call goes to address 0: the process SIGSEGVs while
+# flushing its units during exit, with RIP=0 and no warning.  This build is
+# only safe by luck - OpenBLAS's blas_server.o happens to reference the symbol
+# - and -u turns that luck into a guarantee.  Full analysis, including the
+# three falsifying experiments: docs/_simplify-recon/96-static-exit-sigsegv.md.
+#
 set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -84,7 +95,7 @@ fi
    -DWITH_TBLITE=OFF -DWITH_CPCMX=OFF -DWITH_TESTS=ON -DWITH_OBJECT=OFF \
    -DCMAKE_BUILD_TYPE=Release \
    -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG" \
-   -DCMAKE_EXE_LINKER_FLAGS="-static" \
+   -DCMAKE_EXE_LINKER_FLAGS="-static -Wl,-u,pthread_mutex_destroy" \
    -DBUILD_SHARED_LIBS=OFF -DBLA_STATIC=ON \
    -DXTB_REGISTER_COMMAND=OFF \
    ${GOMP_A:+-DOpenMP_gomp_LIBRARY="${GOMP_A}"} \
