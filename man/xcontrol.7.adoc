@@ -237,8 +237,11 @@ $gbsa
 
 $gfn
 ~~~~
-*method*='int'|'ff'::
-    version of the GFN Hamiltonian; use 'ff' for GFN-FF
+*method*='0'|'1'|'2'|'ff'::
+    version of the GFN Hamiltonian: '0' (GFN0-xTB), '1' (GFN1-xTB), '2'
+    (GFN2-xTB) or 'ff' (GFN-FF).  The value is case insensitive and must be
+    one of these four; any other value is refused with an error.  When the
+    key is absent, GFN2-xTB ('2') is used.
 
 *dispscale*='real'::
     Scale dispersion energy of GFN-FF
