@@ -134,8 +134,8 @@ set_tests_properties(
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR}"
 )
 
-# xtb 
-set(XTB-EXE "${PROJECT_BINARY_DIR}/${PROJECT_NAME}")
+# xtb (the command line program built by the top level project)
+set(XTB-EXE "${PROJECT_BINARY_DIR}/${XTB_EXE_NAME}")
 
 add_test("xtb/Argparser_print_version" ${XTB-EXE} --version)
 add_test("xtb/Argparser_print_help" ${XTB-EXE} --help)

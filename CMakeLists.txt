@@ -25,12 +25,17 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.27.0 AND CMAKE_VERSION VERSION_LESS 3.
    set(WITH_OBJECT FALSE)
 endif()
 
-# Setup the xtb Project
+# Setup the o-xtb Project
 project(
-  "xtb"
+  "o-xtb"
   VERSION "6.7.1" 
   LANGUAGES "C" "Fortran"
 )
+
+# Name of the command line program.  The project and its libraries are called
+# `o-xtb`, the installed/registered command stays `oxtb` (the `xtb` module and
+# symbol prefix of the sources is deliberately not renamed).
+set(XTB_EXE_NAME "oxtb")
 
 # Follow GNU conventions for installing directories
 include(GNUInstallDirs)
@@ -243,27 +248,27 @@ endif()
 ###############
 
 add_executable(
-  ${PROJECT_NAME}-exe
+  ${XTB_EXE_NAME}
   ${prog}
 )
 
 target_link_libraries(
-   ${PROJECT_NAME}-exe
+   ${XTB_EXE_NAME}
    PRIVATE
    "lib-${PROJECT_NAME}-static"
    ${XTB_DL_LIBRARIES}
 )
 
 set_target_properties(
-  ${PROJECT_NAME}-exe
+  ${XTB_EXE_NAME}
   PROPERTIES
   Fortran_MODULE_DIRECTORY ${PROJECT_BINARY_DIR}/include
   RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
-  OUTPUT_NAME "${PROJECT_NAME}"
+  OUTPUT_NAME "${XTB_EXE_NAME}"
 )
 
 target_include_directories(
-   ${PROJECT_NAME}-exe 
+   ${XTB_EXE_NAME}
    PRIVATE 
    ${PROJECT_SOURCE_DIR}/include
    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
@@ -328,7 +333,7 @@ if (WITH_OBJECT)
       TARGETS
       "lib-${PROJECT_NAME}-static"
       "lib-${PROJECT_NAME}-shared"
-      "${PROJECT_NAME}-exe"
+      "${XTB_EXE_NAME}"
       EXPORT "${PROJECT_NAME}-targets"
       LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
       ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -339,7 +344,7 @@ else()
    install(
       TARGETS
       "lib-${PROJECT_NAME}-static"
-      "${PROJECT_NAME}-exe"
+      "${XTB_EXE_NAME}"
       EXPORT "${PROJECT_NAME}-targets"
       ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
       RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
@@ -390,4 +395,41 @@ install(
 if(WITH_TESTS)
    enable_testing()
    add_subdirectory("test")
+endif()
+
+#################################
+# Optional command registration #
+#################################
+# Off by default on purpose: a build must not silently write into the user's
+# PATH.  With -DXTB_REGISTER_COMMAND=ON the freshly built command line program
+# is linked into "~/.local/bin" at the end of the build.  The link target is
+# the executable in the build tree, so a rebuild is picked up without
+# reinstalling; use the installed copy (cmake --install) for a stable path.
+# `install.sh` in the source root does the same registration explicitly and
+# does not need this option.
+option(
+  XTB_REGISTER_COMMAND
+  "Create or update a symlink to the built command in ~/.local/bin"
+  OFF
+)
+if(XTB_REGISTER_COMMAND)
+  # The executable target is named after the project in the pristine tree and
+  # after ${XTB_EXE_NAME} in the renamed tree, so it is looked up by target
+  # type instead of by name and this block stays independent of the rename.
+  get_property(xtb_register_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(xtb_register_target IN LISTS xtb_register_targets)
+    get_target_property(xtb_register_type "${xtb_register_target}" TYPE)
+    if(xtb_register_type STREQUAL "EXECUTABLE")
+      add_custom_command(
+        TARGET "${xtb_register_target}"
+        POST_BUILD
+        COMMAND "${CMAKE_COMMAND}"
+                "-DREGISTER_TARGET=$<TARGET_FILE:${xtb_register_target}>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/register_command.cmake"
+        COMMENT "Registering ${xtb_register_target} in ~/.local/bin"
+        VERBATIM
+      )
+    endif()
+  endforeach()
+  unset(xtb_register_targets)
 endif()

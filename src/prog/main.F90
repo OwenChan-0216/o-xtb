@@ -4663,20 +4663,32 @@ contains
 !> reliable handle.  Measured on OpenBLAS 0.3.21: `setenv` after startup left
 !> `openblas_get_num_threads()` at 8, `openblas_set_num_threads` moved it to 1.
 !>
-!> The symbol is resolved with `dlopen(NULL, RTLD_NOW)` + `dlsym`, which only
-!> inspects the objects the loader has already mapped.  Loading a BLAS library
-!> by name is deliberately avoided: on a machine whose BLAS is MKL that would
-!> pull in a second, unused OpenBLAS.  `openblas_set_num_threads` is tried
-!> first, then `mkl_set_num_threads`; a backend that exports neither (the
-!> reference BLAS, or a statically linked BLAS, whose symbols live in
-!> `.symtab` and are invisible to `dlsym` on the global scope) is reported
-!> with a warning and the run continues.  When the matching read-back entry
-!> point is present (`openblas_get_num_threads`, or `mkl_get_max_threads`,
-!> the oneMKL function `threadpoolctl` reads MKL's thread count with) the
-!> effective value is read back and printed, which is the falsifier of the
-!> flag: a setter that never ran cannot print the requested value.  A
-!> backend offering the setter but no getter prints `(..., not readable)`
-!> rather than inventing a number.
+!> That entry point is reached by two routes, in this order:
+!>
+!> 1. A **link-time** binding through the weak references in
+!>    `src/prog/blas_threads.c`.  It is the only route that reaches a statically
+!>    linked BLAS: a fully static executable has no `.dynsym` at all, so the
+!>    entry points live in `.symtab` only and are invisible to `dlsym` on the
+!>    global scope, even though the code is in the image.  The reference is
+!>    weak so that the route stays optional - if nothing extracts the archive
+!>    members defining the entry points the symbol stays NULL, the bridge in
+!>    `src/prog/blas_threads.c` reports 0, no call goes through a NULL pointer
+!>    and route 2 takes over.
+!> 2. `dlopen(NULL, RTLD_NOW)` + `dlsym`, which only inspects the objects the
+!>    loader has already mapped and therefore serves a dynamically linked BLAS
+!>    (and oneMKL whatever its linkage).  Loading a BLAS library by name is
+!>    deliberately avoided: on a machine whose BLAS is MKL that would pull in a
+!>    second, unused OpenBLAS.
+!>
+!> `openblas_set_num_threads` is tried first, then `mkl_set_num_threads`; a
+!> backend that offers neither (the reference BLAS, or a statically linked BLAS
+!> whose entry points nothing extracted) is reported with a warning and the
+!> run continues.  When the matching read-back entry point is present
+!> (`openblas_get_num_threads`, or `mkl_get_max_threads`, the oneMKL function
+!> `threadpoolctl` reads MKL's thread count with) the effective value is read
+!> back and printed, which is the falsifier of the flag: a setter that never
+!> ran cannot print the requested value.  A backend offering the setter but no
+!> getter prints `(..., not readable)` rather than inventing a number.
 !>
 !> **Not verified against a real oneMKL**: no MKL is installed on the
 !> development machine, so both MKL names are resolved by symbol name only and
@@ -4714,6 +4726,25 @@ subroutine set_blas_threads(env, nthr)
    end interface
 
    interface
+      !> Link-time bridge to the backend entry points, `xtb_blas_set_threads` in
+      !> `src/prog/blas_threads.c`.  Returns 0 when this backend has no
+      !> link-time binding, which is the cue to use the runtime lookup below.
+      function c_blas_set_threads(backend, n) bind(C, name='xtb_blas_set_threads') result(status)
+         import :: c_int
+         integer(c_int), value :: backend
+         integer(c_int), value :: n
+         integer(c_int) :: status
+      end function c_blas_set_threads
+
+      !> `xtb_blas_get_threads` of the same file: returns 0 when the getter has
+      !> no link-time binding, otherwise the reported value is written to `n`.
+      function c_blas_get_threads(backend, n) bind(C, name='xtb_blas_get_threads') result(status)
+         import :: c_int
+         integer(c_int), value :: backend
+         integer(c_int) :: n
+         integer(c_int) :: status
+      end function c_blas_get_threads
+
       !> `void *dlopen(const char *, int)`; `c_null_ptr` is the NULL the
       !> interface reserves for "the current process" (an empty string would
       !> try to open a file of that name).
@@ -4733,6 +4764,10 @@ subroutine set_blas_threads(env, nthr)
       end function c_dlsym
    end interface
 
+   !> The two backends, numbered as `src/prog/blas_threads.c` numbers them
+   integer(c_int), parameter :: backend_openblas = 1
+   integer(c_int), parameter :: backend_mkl = 2
+
    !> `RTLD_NOW` of glibc's `dlfcn.h`
    integer(c_int), parameter :: rtld_now = 2
 
@@ -4740,59 +4775,92 @@ subroutine set_blas_threads(env, nthr)
    type(c_funptr) :: addr
    procedure(c_set_num_threads), pointer :: set_threads
    procedure(c_get_num_threads), pointer :: get_threads
+   !> Backend that accepted the request, 0 while none has
+   integer(c_int) :: backend
    integer(c_int) :: effective
-   logical :: found
+   logical :: readable
 
-   handle = c_dlopen(c_null_ptr, rtld_now)
-   if (.not. c_associated(handle)) then
-      call env%warning("the current process cannot be opened for symbol lookup; "// &
-         & "--blas-threads has no effect", source)
+   backend = 0_c_int
+   effective = -1_c_int
+   readable = .false.
+
+   !> Route 1: the link-time binding.  This is the only route that works in a
+   !> static image, where `dlsym` cannot see the entry points at all.
+   if (c_blas_set_threads(backend_openblas, int(nthr, c_int)) /= 0_c_int) then
+      backend = backend_openblas
+   else if (c_blas_set_threads(backend_mkl, int(nthr, c_int)) /= 0_c_int) then
+      backend = backend_mkl
+   end if
+
+   !> Route 2: the runtime symbol lookup, for a dynamically linked BLAS and for
+   !> any backend route 1 could not bind.
+   handle = c_null_ptr
+   if (backend == 0_c_int) then
+      handle = c_dlopen(c_null_ptr, rtld_now)
+      if (.not. c_associated(handle)) then
+         call env%warning("the current process cannot be opened for symbol lookup; "// &
+            & "--blas-threads has no effect", source)
+         return
+      end if
+      ! The handle is deliberately never passed to `dlclose`: it is the current
+      ! process image, which must stay mapped, so the lookup handle lives for the
+      ! rest of the process on purpose (not a leak to be "fixed").
+
+      addr = c_dlsym(handle, 'openblas_set_num_threads'//c_null_char)
+      if (c_associated(addr)) then
+         call c_f_procpointer(addr, set_threads)
+         call set_threads(int(nthr, c_int))
+         backend = backend_openblas
+      else
+         addr = c_dlsym(handle, 'mkl_set_num_threads'//c_null_char)
+         if (c_associated(addr)) then
+            call c_f_procpointer(addr, set_threads)
+            call set_threads(int(nthr, c_int))
+            backend = backend_mkl
+         end if
+      end if
+   end if
+
+   if (backend == 0_c_int) then
+      call env%warning("no OpenBLAS or MKL symbol found (not exported by a "// &
+         & "statically linked BLAS); --blas-threads has no effect", source)
       return
    end if
-   ! The handle is deliberately never passed to `dlclose`: it is the current
-   ! process image, which must stay mapped, so the lookup handle lives for the
-   ! rest of the process on purpose (not a leak to be "fixed").
 
-   found = .false.
-
-   addr = c_dlsym(handle, 'openblas_set_num_threads'//c_null_char)
-   if (c_associated(addr)) then
-      call c_f_procpointer(addr, set_threads)
-      call set_threads(int(nthr, c_int))
-      found = .true.
-      addr = c_dlsym(handle, 'openblas_get_num_threads'//c_null_char)
+   !> Read the effective value back through the same bridge first, because that
+   !> is the getter a static image also carries; the symbol lookup is the
+   !> fallback for a getter only the loader exposes.  Without a getter the flag
+   !> cannot be falsified, so the run says so instead of inventing a number.
+   if (c_blas_get_threads(backend, effective) /= 0_c_int) then
+      readable = .true.
+   else if (c_associated(handle)) then
+      if (backend == backend_openblas) then
+         addr = c_dlsym(handle, 'openblas_get_num_threads'//c_null_char)
+      else
+         addr = c_dlsym(handle, 'mkl_get_max_threads'//c_null_char)
+      end if
       if (c_associated(addr)) then
          call c_f_procpointer(addr, get_threads)
          effective = get_threads()
+         readable = .true.
+      end if
+   end if
+
+   if (backend == backend_openblas) then
+      if (readable) then
          write(env%unit, '(a,i0,a,i0,a)') 'blas threads: ', nthr, &
             & ' (OpenBLAS, read back ', int(effective), ')'
       else
          write(env%unit, '(a,i0,a)') 'blas threads: ', nthr, ' (OpenBLAS)'
       end if
-   end if
-
-   if (.not. found) then
-      addr = c_dlsym(handle, 'mkl_set_num_threads'//c_null_char)
-      if (c_associated(addr)) then
-         call c_f_procpointer(addr, set_threads)
-         call set_threads(int(nthr, c_int))
-         found = .true.
-         addr = c_dlsym(handle, 'mkl_get_max_threads'//c_null_char)
-         if (c_associated(addr)) then
-            call c_f_procpointer(addr, get_threads)
-            effective = get_threads()
-            write(env%unit, '(a,i0,a,i0,a)') 'blas threads: ', nthr, &
-               & ' (MKL, read back ', int(effective), ')'
-         else
-            write(env%unit, '(a,i0,a)') 'blas threads: ', nthr, &
-               & ' (MKL, not readable)'
-         end if
+   else
+      if (readable) then
+         write(env%unit, '(a,i0,a,i0,a)') 'blas threads: ', nthr, &
+            & ' (MKL, read back ', int(effective), ')'
+      else
+         write(env%unit, '(a,i0,a)') 'blas threads: ', nthr, &
+            & ' (MKL, not readable)'
       end if
-   end if
-
-   if (.not. found) then
-      call env%warning("no OpenBLAS or MKL symbol found (not exported by a "// &
-         & "statically linked BLAS); --blas-threads has no effect", source)
    end if
 
 end subroutine set_blas_threads

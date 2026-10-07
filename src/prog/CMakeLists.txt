@@ -15,10 +15,16 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+# Modified by the o-xtb landscape task suite, 2026.
+
 set(dir "${CMAKE_CURRENT_SOURCE_DIR}")
 
+# `blas_threads.c` holds the weak references to the BLAS runtime thread setter,
+# which `set_blas_threads` in main.F90 needs and which cannot be expressed in
+# Fortran (`!GCC$ ATTRIBUTES weak` is rejected by gfortran 12.2.0).
 list(APPEND prog
   "${dir}/argparser.f90"
+  "${dir}/blas_threads.c"
   "${dir}/dock.f90"
   "${dir}/info.f90"
   "${dir}/irmod.f90"
