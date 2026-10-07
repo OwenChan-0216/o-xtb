@@ -2046,10 +2046,29 @@ contains
          case ('--gfn')
             call args%nextArg(sec)
             if (allocated(sec)) then
-               call set_gfn(env, 'method', sec)
-               if (sec == '0') call set_exttyp('eht')
-               if (sec == 'ff') call set_exttyp('ff')
-               tblite%method = "gfn"//sec
+               ! Only the four documented methods are accepted.  An unknown
+               ! value used to fall through to the GFN2 default without an
+               ! error, so the run silently computed a different method than
+               ! the caller asked for.
+               select case (landscape_lowercase(sec))
+               case ('0')
+                  call set_gfn(env, 'method', sec)
+                  call set_exttyp('eht')
+                  tblite%method = "gfn0"
+               case ('1')
+                  call set_gfn(env, 'method', sec)
+                  tblite%method = "gfn1"
+               case ('2')
+                  call set_gfn(env, 'method', sec)
+                  tblite%method = "gfn2"
+               case ('ff')
+                  call set_gfn(env, 'method', sec)
+                  call set_exttyp('ff')
+                  tblite%method = "gfnff"
+               case default
+                  call env%error("unknown method '"//trim(sec)//"'; valid values are "//&
+                     & "0 (GFN0-xTB), 1 (GFN1-xTB), 2 (GFN2-xTB) and ff (GFN-FF)", source)
+               end select
             else
                call env%error("No method provided for --gfn option", source)
             end if

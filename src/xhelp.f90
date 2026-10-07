@@ -127,7 +127,9 @@ subroutine help(iunit)
    "    (default: 0 (singlet) for even electron number, 1 (doublet) for odd electron number)",&
    "",&
    "--gfn INT",&
-   "    specify parametrisation of GFN-xTB (default = 2)",&
+   "    specify parametrisation of GFN-xTB: 0 (GFN0-xTB), 1 (GFN1-xTB), 2",&
+   "    (GFN2-xTB, the default) or ff (GFN-FF, the same as --gfnff); any",&
+   "    other value is refused with an error",&
    "",&
    "--gfn0",&
    "    use the GFN0-xTB (EHT) Hamiltonian, the same as --gfn 0; a discouraged", &

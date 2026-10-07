@@ -20,6 +20,7 @@ mode mirrors one CMake test one-to-one:
                                      -> xtb/landscape-enum-case
   strictunknown <exe> <input> <rundir> -> xtb/landscape-strict-unknown
   color  <exe> <input> <rundir>       -> xtb/landscape-color
+  gfn    <exe> <input> <rundir>       -> xtb/landscape-gfn-value
   echo <exe> <input> <rundir> <case>
                                      -> xtb/landscape-fc-echo,
                                          xtb/landscape-lopt-engine-echo,
@@ -679,6 +680,112 @@ def check_color(exe, inp, rundir):
         fail("a --color without an argument was accepted", output)
     if "No color scheme provided" not in output:
         fail("the missing color scheme was not reported", output)
+
+
+def check_gfn(exe, inp, rundir):
+    """`--gfn` accepts exactly 0, 1, 2 and ff; every other value is an error.
+
+    Mirrors `xtb/landscape-gfn-value`.  The argument of an unknown `--gfn`
+    value used to reach only the integer parser of the xcontrol reader, whose
+    "could not parse" warning left `set%gfn_method` at its default 2: `--gfn
+    zzz`, `--gfn ffn`, `--gfn 3`, `--gfn 4` and `--gfn ''` all exited 0 and
+    computed **GFN2**.  The same fall-through sat on the xcontrol route
+    (`$gfn method=zzz`), so a run could answer a different question than the
+    one that was asked without a single actionable message.  Both routes are
+    pinned here against the two directions:
+
+    * every illegal spelling has to abort with the list of valid values - the
+      status alone is not enough, an unrelated crash must not pass the check;
+    * every legal spelling has to run and produce the energy of that method,
+      `ff` bitwise equal to `--gfnff` and the no-`--gfn` default bitwise equal
+      to `--gfn 2`, so neither equivalence can be redefined silently later.
+
+    The `$gfn method=1` control proves the xcontrol error is specific to the
+    illegal value and did not simply make every `$gfn` block fatal.
+    """
+    valid_hint = ("valid values are 0 (GFN0-xTB), 1 (GFN1-xTB), "
+                  "2 (GFN2-xTB) and ff (GFN-FF)")
+    os.makedirs(rundir, exist_ok=True)
+
+    def energy(args, label):
+        directory = os.path.join(rundir, label)
+        shutil.rmtree(directory, ignore_errors=True)
+        status, output = run(
+            exe, inp, args + ["--sp", "--norestart"], directory
+        )
+        if status != 0:
+            fail("'%s' failed with status %d" % (" ".join(args), status), output)
+        match = re.search(r"TOTAL ENERGY +(-?[0-9]+\.[0-9]+)", output)
+        if not match:
+            fail("no TOTAL ENERGY for '%s'" % " ".join(args), output)
+        return match.group(1)
+
+    # (1) every illegal spelling aborts and names the valid values
+    for value in ("zzz", "ffn", "3", "4", ""):
+        directory = os.path.join(rundir, "illegal-" + (value or "empty"))
+        shutil.rmtree(directory, ignore_errors=True)
+        status, output = run(
+            exe, inp, ["--gfn", value, "--sp", "--norestart"], directory
+        )
+        if status == 0:
+            fail("an illegal --gfn %r was accepted" % value, output)
+        if "unknown method" not in output:
+            fail("an illegal --gfn %r did not name the rejected value" % value,
+                 output)
+        if valid_hint not in output:
+            fail("an illegal --gfn %r did not list the valid values" % value,
+                 output)
+        print("--gfn %r refused with status %d" % (value, status))
+
+    # (2) the four legal spellings run and give the energy of their method
+    energies = {}
+    for value in ("0", "1", "2", "ff"):
+        energies[value] = energy(["--gfn", value], "legal-" + value)
+
+    # `ff` is the GFN-FF force field, i.e. `--gfnff`, case insensitively
+    gfnff = energy(["--gfnff"], "gfnff")
+    if energies["ff"] != gfnff:
+        fail("--gfn ff (%s) differs from --gfnff (%s)"
+             % (energies["ff"], gfnff))
+    upper = energy(["--gfn", "FF"], "legal-FF")
+    if upper != gfnff:
+        fail("--gfn FF (%s) differs from --gfnff (%s)" % (upper, gfnff))
+
+    # no --gfn at all is the documented default GFN2
+    default = energy([], "default")
+    if default != energies["2"]:
+        fail("the default method (%s) differs from --gfn 2 (%s)"
+             % (default, energies["2"]))
+    print("gfn values: gfn0 %s, gfn1 %s, gfn2 %s, gfnff %s"
+          % (energies["0"], energies["1"], energies["2"], gfnff))
+
+    # (3) the xcontrol route validates the same way
+    xcontrol = os.path.join(rundir, "gfn_method.inp")
+    xdir = os.path.join(rundir, "xcontrol")
+    with open(xcontrol, "w") as handle:
+        handle.write("$gfn\n   method=zzz\n$end\n")
+    shutil.rmtree(xdir, ignore_errors=True)
+    status, output = run(
+        exe, inp, ["--sp", "--input", xcontrol, "--norestart"], xdir
+    )
+    if status == 0:
+        fail("an xcontrol $gfn method=zzz was accepted", output)
+    if "unknown method" not in output or valid_hint not in output:
+        fail("the xcontrol $gfn method=zzz did not list the valid values",
+             output)
+    with open(xcontrol, "w") as handle:
+        handle.write("$gfn\n   method=1\n$end\n")
+    shutil.rmtree(xdir, ignore_errors=True)
+    status, output = run(
+        exe, inp, ["--sp", "--input", xcontrol, "--norestart"], xdir
+    )
+    if status != 0:
+        fail("an xcontrol $gfn method=1 failed with status %d" % status,
+             output)
+    match = re.search(r"TOTAL ENERGY +(-?[0-9]+\.[0-9]+)", output)
+    if not match or match.group(1) != energies["1"]:
+        fail("an xcontrol $gfn method=1 did not select GFN1-xTB", output)
+    print("xcontrol $gfn: method=zzz refused, method=1 selects GFN1-xTB")
 
 
 def compare_enum_case(exe, inp, rundir, label, result, pattern, upper, lower):
@@ -4968,6 +5075,8 @@ def main():
         check_strict_unknown(exe, inp, rundir)
     elif mode == "color":
         check_color(exe, inp, rundir)
+    elif mode == "gfn":
+        check_gfn(exe, inp, rundir)
     elif mode == "echo":
         if len(rest) < 1:
             fail("the echo mode needs a case name")

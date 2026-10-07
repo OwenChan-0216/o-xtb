@@ -4225,6 +4225,21 @@ add_test("xtb/landscape-native-runtypes-unaffected"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-native-runtypes-unaffected
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# `--gfn` accepts exactly 0, 1, 2 and ff (case insensitively); every other
+# value is an error that names the valid values.  An unknown value used to
+# fall through to the GFN2 default on both the command line and the xcontrol
+# route (`$gfn method=zzz`), so the run silently computed a different method
+# than the caller asked for.  `ff` stays legal - it is GFN-FF, the same as
+# `--gfnff` - and the no-`--gfn` default stays GFN2; both equivalences are
+# pinned bitwise next to the error cases.
+add_test("xtb/landscape-gfn-value"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=gfn;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-gfn-value"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-gfn-value
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # 340x OpenMP anti-scaling of many small single points out of the picture
 # (AGENTS.md section 6.8).  The stage 1 CLI checks of the same family
@@ -4291,6 +4306,7 @@ set_tests_properties(
   "xtb/landscape-ohess-fail"
   "xtb/landscape-vib-compliance-skip"
   "xtb/landscape-native-runtypes-unaffected"
+  "xtb/landscape-gfn-value"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

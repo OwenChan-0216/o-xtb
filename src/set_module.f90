@@ -1590,16 +1590,18 @@ subroutine set_gfn(env,key,val)
          set1=.false.
          return
       endif
-      if (getValue(env,val,idum).and.set1) then
-         if ((idum.ge.0).and.(idum.le.2)) then ! actually, this looks stupid...
-            set%gfn_method = idum
-         elseif (idum.eq.3) then
-            set%gfn_method = 2
-            call env%warning('Please, request GFN2-xTB with method=2!',source)
-         else
-            call env%warning('We have not yet made a GFN'//val//'-xTB method',source)
+      if (getValue(env,val,idum)) then
+         if ((idum.ge.0).and.(idum.le.2)) then
+            if (set1) set%gfn_method = idum
+            set1 = .false.
+            return
          endif
       endif
+      ! An unknown method must never fall through to the GFN2 default: the
+      ! value is either one of the methods the code understands or a request
+      ! that has to be refused with the list of valid values.
+      call env%error("unknown method '"//trim(val)//"'; valid values are "//&
+         & "0 (GFN0-xTB), 1 (GFN1-xTB), 2 (GFN2-xTB) and ff (GFN-FF)",source)
       set1 = .false.
    case('d4')
       if (getValue(env,val,ldum).and.set2) set%newdisp = ldum
