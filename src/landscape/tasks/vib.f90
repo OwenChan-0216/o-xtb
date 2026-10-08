@@ -310,8 +310,9 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
    ! caller that needs the frequencies, the thermochemical totals and the
    ! electronic energy together (the result fields alone would not be enough).
    ! The energy comes from the single evaluation the Hessian provider made;
-   ! recomputing it would shift the last digits (SCF restart, AGENTS.md section
-   ! 6.2).  It is assigned here, after both calls with an `intent(out)` result.
+   ! recomputing it would shift the last digits (reusing the SCF restart
+   ! wavefunction perturbs the next evaluation in the ~1e-7 hartree/bohr range).
+   ! It is assigned here, after both calls with an `intent(out)` result.
    vib%energy = energy
    result%vib = vib
 

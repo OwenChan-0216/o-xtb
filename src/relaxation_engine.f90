@@ -615,7 +615,7 @@ subroutine l_ancopt &
    estart = energy
    thiscycle = opt%micro_cycle
    ! explicit copy: intrinsic assignment of a TMolecule corrupts sym(2:) with
-   ! gfortran (stride bug, see AGENTS.md section 6)
+   ! gfortran 12.2.0 (stride bug in a deferred-length character array component)
    call molopt%copy(mol)
 
    if (.not.pr.and.minpr) write(env%unit,'(a6,a14,a16,a16,a15,a6)') &

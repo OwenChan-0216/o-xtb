@@ -340,8 +340,9 @@ module xtb_landscape_results
       type(landscape_convergence_report) :: conv
       !> Frequency analysis of the `vib` task (all components have a default
       !> value, so the component is safe in an intrinsic derived type
-      !> assignment; it carries no deferred-length character array, the
-      !> gfortran 12.2.0 defect of AGENTS.md section 6.5 does not apply).  The
+      !> assignment; it carries no deferred-length character array, so the
+      !> gfortran 12.2.0 stride defect that corrupts such a component under
+      !> intrinsic assignment does not apply).  The
       !> `--ohess` chain of `main.F90` reads it to fill the native frequency
       !> container; the other tasks never touch it.
       type(landscape_vib_result) :: vib

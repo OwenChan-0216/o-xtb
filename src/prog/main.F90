@@ -260,8 +260,8 @@ contains
       !> default 1.0 and the axis was a dead knob.  The value is passed
       !> between the flag parser and the six synchronisation points of
       !> `xtbMain` instead of living in a variable of the program unit, which
-      !> the hard constraint "no module level mutable variables" forbids
-      !> (`AGENTS.md` section 5, CLI redesign sections 3.5 and 3.11).
+      !> the project hard constraint "no module-level mutable variables"
+      !> forbids.
       logical :: acc_was_set
 
 !  OMP stuff
@@ -1745,9 +1745,10 @@ contains
       !> `set%acc` into a landscape engine control, so that an explicit
       !> `--acc` wins over the SCC accuracy a convergence level derives (CLI
       !> redesign section 3.5, R5).  Declared as a dummy - and not as a
-      !> variable of the program unit - because mutable program-unit state is
-      !> forbidden (`AGENTS.md` section 5); reset at the top of the flag loop,
-      !> so a second run in the same process (C API) starts clean.
+      !> variable of the program unit - because the project hard constraint
+      !> "no module-level mutable variables" forbids mutable program-unit
+      !> state; reset at the top of the flag loop, so a second run in the same
+      !> process (C API) starts clean.
       logical, intent(out) :: acc_was_set
 
 !$    integer :: omp_get_num_threads, nproc

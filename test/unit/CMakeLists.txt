@@ -832,7 +832,8 @@ add_test("xtb/landscape-color"
 # relaxed scan and `--lts-init-mode FORCE` would fall back to the `h0` start.
 #
 # OMP_NUM_THREADS=1 is part of the test environment, so the two runs are
-# bitwise comparable (AGENTS.md section 6.1).
+# bitwise comparable (a cold-start GFN2 single point is reproducible bit for
+# bit at a fixed thread count).
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_enum_case.cmake" [=[
 file(MAKE_DIRECTORY "${RUNDIR}")
 function(compare_enum_case label input result pattern upper lower)
@@ -3390,9 +3391,9 @@ set_tests_properties(
 )
 
 # The scan suite runs GFN2 single points; with the default thread count the
-# 340x OpenMP anti-scaling of AGENTS.md section 6.8 turns it into a 20 s test
-# (0.13 s with one thread), and one thread also removes the last bit of thread
-# dependence from the scan assertions.
+# ~340x OpenMP anti-scaling of many small single points turns it into a 20 s
+# test (0.13 s with one thread), and one thread also removes the last bit of
+# thread dependence from the scan assertions.
 set_tests_properties(
   "${PROJECT_NAME}/landscape-scan"
   PROPERTIES
@@ -3400,8 +3401,8 @@ set_tests_properties(
 )
 
 # The frequency suite builds numerical Hessians (6N GFN2 single points each);
-# one thread keeps the 340x OpenMP anti-scaling of AGENTS.md section 6.8 out
-# of the picture and makes the Hessians reproducible.
+# one thread keeps the ~340x OpenMP anti-scaling of many small single points
+# out of the picture and makes the Hessians reproducible.
 set_tests_properties(
   "${PROJECT_NAME}/landscape-vib"
   PROPERTIES
@@ -3410,8 +3411,8 @@ set_tests_properties(
 
 # The end-to-end suite runs the opt -> freq -> thermo chain and a TS -> IRC
 # run on real GFN2 calculations; one thread is required for the bitwise
-# reproducibility of the engine (AGENTS.md section 6.1) and for the 340x
-# OpenMP anti-scaling of many small single points (AGENTS.md section 6.8).
+# reproducibility of the engine at a fixed thread count and for the ~340x
+# OpenMP anti-scaling of many small single points.
 set_tests_properties(
   "${PROJECT_NAME}/landscape-e2e"
   PROPERTIES
@@ -3457,8 +3458,8 @@ set_tests_properties(
 )
 
 # The failed scan points evaluate SCCs at strongly stretched geometries; with
-# the default thread count the 340x OpenMP anti-scaling of AGENTS.md section
-# 6.8 turns a 0.2 s run into 30 s.
+# the default thread count the ~340x OpenMP anti-scaling of many small single
+# points turns a 0.2 s run into 30 s.
 set_tests_properties(
   "xtb/landscape-scan-failed-point"
   PROPERTIES
@@ -3658,8 +3659,9 @@ set(LANDSCAPE-CLI-PY "${CMAKE_CURRENT_SOURCE_DIR}/landscape_cli_check.py")
 # different values through two different flags are an error, `auto` keeps the
 # default of the task and a repeated flag keeps the last value.
 # `landscape_cli_check.py` mode `method` runs every pair and compares the
-# result files byte wise (OMP_NUM_THREADS=1, AGENTS.md section 6.1), so an
-# alias that does not reach the task cannot pass.
+# result files byte wise (OMP_NUM_THREADS=1 makes the cold-start GFN2 runs
+# reproducible bit for bit), so an alias that does not reach the task cannot
+# pass.
 add_test("xtb/landscape-method"
   ${CMAKE_COMMAND}
   -DPYTHON=${Python3_EXECUTABLE}
@@ -3955,7 +3957,8 @@ add_test("xtb/landscape-lirc-fix"
 # Upstream copied the geometry with an **intrinsic** `TMolecule` assignment in
 # the L-ANCopt engine (`src/relaxation_engine.f90:615` and `:779`), and
 # gfortran 12.2.0 corrupts `sym(2:)` of a `character(len=:), allocatable ::
-# sym(:)` component under intrinsic assignment (AGENTS.md section 6.5).  With
+# sym(:)` component under intrinsic assignment (a stride bug in deferred-length
+# character array components).  With
 # `$opt engine=lbfgs` the symbol column of `xtbopt.xyz` and of the stdout
 # `final structure:` block came out as garbage bytes while every number stayed
 # correct; the `rf` engine was never affected, which is why the BC-4 fixtures
@@ -4262,8 +4265,8 @@ add_test("xtb/landscape-dock-gfn-value"
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
-# 340x OpenMP anti-scaling of many small single points out of the picture
-# (AGENTS.md section 6.8).  The stage 1 CLI checks of the same family
+# ~340x OpenMP anti-scaling of many small single points out of the picture.
+# The stage 1 CLI checks of the same family
 # (`fc-echo`, `lopt-engine-echo`, `lirc-default-echo`, `lts-escape-echo`,
 # `strict-unknown`) were measured to pass with `XTBPATH` unset as well - the
 # GFN2 parameters are compiled into the binary - but they are registered here

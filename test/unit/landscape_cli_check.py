@@ -3019,9 +3019,10 @@ def check_native_opt_symbols(exe, inp, rundir):
     the geometry with an intrinsic `TMolecule` assignment
     (`src/relaxation_engine.f90:615` and `:779`); gfortran 12.2.0 corrupts
     `sym(2:)` of a `character(len=:), allocatable :: sym(:)` component under
-    intrinsic assignment while every length stays correct (stride bug,
-    AGENTS.md section 6.5 - the suite's own `src/landscape/types/log.f90`
-    already works around it).  Measured consequence: with the L-ANCopt engine
+    intrinsic assignment while every length stays correct (a stride bug in
+    deferred-length character array components - the suite's own
+    `src/landscape/types/log.f90` already works around it).  Measured
+    consequence: with the L-ANCopt engine
     the symbol column of `xtbopt.xyz` **and** of the `final structure:` block
     of stdout came out as NUL bytes, while the numbers were correct.  The `rf`
     engine was never affected, which is why the native `--opt` (default engine

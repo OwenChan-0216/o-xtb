@@ -150,9 +150,9 @@ end subroutine collect_landscape_e2e
 !>
 !> The test runs the real `opt` and `vib` tasks and then rebuilds the Hessian
 !> of the optimised geometry through the same provider the task uses.  The
-!> engine is bitwise reproducible for a fixed thread count (AGENTS.md section
-!> 6.1), so the rebuilt matrix is the one of the task and the comparison of
-!> the two projections is a genuine same-matrix comparison.
+!> engine is bitwise reproducible for a fixed thread count, so the rebuilt
+!> matrix is the one of the task and the comparison of the two projections is
+!> a genuine same-matrix comparison.
 subroutine test_h2o_chain(error)
    type(error_type), allocatable, intent(out) :: error
    type(TEnvironment) :: env

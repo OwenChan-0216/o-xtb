@@ -67,8 +67,8 @@
 !>
 !> **Sign resolution** (M4 hard constraint 2).  `C` is a difference of two
 !> forces divided by `2*delta`: with the force noise of a cold SCC start
-!> (`sigma_F ~ 1e-9` hartree/bohr, AGENTS.md section 6) and the default
-!> `delta = 1.8897e-2` bohr the statistical error of the curvature is
+!> (`sigma_F ~ 1e-9` hartree/bohr, the cold-start SCC gradient noise) and the
+!> default `delta = 1.8897e-2` bohr the statistical error of the curvature is
 !> `sqrt(2) sigma_F/(2 delta) ~ 4e-8` hartree/bohr^2.  That is five orders of
 !> magnitude below the 3 cm^-1 band (about `1e-4` hartree/bohr^2) quoted by
 !> M4 hard constraint 2, so the branch decision is not noise limited for any
