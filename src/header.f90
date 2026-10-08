@@ -45,7 +45,7 @@ subroutine xtb_header(iunit)
    !> row carries no leading blank (it is padded at the end instead), which is
    !> what aligns it with the two lower rows.
    character(len=24),parameter :: wordmark(3) = [character(len=24) :: &
-      "___   _    _____  ___   ", &
+      " ___  __    _____ ____  ", &
       "/ / \ \ \_/  | |  | |_) ", &
       "\_\_/ /_/ \  |_|  |_|_) "]
 

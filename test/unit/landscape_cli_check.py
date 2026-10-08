@@ -5195,16 +5195,15 @@ def check_level_axes(exe, inp, rundir):
 #
 # Three properties are asserted on their own, not only through the exact
 # block: every printed banner line fits the 80 columns of a standard terminal,
-# the three wordmark rows start in the same column (the alignment defect the
-# block layout once had), and the build date line carries the short commit
-# hash of the build, taken from the `provenance` block of the same binary's
-# `--ljson` document.
+# the wordmark is exactly the drawing below, and the build date line carries
+# the short commit hash of the build, taken from the `provenance` block of the
+# same binary's `--ljson` document.
 BANNER_WIDTH = 58
 BANNER_INDENT = 11
 BANNER_ART_WIDTH = 24
 BANNER_LIMIT = 80
 BANNER_WORDMARK = [
-    r"___   _    _____  ___   ",
+    r" ___  __    _____ ____  ",
     r"/ / \ \ \_/  | |  | |_) ",
     r"\_\_/ /_/ \  |_|  |_|_) ",
 ]
@@ -5292,14 +5291,20 @@ def check_banner(exe, inp, rundir):
     if start < 0:
         fail("the banner wordmark is missing above %r" % anchor, output)
 
-    # (b) The three wordmark rows start in the same column.  The drawing once
-    # carried a stray leading blank on its first row, which shifted that row
-    # one column to the right; reinstating it turns this red.
-    starts = [len(line) - len(line.lstrip(" "))
-              for line in lines[start:start + len(BANNER_WORDMARK)]]
-    if len(set(starts)) != 1:
-        fail("the wordmark rows start in different columns: %r" % starts,
-             output)
+    # (b) The wordmark is exactly the drawing above, row for row.  Comparing
+    # the rows verbatim is what catches an accidental edit to the drawing, a
+    # stray leading blank on one row for instance, because it changes that
+    # row's text as well as its alignment.
+    #
+    # An earlier version of this check instead required all three rows to
+    # start in the same column.  That is wrong as a rule: the glyph tops are
+    # deliberately inset or widened - the bar of the "O" sits inside its
+    # sides, while the bar of the "T" is wider than its stem - so the rows do
+    # not share a first column in a correct drawing.
+    wordmark = [centred_wordmark(row) for row in BANNER_WORDMARK]
+    if lines[start:start + len(wordmark)] != wordmark:
+        fail("the wordmark is not the expected drawing\nexpected: %r\ngot:      %r"
+             % (wordmark, lines[start:start + len(wordmark)]), output)
 
     # (a) Every printed banner line fits a standard terminal.
     for line in lines[start:start + len(block)]:
