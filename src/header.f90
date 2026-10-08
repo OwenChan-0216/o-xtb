@@ -21,9 +21,12 @@
 !>
 !> Prints the three line ASCII wordmark of the logo, the product description,
 !> the version lines of `xtb_version` and the legal notice.  Every line is
-!> centred in one common block width, so the banner keeps its shape in a
-!> monospace terminal; the wordmark itself is printed character for character
-!> (the backslashes and the trailing blanks are part of the drawing).
+!> centred in one common block of `width` characters, which is indented by
+!> `indent` so the banner stays inside the 80 columns of a standard terminal
+!> (`indent + width <= 80`); the wordmark itself is printed character for
+!> character (the backslashes and the trailing blanks are part of the
+!> drawing).  The three wordmark rows start in the same column: they share
+!> one centring offset and the first row has no stray leading blank.
 subroutine xtb_header(iunit)
 
    implicit none
@@ -31,39 +34,50 @@ subroutine xtb_header(iunit)
       !! I/O unit
 
    !> Width of the banner block in characters: the length of the longest line
-   !> of the banner (the `Original Author - ...` line of `xtb_version`).
-   integer,parameter :: width = 94
-   !> OxTB wordmark, three lines, printed as authored.
+   !> of the banner (the product description line below).  The block is
+   !> indented by `indent`, so `indent + width` is the widest printed line.
+   integer,parameter :: width = 58
+   !> Leading indent of the banner block: the block is centred in an 80 column
+   !> terminal, `indent = (80 - width) / 2`.
+   integer,parameter :: indent = 11
+   !> OxTB wordmark, three lines, printed as authored.  The rows are padded to
+   !> a common 24 column width, so they share one centring offset; the first
+   !> row carries no leading blank (it is padded at the end instead), which is
+   !> what aligns it with the two lower rows.
    character(len=24),parameter :: wordmark(3) = [character(len=24) :: &
-      " ___   _    _____  ___  ", &
+      "___   _    _____  ___   ", &
       "/ / \ \ \_/  | |  | |_) ", &
       "\_\_/ /_/ \  |_|  |_|_) "]
 
    integer :: i, offset
 
+   offset = indent + max(0, (width - len(wordmark(1))) / 2)
    do i = 1, size(wordmark)
-      offset = max(0, (width - len_trim(wordmark(i))) / 2)
       write(iunit,'(a)') repeat(' ', offset)//wordmark(i)
    end do
 
    call banner_line(iunit, &
       & "OxTB - An Omni-functional PES Exploration and "// &
-      & "Exploitation Toolkit Based on xTB", width)
+      & "Exploitation", width, indent)
+   call banner_line(iunit, "Toolkit Based on xTB", width, indent)
+   call banner_line(iunit, "Original Author - S. Grimme", width, indent)
    call banner_line(iunit, &
-      & "Original Author - S. Grimme from Mulliken Center for "// &
-      & "Theoretical Chemistry, University of Bonn", width)
+      & "Mulliken Center for Theoretical Chemistry", width, indent)
+   call banner_line(iunit, "University of Bonn", width, indent)
 
-   call xtb_version(iunit, width)
+   call xtb_version(iunit, width, indent)
 
    !> The appropriate legal notices stay on the banner (GPL-3.0 section 5(d));
    !> the full disclaimer text is printed by `disclaimer` (also on
    !> `--license`) and stays next to the banner at startup.
    call banner_line(iunit, &
-      & "Copyright (C) 2017-2020 Stefan Grimme, 2019-2020 "// &
-      & "Sebastian Ehlert and contributors", width)
+      & "Copyright (C) 2017-2020 Stefan Grimme,", width, indent)
    call banner_line(iunit, &
-      & "LGPL-3.0-or-later - NO WARRANTY; see `oxtb "// &
-      & "--license` for the full text", width)
+      & "2019-2020 Sebastian Ehlert and contributors", width, indent)
+   call banner_line(iunit, &
+      & "LGPL-3.0-or-later - NO WARRANTY;", width, indent)
+   call banner_line(iunit, &
+      & "see `oxtb --license` for the full text", width, indent)
    write(iunit,'(a)')
 
 end subroutine xtb_header
@@ -72,29 +86,58 @@ end subroutine xtb_header
 !>
 !> `oxtb_version` is the product version of this program, `engine_version`
 !> the version of the xTB engine it is built from (both generated into
-!> `xtb_version.fh`).
-subroutine xtb_version(iunit,width)
+!> `xtb_version.fh`).  The build date line carries the short commit hash for
+!> bug reports; the hash is taken from the same `version` string the banner
+!> printed before the rebrand (`<engine> (<commit>)`) and is omitted when the
+!> build has none, so the line never shows an empty token.
+subroutine xtb_version(iunit,width,indent)
 
    implicit none
    integer,intent(in) :: iunit
       !! I/O unit
    integer,intent(in) :: width
       !! Banner block width in characters, see `xtb_header`
+   integer,intent(in) :: indent
+      !! Leading indent of the banner block, see `xtb_header`
+
+   !> Short commit hash of the build, empty when the build carries none.
+   character(len=:),allocatable :: commit
+   integer :: hash_start, hash_end
 
    include 'xtb_version.fh'
-   call banner_line(iunit, "* OxTB version "//oxtb_version//" *", width)
-   call banner_line(iunit, "* xTB version "//engine_version//" *", width)
-   call banner_line(iunit, "Compiled on "//date, width)
+
+   hash_start = index(version, '(')
+   hash_end = index(version, ')')
+   if (hash_start > 0 .and. hash_end > hash_start + 1) then
+      commit = version(hash_start + 1:hash_end - 1)
+   else
+      commit = ''
+   end if
+   !> `unknown-commit` is what `cmake/CMakeLists.txt` writes when `git` cannot
+   !> be asked; treat it as no hash at all.
+   if (commit == 'unknown-commit') commit = ''
+   if (len(commit) > 7) commit = commit(1:7)
+
+   call banner_line(iunit, "* OxTB version "//oxtb_version//" *", width, &
+      & indent)
+   call banner_line(iunit, "* xTB version "//engine_version//" *", width, &
+      & indent)
+   if (len(commit) > 0) then
+      call banner_line(iunit, "Compiled on "//date//" from "//commit, width, &
+         & indent)
+   else
+      call banner_line(iunit, "Compiled on "//date, width, indent)
+   end if
    write(iunit,'(a)')
 
 end subroutine xtb_version
 
-!> Write one banner line centred in `width` characters.
+!> Write one banner line centred in `width` characters and indented.
 !>
 !> The centring is the leading padding `(width - len)/2` `generic_header`
-!> below uses; a line longer than the block width is not truncated and starts
-!> in the first column.
-subroutine banner_line(iunit,line,width)
+!> below uses, shifted right by `indent`; a line longer than the block width
+!> is not truncated and starts at `indent`.
+subroutine banner_line(iunit,line,width,indent)
 
    implicit none
    integer,intent(in) :: iunit
@@ -103,9 +146,11 @@ subroutine banner_line(iunit,line,width)
       !! Banner line, trailing blanks are not printed
    integer,intent(in) :: width
       !! Banner block width in characters
+   integer,intent(in) :: indent
+      !! Leading indent of the banner block
 
    write(iunit,'(a)') &
-      & repeat(' ', max(0, (width - len_trim(line)) / 2))//trim(line)
+      & repeat(' ', indent + max(0, (width - len_trim(line)) / 2))//trim(line)
 
 end subroutine banner_line
 

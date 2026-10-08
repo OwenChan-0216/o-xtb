@@ -110,7 +110,12 @@ set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${dialects}" PARENT_SCOPE)
 # Populate xtb_version.fh with metadata
 set(version ${PROJECT_VERSION})
 set(oxtb_version ${OXTB_PRODUCT_VERSION})
+# `WORKING_DIRECTORY` matters: without it the command runs in the build
+# directory, so a build tree outside the repository (a scratch /tmp build, for
+# instance) silently falls back to `unknown-commit` and the banner loses the
+# revision it is supposed to show.
 execute_process(COMMAND git rev-parse HEAD
+  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
   RESULT_VARIABLE git_return
   OUTPUT_VARIABLE commit)
 if(git_return)

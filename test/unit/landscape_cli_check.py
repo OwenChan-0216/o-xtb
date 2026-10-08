@@ -5186,39 +5186,66 @@ def check_level_axes(exe, inp, rundir):
 # version, the engine version and the legal notices are printed together, and
 # nothing covered it before this check (`xtb/Argparser_print_version` only ran
 # `--version` and looked at the exit status).  `xtb_header` centres every line
-# in one block width, so the check pins the exact indentation of the wordmark
-# and of every text line, both version numbers, the build date line, the legal
-# notice, the order of the block - and that the old boxed `x T B` banner is
-# gone.  The wordmark is compared **with** its trailing blanks, because those
-# are part of the drawing.
-BANNER_WIDTH = 94
+# in one block of `BANNER_WIDTH` characters and indents the block by
+# `BANNER_INDENT`, so the check pins the exact indentation of the wordmark and
+# of every text line, both version numbers, the build date line (commit hash
+# included), the legal notice, the order of the block - and that the old boxed
+# `x T B` banner is gone.  The wordmark is compared **with** its trailing
+# blanks, because those are part of the drawing.
+#
+# Three properties are asserted on their own, not only through the exact
+# block: every printed banner line fits the 80 columns of a standard terminal,
+# the three wordmark rows start in the same column (the alignment defect the
+# block layout once had), and the build date line carries the short commit
+# hash of the build, taken from the `provenance` block of the same binary's
+# `--ljson` document.
+BANNER_WIDTH = 58
+BANNER_INDENT = 11
+BANNER_ART_WIDTH = 24
+BANNER_LIMIT = 80
 BANNER_WORDMARK = [
-    r" ___   _    _____  ___  ",
+    r"___   _    _____  ___   ",
     r"/ / \ \ \_/  | |  | |_) ",
     r"\_\_/ /_/ \  |_|  |_|_) ",
 ]
 BANNER_TEXT = [
-    "OxTB - An Omni-functional PES Exploration and Exploitation Toolkit "
-    "Based on xTB",
-    "Original Author - S. Grimme from Mulliken Center for Theoretical "
-    "Chemistry, University of Bonn",
+    "OxTB - An Omni-functional PES Exploration and Exploitation",
+    "Toolkit Based on xTB",
+    "Original Author - S. Grimme",
+    "Mulliken Center for Theoretical Chemistry",
+    "University of Bonn",
+]
+BANNER_VERSION = [
     "* OxTB version 0.1.0 *",
     "* xTB version 6.7.1 *",
-    "Copyright (C) 2017-2020 Stefan Grimme, 2019-2020 Sebastian Ehlert and "
-    "contributors",
-    "LGPL-3.0-or-later - NO WARRANTY; see `oxtb --license` for the full text",
+]
+BANNER_LEGAL = [
+    "Copyright (C) 2017-2020 Stefan Grimme,",
+    "2019-2020 Sebastian Ehlert and contributors",
+    "LGPL-3.0-or-later - NO WARRANTY;",
+    "see `oxtb --license` for the full text",
 ]
 # The dashed box of the banner this check replaced.
 BANNER_OLD = "-" * 59
-# The legal notice of the banner, printed in the same block.
-BANNER_LEGAL = BANNER_TEXT[4:]
+# What `cmake/CMakeLists.txt` bakes in when `git` cannot be asked for a commit.
+BANNER_NO_COMMIT = "unknown-commit"
 
 
 def centred_banner_line(text):
     """The line `xtb_header`/`banner_line` prints for `text`: centred in
-    `BANNER_WIDTH` characters, trailing blanks of the text kept."""
-    offset = max(0, (BANNER_WIDTH - len(text.rstrip())) // 2)
+    `BANNER_WIDTH` characters and indented by `BANNER_INDENT`."""
+    offset = BANNER_INDENT + max(0, (BANNER_WIDTH - len(text.rstrip())) // 2)
     return " " * offset + text
+
+
+def centred_wordmark(row):
+    """The line `xtb_header` prints for one wordmark `row`.
+
+    The rows are padded to `BANNER_ART_WIDTH` and share one offset, so the
+    three of them start in the same column; the row keeps its trailing
+    blanks."""
+    offset = BANNER_INDENT + max(0, (BANNER_WIDTH - BANNER_ART_WIDTH) // 2)
+    return " " * offset + row
 
 
 def check_banner(exe, inp, rundir):
@@ -5240,18 +5267,46 @@ def check_banner(exe, inp, rundir):
     if len(compiled) != 1:
         fail("the banner has %d 'Compiled on' lines, expected exactly one"
              % len(compiled), output)
-    date = compiled[0][len("Compiled on "):]
-    if not re.fullmatch(r"[0-9]{4}/[0-9]{2}/[0-9]{2}", date):
-        fail("the build date %r is not <year>/<month>/<day>" % date, output)
+    match = re.fullmatch(
+        r"Compiled on ([0-9]{4}/[0-9]{2}/[0-9]{2})(?: from (\S+))?",
+        compiled[0])
+    if not match:
+        fail("the build date line %r is not 'Compiled on <date>' or "
+             "'Compiled on <date> from <hash>'" % compiled[0], output)
+    date, banner_commit = match.group(1), match.group(2)
 
-    texts = (BANNER_WORDMARK + BANNER_TEXT[:4] + [compiled[0], ""]
-             + BANNER_LEGAL)
-    block = ["" if text == "" else centred_banner_line(text)
-             for text in texts]
+    block = ([centred_wordmark(row) for row in BANNER_WORDMARK]
+             + [centred_banner_line(text) for text in BANNER_TEXT]
+             + [centred_banner_line(text) for text in BANNER_VERSION]
+             + [centred_banner_line(compiled[0]), ""]
+             + [centred_banner_line(text) for text in BANNER_LEGAL])
+    # The product description line is stable while the wordmark is not, so it
+    # is the anchor of the block: the wordmark starts `len(BANNER_WORDMARK)`
+    # lines above it.
+    anchor = centred_banner_line(BANNER_TEXT[0])
     try:
-        start = lines.index(block[0])
+        start = lines.index(anchor) - len(BANNER_WORDMARK)
     except ValueError:
-        fail("the banner wordmark is missing (expected %r)" % block[0], output)
+        fail("the banner product line is missing (expected %r)" % anchor,
+             output)
+    if start < 0:
+        fail("the banner wordmark is missing above %r" % anchor, output)
+
+    # (b) The three wordmark rows start in the same column.  The drawing once
+    # carried a stray leading blank on its first row, which shifted that row
+    # one column to the right; reinstating it turns this red.
+    starts = [len(line) - len(line.lstrip(" "))
+              for line in lines[start:start + len(BANNER_WORDMARK)]]
+    if len(set(starts)) != 1:
+        fail("the wordmark rows start in different columns: %r" % starts,
+             output)
+
+    # (a) Every printed banner line fits a standard terminal.
+    for line in lines[start:start + len(block)]:
+        if len(line) > BANNER_LIMIT:
+            fail("the banner line %r is %d columns wide, more than %d"
+                 % (line, len(line), BANNER_LIMIT), output)
+
     if lines[start:start + len(block)] != block:
         fail("the banner is not the expected centred block\nexpected: %r\ngot:      %r"
              % (block, lines[start:start + len(block)]), output)
@@ -5259,21 +5314,42 @@ def check_banner(exe, inp, rundir):
         if line.strip() == BANNER_OLD:
             fail("the old boxed xTB banner is still printed", output)
     print("--version banner: %d centred lines, product 0.1.0, engine 6.7.1, "
-          "build date %s" % (len(block), date))
+          "build date %s, commit %s"
+          % (len(block), date, banner_commit or "none"))
 
-    status, output = run(exe, inp, ["--gfn", "2", "--sp", "--norestart"],
-                         rundir)
+    status, output = run(exe, inp, ["--gfn", "2", "--sp", "--norestart",
+                                    "--ljson"], rundir)
     if status != 0:
         fail("the GFN2 single point terminated with status %d" % status,
              output)
-    for text in BANNER_WORDMARK + BANNER_TEXT:
-        if centred_banner_line(text) not in output.split("\n"):
+    normal = output.split("\n")
+    for row in BANNER_WORDMARK:
+        if centred_wordmark(row) not in normal:
+            fail("the banner wordmark row %r is missing from a normal run"
+                 % row, output)
+    for text in BANNER_TEXT + BANNER_VERSION:
+        if centred_banner_line(text) not in normal:
             fail("the banner line %r is missing from a normal run" % text,
                  output)
     if "Compiled on " not in output:
         fail("the banner of a normal run has no build date", output)
     if "GNU Lesser General Public License" not in output:
         fail("the disclaimer is no longer printed at startup", output)
+
+    # The build date line carries the commit hash of the build.  The same
+    # binary reports the hash in the `provenance` block of its `--ljson`
+    # document, so the check compares the two instead of trusting the format;
+    # a build without a hash (no `git` at configure time) must fall back to
+    # the date alone rather than print an empty token.
+    build_commit = read_json(rundir, "landscape_sp.json")["provenance"]["commit"]
+    if build_commit and build_commit != BANNER_NO_COMMIT:
+        expected = build_commit[:7]
+        if banner_commit != expected:
+            fail("the build date line carries %r, expected the commit hash %r"
+                 % (banner_commit, expected), output)
+    elif banner_commit is not None:
+        fail("the build carries no commit hash but the banner claims %r"
+             % banner_commit, output)
 
     status, output = run(exe, inp, ["--license"], rundir)
     if status != 0:
