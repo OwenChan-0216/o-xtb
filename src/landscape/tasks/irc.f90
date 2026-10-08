@@ -99,6 +99,7 @@ module xtb_landscape_tasks_irc
    use xtb_landscape_irc_eulerpc, only : landscape_irc_eulerpc_walk
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_counter, &
+      & landscape_json_add_core, &
       & landscape_json_add_value, landscape_json_add_flag, &
       & landscape_json_add_series, landscape_json_write, &
       & landscape_json_status_ok, landscape_json_status_incomplete, &
@@ -445,7 +446,7 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
    end if
 
    if (settings%ljson) then
-      call write_json(env, settings, result, have_bwd, n_scf_fail)
+      call write_json(env, mol, settings, result, have_bwd, n_scf_fail)
    end if
 
 end subroutine landscape_irc
@@ -468,9 +469,11 @@ end subroutine landscape_irc
 !> run whose input is not a saddle, that could not build a direction or that
 !> had an unconverged SCC is `error` - the task reports it through `env` and
 !> the process exits non-zero.
-subroutine write_json(env, settings, result, have_bwd, n_scf_fail)
+subroutine write_json(env, mol, settings, result, have_bwd, n_scf_fail)
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
+   !> Molecule of the run (the core block's geometry, the transition state)
+   type(TMolecule), intent(in) :: mol
    !> IRC settings
    type(landscape_irc_settings), intent(in) :: settings
    !> IRC result
@@ -516,6 +519,7 @@ subroutine write_json(env, settings, result, have_bwd, n_scf_fail)
    doc%converged = result%is_saddle .and. result%n_fwd > 0 .and. .not. truncated &
       & .and. result%term_fwd /= p_landscape_irc_term_max_steps
    if (allocated(result%message)) doc%message = result%message
+   call landscape_json_add_core(doc, mol, result%energy_ts, settings%input_file)
    call landscape_json_add_counter(doc, 'method', settings%method)
    call landscape_json_add_counter(doc, 'n_fwd', result%n_fwd)
    call landscape_json_add_counter(doc, 'n_bwd', result%n_bwd)

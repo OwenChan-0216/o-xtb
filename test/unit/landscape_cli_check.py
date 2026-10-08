@@ -31,7 +31,7 @@ mode mirrors one CMake test one-to-one:
   vib    <exe> <input> <rundir>       -> xtb/landscape-vib-cli
   vibnamespace <exe> <input> <rundir> -> xtb/landscape-vib-namespace
   optnamespace <exe> <input> <rundir> -> xtb/landscape-opt-namespace
-  ljsonnorun <exe> <input> <rundir>   -> xtb/landscape-ljson-no-runtype
+  ljsondefault <exe> <input> <rundir> -> xtb/landscape-ljson-default
   vibetemp <exe> <input> <rundir>     -> xtb/landscape-vib-etemp
   enumcase <exe> <input> <rundir> <second>
                                      -> xtb/landscape-enum-case
@@ -2478,14 +2478,15 @@ def check_opt_namespace(exe, inp, rundir):
              "tell an overwrite from a correct pair")
 
 
-def check_ljson_no_runtype(exe, inp, rundir):
-    """`--ljson` without a landscape run type is reported, not silently ignored.
+def check_ljson_default(exe, inp, rundir):
+    """The bare default run type (`--sp`) writes its document.
 
-    Mirrors the CMake script of `xtb/landscape-ljson-no-runtype` (finding L-9 of
-    `50-m7-independent-review.md`): the switch is an output switch, so a run
-    type that does not know it writes nothing.  That used to happen without a
-    message; now the no-op is reported on stderr, no document is written, and
-    the process still exits 0 because the request itself is not an error.
+    Report 117 retires the old contract "`--ljson` without a landscape run type
+    writes nothing and warns": the bare default `set%runtyp` is 2 = `--sp`, and
+    every documented run type now writes `landscape_<task>.json`.  This mode
+    mirrors the CMake script of `xtb/landscape-ljson-default`: the run exits 0,
+    writes `landscape_sp.json` with the uniform core block, and no warning
+    about a missing run type is printed.
     """
     rundir = os.path.abspath(rundir)
     shutil.rmtree(rundir, ignore_errors=True)
@@ -2495,13 +2496,16 @@ def check_ljson_no_runtype(exe, inp, rundir):
     )
     if status != 0:
         fail("xtb --ljson terminated with status %d" % status, output)
-    if "writes nothing without a landscape run type" not in output:
-        fail("the --ljson no-op was not reported", output)
-    documents = [name for name in os.listdir(rundir)
-                 if name.startswith("landscape_") and name.endswith(".json")]
-    if documents:
-        fail("--ljson wrote a document without a landscape run type: %s"
-             % documents)
+    if "writes nothing" in output:
+        fail("the retired --ljson no-op warning is still printed", output)
+    document = read_json(rundir, "landscape_sp.json")
+    if document.get("task") != "sp":
+        fail("the default --ljson document is not an sp result", output)
+    for key in ("format", "n_atoms", "energy", "geometry", "provenance"):
+        if key not in document:
+            fail("the default --ljson document lacks the core key %s" % key,
+                 output)
+    print("ljson default: the bare --sp default writes landscape_sp.json")
 
 
 def check_method(exe, inp, rundir, hcn, nh3, nh3down):
@@ -4156,13 +4160,21 @@ def check_opt_native_exit(exe, inp, rundir):
             fail("--opt --method %s ran the landscape suite" % name, output)
         if "[NOTICE]" in output:
             fail("--opt --method %s announced a redeployment" % name, output)
-        if "writes nothing without a landscape run type" not in output:
-            fail("--ljson did not report the native exit --opt --method %s as a "
-                 "run type without a document" % name, output)
-        documents = [f for f in os.listdir(workdir)
-                     if f.startswith("landscape_") and f.endswith(".json")]
-        if documents:
-            fail("--opt --method %s wrote %s" % (name, documents), output)
+        # Report 117: the native run types write the unified document too, so
+        # the old "writes nothing without a landscape run type" contract is
+        # retired.  The native engine must still leave the suite untouched
+        # (asserted above), but it now writes the same core document every
+        # task writes.
+        document = read_json(workdir, "landscape_opt.json")
+        if document.get("task") != "opt":
+            fail("--opt --method %s wrote a non-opt document" % name, output)
+        if document.get("status_name") not in ("ok", "incomplete", "error"):
+            fail("--opt --method %s wrote a status_name %r"
+                 % (name, document.get("status_name")), output)
+        for key in ("format", "n_atoms", "energy", "geometry", "provenance"):
+            if key not in document:
+                fail("--opt --method %s document lacks the core key %s"
+                     % (name, key), output)
         print("opt native exit: --method %-10s -> %s" % (name, token))
 
 
@@ -5311,8 +5323,8 @@ def main():
         check_thermo_knobs(exe, inp, rundir, rest[0])
     elif mode == "optnamespace":
         check_opt_namespace(exe, inp, rundir)
-    elif mode == "ljsonnorun":
-        check_ljson_no_runtype(exe, inp, rundir)
+    elif mode == "ljsondefault":
+        check_ljson_default(exe, inp, rundir)
     elif mode == "ts":
         check_ts(exe, inp, rundir)
     elif mode == "tsetemp":

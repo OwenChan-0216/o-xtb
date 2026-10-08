@@ -37,7 +37,8 @@ module xtb_landscape_sp
    use xtb_landscape_results, only : landscape_result
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_result, &
-      & landscape_json_add_value, landscape_json_write, &
+      & landscape_json_add_core, landscape_json_add_value, &
+      & landscape_json_write, &
       & landscape_json_status_ok, landscape_json_status_error
    use xtb_landscape_coords, only : vec_norm, vec_maxabs, geometry_pack
    use xtb_landscape_engine, only : landscape_engine, new_landscape_engine, &
@@ -154,7 +155,7 @@ subroutine landscape_single_point(env, mol, chk, calc, settings, result)
    if (settings%printlevel > 0) call engine%report(env%unit)
    call engine%destroy()
 
-   if (settings%ljson) call write_json(env, result)
+   if (settings%ljson) call write_json(env, mol, settings, result)
 
 end subroutine landscape_single_point
 
@@ -163,9 +164,13 @@ end subroutine landscape_single_point
 !> The document carries the shared result fields plus the single point
 !> specific request flags, so a regression diff shows whether a Hessian was
 !> asked for as well.
-subroutine write_json(env, result)
+subroutine write_json(env, mol, settings, result)
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
+   !> Molecule of the run (the core block's geometry)
+   type(TMolecule), intent(in) :: mol
+   !> Single point settings
+   type(landscape_sp_settings), intent(in) :: settings
    !> Single point result
    type(landscape_result), intent(in) :: result
 
@@ -179,6 +184,7 @@ subroutine write_json(env, result)
    if (.not. result%converged) status = landscape_json_status_error
    call landscape_json_document_init(doc, 'sp')
    call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_core(doc, mol, result%energy, settings%input_file)
    call landscape_json_add_value(doc, 'kcal_per_mol', result%energy*autokcal)
    call landscape_json_write(env, doc, ok)
 

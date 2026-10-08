@@ -48,6 +48,7 @@ module xtb_landscape_tasks_opt
       & landscape_write_last_geometry
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_result, &
+      & landscape_json_add_core, &
       & landscape_json_add_counter, landscape_json_add_value, &
       & landscape_json_write, landscape_json_status_ok, &
       & landscape_json_status_incomplete, landscape_json_status_error
@@ -209,7 +210,7 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
       call landscape_write_files(env, mol, settings, traj, result)
    end if
 
-   if (settings%ljson) call write_json(env, result, n_scf_fail)
+   if (settings%ljson) call write_json(env, mol, settings, result, n_scf_fail)
 
    call engine%destroy()
 
@@ -257,9 +258,13 @@ end subroutine landscape_optimize
 !> `incomplete`, the caller may still look at the geometry) from "the run is
 !> not trustworthy" (status `error`, the energy/gradient pair of an
 !> unconverged SCC was never accepted by the engine).
-subroutine write_json(env, result, n_scf_fail)
+subroutine write_json(env, mol, settings, result, n_scf_fail)
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
+   !> Molecule of the run (the core block's geometry)
+   type(TMolecule), intent(in) :: mol
+   !> Minimisation settings
+   type(landscape_opt_settings), intent(in) :: settings
    !> Minimisation result
    type(landscape_result), intent(in) :: result
    !> Number of unconverged SCCs of the run
@@ -274,6 +279,7 @@ subroutine write_json(env, result, n_scf_fail)
    if (n_scf_fail > 0) status = landscape_json_status_error
    call landscape_json_document_init(doc, 'opt')
    call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_core(doc, mol, result%energy, settings%input_file)
    call landscape_json_add_counter(doc, 'n_fallback', result%n_fallback)
    call landscape_json_add_value(doc, 'kcal_per_mol', result%energy*autokcal)
    call landscape_json_write(env, doc, ok)

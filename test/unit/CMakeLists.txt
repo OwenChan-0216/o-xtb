@@ -3517,12 +3517,16 @@ foreach(task IN ITEMS opt scan scan2d vib ts irc)
     -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
 endforeach()
 
-# `--ljson` is an output switch, not a run type: without one of `--lopt`,
-# `--lscan`, `--lvib`, `--lts`, `--lirc` it writes nothing, which used to be a
-# silent no-op (finding L-9 of `50-m7-independent-review.md`).  The check pins
-# both halves of the contract: the no-op is reported on stderr, no document is
-# written, and the run itself still exits 0 because the request is not an error.
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ljson_norun.cmake" [=[
+# `--ljson` is an output switch, not a run type.  Since the unified document
+# of report 117 **every** run type writes a `landscape_<task>.json`: the bare
+# default run type is `set%runtyp` = 2 = `--sp`, so `--gfn 2 --ljson` writes
+# `landscape_sp.json`.  The old "writes nothing without a landscape run type"
+# warning is retired (its premise was that only the suite emitted JSON).  This
+# check pins the new contract - the default is a task and writes a document -
+# and the one genuinely incapable mode reachable here: a tblite-gated
+# pre-calculation (`--dipro`, `--ceh`) never reaches the common
+# post-processing and must report why instead of writing silently.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ljson_default.cmake" [=[
 file(REMOVE_RECURSE "${RUNDIR}")
 file(MAKE_DIRECTORY "${RUNDIR}")
 execute_process(
@@ -3535,20 +3539,53 @@ execute_process(
 if(NOT status EQUAL 0)
   message(FATAL_ERROR "xtb --ljson terminated with status ${status}\n${output}")
 endif()
-if(NOT output MATCHES "writes nothing without a landscape run type")
-  message(FATAL_ERROR "the --ljson no-op was not reported\n${output}")
+if(NOT EXISTS "${RUNDIR}/landscape_sp.json")
+  message(FATAL_ERROR "--ljson with the default run type wrote no landscape_sp.json\n${output}")
 endif()
-file(GLOB documents "${RUNDIR}/landscape_*.json")
-if(documents)
-  message(FATAL_ERROR "--ljson wrote a document without a landscape run type: ${documents}")
+file(READ "${RUNDIR}/landscape_sp.json" document)
+foreach(needle "\"format\": 2" "\"task\": \"sp\"" "\"n_atoms\": 3" "\"energy\": " "\"geometry\": {" "\"unit\": \"bohr\"" "\"provenance\": {" "\"oxtb_version\": \"0.1.0\"" "\"engine_version\": \"6.7.1\"" "\"input_file\": ")
+  string(FIND "${document}" "${needle}" found)
+  if(found EQUAL -1)
+    message(FATAL_ERROR "landscape_sp.json lacks ${needle}\n${document}")
+  endif()
+endforeach()
+
+# A tblite-gated pre-calculation is the only run that never reaches the
+# common post-processing; it must write no document and must say why.  In a
+# tblite build the refusal is replaced by the DIPRO/CEH short-circuit (which
+# carries its own `--ljson writes nothing` warning); this build has no tblite,
+# so the parse time refusal is what is asserted.
+if(WITH_TBLITE)
+  message(STATUS "skipping the --dipro negative half: this build has tblite")
+else()
+  file(REMOVE_RECURSE "${RUNDIR}-dipro")
+  file(MAKE_DIRECTORY "${RUNDIR}-dipro")
+  execute_process(
+    COMMAND "${EXE}" "${INPUT}" --gfn 2 --dipro --ljson
+    WORKING_DIRECTORY "${RUNDIR}-dipro"
+    RESULT_VARIABLE status
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE output
+  )
+  if(status EQUAL 0)
+    message(FATAL_ERROR "the tblite-gated --dipro run exited 0\n${output}")
+  endif()
+  if(NOT output MATCHES "tblite")
+    message(FATAL_ERROR "the --dipro refusal did not say why\n${output}")
+  endif()
+  file(GLOB documents "${RUNDIR}-dipro/landscape_*.json")
+  if(documents)
+    message(FATAL_ERROR "--ljson wrote a document for an incapable run type: ${documents}")
+  endif()
 endif()
 ]=])
-add_test("xtb/landscape-ljson-no-runtype"
+add_test("xtb/landscape-ljson-default"
   ${CMAKE_COMMAND}
   -DEXE=${XTB-EXE}
   -DINPUT=${LANDSCAPE-H2O}
-  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ljson-no-runtype
-  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ljson_norun.cmake")
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ljson-default
+  -DWITH_TBLITE=${WITH_TBLITE}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ljson_default.cmake")
 
 # The product endpoint of the HCN/HNC band searches (same atom order as the
 # reactant, HNC on the H-C-N line).  A distinct variable name: `LANDSCAPE-HNC`
@@ -3570,6 +3607,22 @@ add_test("xtb/landscape-e2e-ljson-methods"
   -DSCRIPT=${LANDSCAPE-E2E-PY}
   "-DARGS=ljson-methods;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ljson-methods;${LANDSCAPE-HNC-PRODUCT}"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ljson-methods
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+
+# The single-parser contract of report 117: one parser reads the document of
+# every task.  The check runs the six suite tasks, all eight `ts` methods, all
+# four `irc` methods and the native run types (`--sp`, `--grad`, `--opt`,
+# `--hess`, `--ohess`, `--md`) and feeds every `landscape_<task>.json` to the
+# one parser `parse_document`, which asserts the same top level keys, types,
+# geometry shape, unit and `format: 2` for all of them.  Removing the core
+# block from any single task makes it red (the falsifiability experiment of the
+# report).
+add_test("xtb/landscape-e2e-ljson-core"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=ljson-core;${LANDSCAPE-E2E-XTB};${LANDSCAPE-HCN};${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ljson-core;${LANDSCAPE-HNC-PRODUCT}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ljson-core
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
 
 # The sampling point of the `ts` evaluation counter (PLAN section 12.11): the
@@ -4291,13 +4344,14 @@ add_test("xtb/landscape-banner"
 # `20-stage1-review.md`).
 set_tests_properties(
   "xtb/landscape-ljson-opt"
-  "xtb/landscape-ljson-no-runtype"
+  "xtb/landscape-ljson-default"
   "xtb/landscape-ljson-scan"
   "xtb/landscape-ljson-scan2d"
   "xtb/landscape-ljson-vib"
   "xtb/landscape-ljson-ts"
   "xtb/landscape-ljson-irc"
   "xtb/landscape-e2e-ljson-methods"
+  "xtb/landscape-e2e-ljson-core"
   "xtb/landscape-e2e-ts-counters"
   "xtb/landscape-e2e-scan-counters"
   "xtb/landscape-e2e-chain"

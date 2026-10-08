@@ -424,6 +424,11 @@ module xtb_landscape_settings
       !> artefact.  The file name is the task name of the concrete settings
       !> type, all tasks write the same key order.
       logical :: ljson = .false.
+      !> Positional geometry input file of the run, copied into the
+      !> `provenance` block of the JSON document.  It is an unallocated
+      !> allocatable for a run that has no positional input (the `sp` task of
+      !> the API/tests), which the writer reports as an empty string.
+      character(len=:), allocatable :: input_file
    contains
       !> Test the four convergence criteria plus the energy guard
       procedure :: is_converged => landscape_settings_is_converged

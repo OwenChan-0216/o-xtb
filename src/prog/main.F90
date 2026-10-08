@@ -121,6 +121,7 @@ module xtb_prog_main
       & landscape_lowercase
    use xtb_landscape_hessian, only: landscape_hessian_source_known
    use xtb_landscape_results, only: landscape_result
+   use xtb_landscape_json, only: landscape_json_write_run
 
    implicit none
    private
@@ -608,6 +609,18 @@ contains
 
       call setup_summary(env%unit, mol%n, fname, xcontrol, chk%wfn, xrc)
 
+      ! The positional input file reaches the `provenance` block of the
+      ! `--ljson` document through the settings objects, the only channel to
+      ! the tasks.  It is assigned after the geometry was read, so a default
+      ! input (`caffeine`) or a converted one is reported as the file the run
+      ! actually used.  The suite settings are unused by a native run type and
+      ! vice versa; both carry the name so the document is uniform.
+      lset%input_file = fname
+      lsset%input_file = fname
+      lvset%input_file = fname
+      ltset%input_file = fname
+      lircset%input_file = fname
+
       ! ------------------------------------------------------------------------
       ! 2D => 3D STRUCTURE CONVERTER
       ! ------------------------------------------------------------------------
@@ -795,6 +808,8 @@ contains
 
       ! get CEH charges !
       if (allocated(tblite%ceh)) then
+         if (lset%ljson) call env%warning("--ljson writes nothing: the CEH "//&
+            & "pre-calculation returns before the document stage", source)
          ! if numercal charges are requested !
          if (tblite%ceh%grad) then
             call num_grad_chrg(env,mol,tblite)
@@ -848,6 +863,8 @@ contains
       !-------------------------------------------------------------------------
       ! DIPRO calculation of coupling integrals for dimers
       if (dipro%diprocalc) then
+         if (lset%ljson) call env%warning("--ljson writes nothing: the DIPRO "//&
+            & "coupling calculation terminates before the document stage", source)
          call start_timing(11)
          call get_jab(env, tblite, mol, splitlist, dipro)
          call env%checkpoint("Something in your DIPRO calculation went wrong.")
@@ -1059,19 +1076,16 @@ contains
       ! run types themselves stay `p_run_opt`/`p_run_ohess` (CLI redesign
       ! section 3.11).
       !
-      ! `--ljson` is an output switch of the landscape tasks, not a run type: a
-      ! run type that does not know it writes nothing, which used to happen
-      ! without any message and is a silent no-op for a caller who expected a
-      ! document (finding L-9 of
-      ! `docs/_landscape-recon/50-m7-independent-review.md`).  The check is here
-      ! and not in the parser, because the flag and the run type may be given in
-      ! either order.  It reads the *effective* task, so the redeployed
-      ! `--opt`/`--ohess` write their documents and a native exit such as
-      ! `--opt --method ancopt --ljson` is still reported.
-      if (lset%ljson .and. .not. landscape_is_suite_run(set%runtyp, landscape_native_engine)) then
-         call env%warning("--ljson writes nothing without a landscape run "//&
-            & "type: add --lopt, --lscan, --lvib, --lts, --lirc or --opt", source)
-      end if
+      ! `--ljson` is an output switch, not a run type.  Since the unified
+      ! document of report 117 **every** run type writes a
+      ! `landscape_<task>.json`: the suite tasks through their own drivers,
+      ! the native run types through `landscape_json_write_run` at the common
+      ! post-processing.  The old warning ("writes nothing without a landscape
+      ! run type") is therefore obsolete and removed; it used to fire for the
+      ! native default `--sp`, which is exactly the case that now writes
+      ! `landscape_sp.json`.  The only run types that never reach the common
+      ! post-processing are the tblite-gated DIPRO and CEH short-circuits,
+      ! which report their own reason (see `src/prog/main.F90`).
 
       ! BC-5 of the CLI redesign: `--opt`/`--ohess` change their meaning, and
       ! that is announced on every run.  The notice goes to `env%unit` (stdout,
@@ -1485,6 +1499,26 @@ contains
                                mol, chk%wfn, calc, res, fres)
             call close_file(ich)
          end select
+      end if
+
+      ! Unified machine readable document of a native run type (report 117).
+      !
+      ! The native run types (`--sp`, `--grad`, `--opt`, `--hess`, `--ohess`,
+      ! `--md`, ...) have no `landscape_result`; `landscape_json_write_run`
+      ! fills the same core block the suite tasks write, under the same
+      ! `landscape_<task>.json` name, so one parser reads every task.  The
+      ! document is written independently of `--json` (which still writes
+      ! `xtbout.json` unchanged) and of the run type's own output files.  `res`
+      ! holds the total energy and gradient norm of the run type specific
+      ! block above, so the document describes the geometry `mol` ended on.
+      if (lset%ljson .and. &
+         & .not. landscape_is_suite_run(set%runtyp, landscape_native_engine)) then
+         block
+            logical :: ljson_ok
+            call landscape_json_write_run(env, mol, res%e_total, res%gnorm, &
+               & res%converged, landscape_runtyp_task_name(set%runtyp), fname, &
+               & ljson_ok)
+         end block
       end if
 
       if (allocated(set%property_file)) then
@@ -5105,6 +5139,65 @@ pure function effective_landscape_task(runtyp, native_engine) result(task)
    end if
 
 end function effective_landscape_task
+
+!> Short task name of a run type for the `task` key of the JSON document.
+!>
+!> The native run types need a stable, lower case name for the
+!> `landscape_<task>.json` file and for the `task` key, the way the suite
+!> tasks have one (`sp`, `opt`, `scan`, `ts`, `irc`, `vib`).  The mapping is
+!> the one the `--help`/man run type table uses; an unknown run type (which
+!> the dispatch rejects before this point anyway) yields `run`, so the writer
+!> never produces an empty file name.
+pure function landscape_runtyp_task_name(runtyp) result(name)
+   !> Run type of the process
+   integer, intent(in) :: runtyp
+   !> Lower case task name
+   character(len=:), allocatable :: name
+
+   select case (runtyp)
+   case (p_run_scc)
+      name = 'sp'
+   case (p_run_prescc)
+      name = 'prescc'
+   case (p_run_grad)
+      name = 'grad'
+   case (p_run_opt)
+      name = 'opt'
+   case (p_run_hess)
+      name = 'hess'
+   case (p_run_ohess)
+      name = 'ohess'
+   case (p_run_bhess)
+      name = 'bhess'
+   case (p_run_md)
+      name = 'md'
+   case (p_run_omd)
+      name = 'omd'
+   case (p_run_path)
+      name = 'path'
+   case (p_run_screen)
+      name = 'screen'
+   case (p_run_modef)
+      name = 'modef'
+   case (p_run_mdopt)
+      name = 'mdopt'
+   case (p_run_metaopt)
+      name = 'metaopt'
+   case (p_run_vip)
+      name = 'vip'
+   case (p_run_vea)
+      name = 'vea'
+   case (p_run_vipea)
+      name = 'vipea'
+   case (p_run_vfukui)
+      name = 'vfukui'
+   case (p_run_vomega)
+      name = 'vomega'
+   case default
+      name = 'run'
+   end select
+
+end function landscape_runtyp_task_name
 
 !> TRUE if the landscape suite executes this run type.
 !>

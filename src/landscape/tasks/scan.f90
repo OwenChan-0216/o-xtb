@@ -59,6 +59,7 @@ module xtb_landscape_tasks_scan
       & landscape_scan_grid_write
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_result, &
+      & landscape_json_add_core, &
       & landscape_json_add_counter, landscape_json_add_value, &
       & landscape_json_add_flag, landscape_json_add_series, &
       & landscape_json_write, &
@@ -333,9 +334,11 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
    ! `landscape_settings%ljson`).
    if (settings%ljson) then
       if (settings%ndim == 2) then
-         call write_json_grid(env, result, grid, n_fail, n_unconverged, n_valid)
+         call write_json_grid(env, mol, settings, result, grid, n_fail, &
+            & n_unconverged, n_valid)
       else
-         call write_json_profile(env, result, profile, n_fail, n_unconverged, n_valid)
+         call write_json_profile(env, mol, settings, result, profile, n_fail, &
+            & n_unconverged, n_valid)
       end if
    end if
 
@@ -347,9 +350,14 @@ end subroutine landscape_scan
 !> order, i.e. the quantity of `xtbscan.log`; the counters are the point
 !> counts the task prints (`n_points`, `n_valid`, `n_fail`,
 !> `n_unconverged`) next to the aggregate `n_eval` of the result.
-subroutine write_json_profile(env, result, profile, n_fail, n_unconverged, n_valid)
+subroutine write_json_profile(env, mol, settings, result, profile, n_fail, &
+      & n_unconverged, n_valid)
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
+   !> Molecule of the run (the core block's geometry)
+   type(TMolecule), intent(in) :: mol
+   !> Scan settings
+   type(landscape_scan_settings), intent(in) :: settings
    !> Aggregate scan result
    type(landscape_result), intent(in) :: result
    !> 1D scan profile
@@ -368,6 +376,7 @@ subroutine write_json_profile(env, result, profile, n_fail, n_unconverged, n_val
    call scan_json_status(result, n_fail, status)
    call landscape_json_document_init(doc, 'scan')
    call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_core(doc, mol, result%energy, settings%input_file)
    call landscape_json_add_counter(doc, 'n_points', profile%n_points)
    call landscape_json_add_counter(doc, 'n_forward', profile%n_forward)
    call landscape_json_add_counter(doc, 'n_valid', n_valid)
@@ -393,9 +402,14 @@ end subroutine write_json_profile
 !> The `energy` series holds the grid in **visit order** (the order the
 !> serpentine sweep evaluated the points), so it lines up with the frames of
 !> `xtbscan.log`; `n_points` is `n1*n2`.
-subroutine write_json_grid(env, result, grid, n_fail, n_unconverged, n_valid)
+subroutine write_json_grid(env, mol, settings, result, grid, n_fail, &
+      & n_unconverged, n_valid)
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
+   !> Molecule of the run (the core block's geometry)
+   type(TMolecule), intent(in) :: mol
+   !> Scan settings
+   type(landscape_scan_settings), intent(in) :: settings
    !> Aggregate scan result
    type(landscape_result), intent(in) :: result
    !> 2D scan grid
@@ -415,6 +429,7 @@ subroutine write_json_grid(env, result, grid, n_fail, n_unconverged, n_valid)
    call scan_json_status(result, n_fail, status)
    call landscape_json_document_init(doc, 'scan')
    call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_core(doc, mol, result%energy, settings%input_file)
    call landscape_json_add_counter(doc, 'n_points', grid%n_points)
    call landscape_json_add_counter(doc, 'n1', grid%n1)
    call landscape_json_add_counter(doc, 'n2', grid%n2)

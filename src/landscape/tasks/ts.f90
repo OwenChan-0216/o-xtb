@@ -102,6 +102,7 @@ module xtb_landscape_tasks_ts
    use xtb_mctc_filetypes, only : fileType, getFileType
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_result, &
+      & landscape_json_add_core, &
       & landscape_json_add_counter, landscape_json_add_value, &
       & landscape_json_add_flag, landscape_json_write, landscape_json_status_ok, &
       & landscape_json_status_incomplete, landscape_json_status_error
@@ -293,7 +294,7 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    ! of images between two fixed endpoints.
    if (landscape_ts_method_is_band(settings%method)) then
       call landscape_ts_band(env, mol, chk, engine, settings, result)
-      if (settings%ljson) call write_json(env, settings, result, engine%n_scf_fail)
+      if (settings%ljson) call write_json(env, mol, settings, result, engine%n_scf_fail)
       call engine%report(env%unit)
       call engine%report_unused_hess_step(env%unit)
       call engine%destroy()
@@ -353,7 +354,7 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    call engine%report_unused_hess_step(env%unit)
    call engine%destroy()
 
-   if (settings%ljson) call write_json(env, settings, result, n_scf_fail)
+   if (settings%ljson) call write_json(env, mol, settings, result, n_scf_fail)
 
    if (n_scf_fail > 0) then
       call env%error("transition state search aborted: the SCC did not "//&
@@ -380,9 +381,11 @@ end subroutine landscape_ts
 !> methods fill `result%converged` from the band criterion and have no
 !> convergence report (`result%conv`), so their `history` block is empty while
 !> the counters and the confirmation are complete.
-subroutine write_json(env, settings, result, n_scf_fail)
+subroutine write_json(env, mol, settings, result, n_scf_fail)
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
+   !> Molecule of the run (the core block's geometry, the converged saddle)
+   type(TMolecule), intent(in) :: mol
    !> Transition state settings
    type(landscape_ts_settings), intent(in) :: settings
    !> Search result
@@ -405,6 +408,7 @@ subroutine write_json(env, settings, result, n_scf_fail)
    if (n_scf_fail > 0) status = landscape_json_status_error
    call landscape_json_document_init(doc, 'ts')
    call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_core(doc, mol, result%energy, settings%input_file)
    call landscape_json_add_counter(doc, 'method', settings%method)
    call landscape_json_add_flag(doc, 'verify_ts', settings%verify_ts)
    call landscape_json_add_value(doc, 'kcal_per_mol', result%energy*autokcal)

@@ -64,6 +64,14 @@ Modes (the first four mirror a CMake test of `test/unit/CMakeLists.txt`)
         and asserts that each writes a parseable document whose `method`
         counter is the identifier of the method (the four band searches take
         a different code path in the task and return early).
+  ljson-core <exe> <input> <rundir> <product>
+        The single-parser contract of report 117: runs the six suite tasks,
+        all eight `ts` methods, all four `irc` methods and the native run
+        types (`--sp`, `--grad`, `--opt`, `--hess`, `--ohess`, `--md`) and
+        feeds every `landscape_<task>.json` to one parser (`parse_document`),
+        which asserts the uniform core block (keys, types, geometry shape,
+        unit, `format: 2`) for all of them.  Removing the core block from any
+        one task makes it red.
   scan-counters <exe> <input> <rundir>
         The point bookkeeping of a scan: runs a converged scan and a scan
         whose inner relaxation never converges (`--lscan-max-steps 1`) and
@@ -382,7 +390,8 @@ def check_ljson(exe, inp, rundir, task):
     if document.get("status") != 0:
         fail("%s reports status %s" % (name, document.get("status")), read(path))
     if list(document) != ["format", "task", "status", "status_name",
-                          "converged", "message", "counters", "values",
+                          "converged", "message", "n_atoms", "energy",
+                          "geometry", "provenance", "counters", "values",
                           "flags", "history"]:
         fail("%s has an unexpected key order: %s" % (name, list(document)),
              read(path))
@@ -1070,6 +1079,161 @@ def count_extrema(energies):
     return {"minima": minima, "maxima": maxima}
 
 
+# The uniform top level of a `--ljson` document (format 2).  Every task, suite
+# or native, writes exactly these keys in exactly this order (report 117).
+CORE_KEYS = ["format", "task", "status", "status_name", "converged",
+             "message", "n_atoms", "energy", "geometry", "provenance",
+             "counters", "values", "flags", "history"]
+#> Keys of the geometry block; the unit is stated explicitly (bohr).
+GEOMETRY_KEYS = ["unit", "symbols", "coordinates"]
+#> Keys of the provenance block.
+PROVENANCE_KEYS = ["oxtb_version", "engine_version", "commit", "command_line",
+                   "method", "charge", "spin", "input_file"]
+
+
+def parse_document(path, expected_task):
+    """The single parser: read any task document and return the core block.
+
+    This one function is the whole point of the unified schema.  It asserts
+    the same top level keys, the same types and the same core block for every
+    task - suite or native - and returns the parsed document so a caller can
+    make further assertions.  A task that omits or renames a core key,
+    changes a core type, drops the geometry, states the wrong unit or writes a
+    different `format` fails here, whichever task it is.
+    """
+    try:
+        with open(path) as handle:
+            doc = json.load(handle)
+    except (OSError, ValueError) as error:
+        fail("%s is not valid JSON: %s" % (path, error),
+             read(path) if os.path.exists(path) else "")
+    if list(doc) != CORE_KEYS:
+        fail("%s has an unexpected key order: %s" % (path, list(doc)),
+             read(path))
+    if isinstance(doc["format"], bool) or not isinstance(doc["format"], int) \
+            or doc["format"] != 2:
+        fail("%s does not declare format 2: %r" % (path, doc["format"]))
+    if doc["task"] != expected_task:
+        fail("%s declares task %r, expected %r"
+             % (path, doc["task"], expected_task))
+    if not isinstance(doc["status"], int) or isinstance(doc["status"], bool):
+        fail("%s status is not an integer" % path)
+    if not isinstance(doc["status_name"], str):
+        fail("%s status_name is not a string" % path)
+    if not isinstance(doc["converged"], bool):
+        fail("%s converged is not a boolean" % path)
+    if not isinstance(doc["message"], str):
+        fail("%s message is not a string" % path)
+    if not isinstance(doc["n_atoms"], int) or isinstance(doc["n_atoms"], bool) \
+            or doc["n_atoms"] <= 0:
+        fail("%s n_atoms is not a positive integer" % path)
+    if isinstance(doc["energy"], bool) \
+            or not isinstance(doc["energy"], (int, float)):
+        fail("%s energy is not a number" % path)
+    geometry = doc["geometry"]
+    if not isinstance(geometry, dict) or list(geometry) != GEOMETRY_KEYS:
+        fail("%s geometry has an unexpected shape: %s" % (path, geometry))
+    if geometry["unit"] != "bohr":
+        fail("%s geometry unit is %r, expected 'bohr'"
+             % (path, geometry["unit"]))
+    symbols = geometry["symbols"]
+    coordinates = geometry["coordinates"]
+    if not isinstance(symbols, list) or len(symbols) != doc["n_atoms"]:
+        fail("%s geometry has %s symbols for %d atoms"
+             % (path, len(symbols), doc["n_atoms"]))
+    if any(not isinstance(s, str) or not s for s in symbols):
+        fail("%s geometry symbols are not non-empty strings" % path)
+    if not isinstance(coordinates, list) or len(coordinates) != doc["n_atoms"]:
+        fail("%s geometry has %s coordinate rows for %d atoms"
+             % (path, len(coordinates), doc["n_atoms"]))
+    for row in coordinates:
+        if (not isinstance(row, list) or len(row) != 3 or
+                any(isinstance(v, bool) or not isinstance(v, (int, float))
+                    for v in row)):
+            fail("%s geometry row is not an [x, y, z] triple: %s"
+                 % (path, row))
+    provenance = doc["provenance"]
+    if not isinstance(provenance, dict) or list(provenance) != PROVENANCE_KEYS:
+        fail("%s provenance has an unexpected shape: %s" % (path, provenance))
+    for key in ("oxtb_version", "engine_version", "commit", "command_line",
+                "method", "input_file"):
+        if not isinstance(provenance[key], str):
+            fail("%s provenance %s is not a string" % (path, key))
+    if not provenance["oxtb_version"] or not provenance["engine_version"]:
+        fail("%s provenance carries no version" % path)
+    if not provenance["command_line"]:
+        fail("%s provenance carries no command line" % path)
+    for key in ("charge", "spin"):
+        if isinstance(provenance[key], bool) \
+                or not isinstance(provenance[key], int):
+            fail("%s provenance %s is not an integer" % (path, key))
+    for key in ("counters", "values", "flags", "history"):
+        if not isinstance(doc[key], dict):
+            fail("%s %s is not an object" % (path, key))
+    return doc
+
+
+def check_ljson_core(exe, inp, rundir, product):
+    """The single-parser contract: every task parses with one parser.
+
+    Runs a representative matrix - the six suite tasks, all eight `ts`
+    methods, all four `irc` methods and the native run types - and feeds
+    every document to `parse_document`, the one parser.  This is the
+    falsifiable form of "one parser reads every task": removing the core
+    block from any single task makes the parser reject that task's document,
+    so the check goes red.  The assertions are structural (keys, types,
+    shape, unit), not numerical; the numerical cross-checks live in the
+    `ljson` and `*-counters` modes.
+    """
+    rundir = os.path.abspath(rundir)
+    os.makedirs(rundir, exist_ok=True)
+    product_file = os.path.join(rundir, "product.xyz")
+    with open(product_file, "w") as handle:
+        handle.write(product)
+    md_ctrl = os.path.join(rundir, "md.ctrl")
+    with open(md_ctrl, "w") as handle:
+        handle.write("$md\n  time=0.02\n  temp=300.0\n$end\n")
+
+    # (label, args, task) - the native run types first, then the suite ones
+    # (the `ts`/`irc` method loops below add the rest).
+    matrix = [
+        ("native-sp", ["--sp"], "sp"),
+        ("native-grad", ["--grad"], "grad"),
+        ("native-opt", ["--opt", "--method", "ancopt"], "opt"),
+        ("native-hess", ["--hess"], "hess"),
+        ("native-ohess", ["--ohess", "--method", "ancopt"], "ohess"),
+        ("native-md", ["--md", "--input", md_ctrl], "md"),
+        ("suite-opt", ["--lopt", "--lopt-level", "loose"], "opt"),
+        ("suite-scan", TASK_ARGS["scan"], "scan"),
+        ("suite-vib", ["--lvib"], "vib"),
+    ]
+    for method, _ in TS_METHODS:
+        args = ["--lts", "--lts-method", method, "--lts-max-steps", "20",
+                "--lts-level", "superloose"]
+        if method in ("neb", "cineb", "autoneb", "string", "gsm"):
+            args += ["--lts-product", product_file]
+        matrix.append(("ts-%s" % method, args, "ts"))
+    for method, _ in IRC_METHODS:
+        matrix.append(("irc-%s" % method,
+                       ["--lirc", "--lirc-method", method,
+                        "--lirc-max-steps", "4"], "irc"))
+
+    tasks = set()
+    for label, args, task in matrix:
+        run_dir = os.path.join(rundir, label)
+        status, output = run(exe, inp,
+                             ["--gfn", "2", "--norestart", "--ljson"] + args,
+                             run_dir)
+        path = os.path.join(run_dir, "landscape_%s.json" % task)
+        if not os.path.exists(path):
+            fail("the %s run (status %d) wrote no landscape_%s.json"
+                 % (label, status, task), output)
+        parse_document(path, task)
+        tasks.add(task)
+    print("ljson-core: %d documents of %d tasks (%s) parse with one parser"
+          % (len(matrix), len(tasks), ", ".join(sorted(tasks))))
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -1087,6 +1251,8 @@ def main():
         check_chain_failure(sys.argv[2], sys.argv[3], sys.argv[4])
     elif mode == "ljson-methods":
         check_ljson_methods(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+    elif mode == "ljson-core":
+        check_ljson_core(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
     elif mode == "ts-counters":
         check_ts_counters(sys.argv[2], sys.argv[3], sys.argv[4])
     elif mode == "scan-counters":

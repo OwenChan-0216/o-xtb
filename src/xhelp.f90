@@ -354,13 +354,13 @@ subroutine help(iunit)
    "    case-sensitive",&
    "",&
    "--ljson",&
-   "    write the structured result landscape_<task>.json (status, counters and", &
-   "    the convergence history) for every landscape task; the file is meant for", &
-   "    regression comparison and is written independently of the other output", &
-   "    files.  The switch needs a landscape run type (--lopt, --lscan, --lts,", &
-   "    --lirc, --lvib, and since stage 3 also --opt and --ohess): on its own it", &
-   "    writes nothing and a warning says so", &
-   "    (the sp task has no run type and is reachable through the API only)",&
+   "    write the structured result landscape_<task>.json for every task: native", &
+   "    (--sp, --grad, --opt, --hess, --ohess, --md, ...) and landscape (--lopt,", &
+   "    --lscan, --lts, --lirc, --lvib).  The document carries a uniform core", &
+   "    block (task, status, converged, energy, n_atoms, geometry, provenance)", &
+   "    plus the task specific counters and convergence history, so one parser", &
+   "    reads every task; it is meant for regression comparison and is written", &
+   "    independently of the other output files (format 2)",&
    "",&
    "--lopt",&
    "    minimize the geometry with the landscape task suite (src/landscape); the", &

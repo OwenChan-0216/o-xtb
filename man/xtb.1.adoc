@@ -290,9 +290,11 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     SUITE OPTIONS
 
 *--ljson*::
-    write the structured result `landscape_<task>.json` (status, counters and
-    convergence history) for every landscape task; the switch needs one of
-    `--lopt`, `--lscan`, `--lts`, `--lirc`, `--lvib`, `--opt` or `--ohess`
+    write the structured result `landscape_<task>.json` for every task - native
+    (`--sp`, `--grad`, `--opt`, `--hess`, ...) and landscape (`--lopt`,
+    `--lscan`, `--lts`, `--lirc`, `--lvib`).  The document has a uniform core
+    block (task, status, energy, geometry, provenance) plus the task specific
+    counters and convergence history
 
 *--hess*::
     perform a numerical hessian calculation on input geometry

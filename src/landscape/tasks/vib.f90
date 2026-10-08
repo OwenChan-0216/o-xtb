@@ -67,6 +67,7 @@ module xtb_landscape_tasks_vib
       & landscape_vib_set_thermo_settings, landscape_vib_check_thermo_settings
    use xtb_landscape_json, only : landscape_json_document, &
       & landscape_json_document_init, landscape_json_add_result, &
+      & landscape_json_add_core, &
       & landscape_json_add_counter, landscape_json_add_value, &
       & landscape_json_add_flag, landscape_json_add_series, &
       & landscape_json_write, &
@@ -316,7 +317,7 @@ subroutine landscape_vib(env, mol, chk, calc, settings, result)
    vib%energy = energy
    result%vib = vib
 
-   if (settings%ljson) call write_json(env, settings, result, vib)
+   if (settings%ljson) call write_json(env, mol, settings, result, vib)
 
 end subroutine landscape_vib
 
@@ -335,9 +336,11 @@ end subroutine landscape_vib
 !> that is not a minimum (the `--hess` path reports it the same way) - but it
 !> is `incomplete` rather than `ok`, so a regression diff of the status field
 !> catches a changed mode count.
-subroutine write_json(env, settings, result, vib)
+subroutine write_json(env, mol, settings, result, vib)
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
+   !> Molecule of the run (the core block's geometry)
+   type(TMolecule), intent(in) :: mol
    !> Frequency settings
    type(landscape_vib_settings), intent(in) :: settings
    !> Task result
@@ -353,6 +356,7 @@ subroutine write_json(env, settings, result, vib)
    if (vib%n_imag > 0) status = landscape_json_status_incomplete
    call landscape_json_document_init(doc, 'vib')
    call landscape_json_add_result(doc, result, status)
+   call landscape_json_add_core(doc, mol, result%energy, settings%input_file)
    call landscape_json_add_counter(doc, 'n_atoms', size(vib%freq)/3)
    call landscape_json_add_counter(doc, 'n_modes', size(vib%freq))
    call landscape_json_add_counter(doc, 'n_zero', vib%n_zero)
