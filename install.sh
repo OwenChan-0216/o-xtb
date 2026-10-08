@@ -140,11 +140,14 @@ ok "$(readlink "${BIN_DIR}/${COMMAND_NAME}")"
 
 step "self check"
 version_out="$("${PREFIX}/bin/${COMMAND_NAME}" --version)"
+# The OxTB banner prints the product version and the engine version it is built
+# on.  Only the product line is required here, so bumping either number does
+# not have to touch this script.
 case "${version_out}" in
-   *"xtb version"*) ;;
-   *) printf 'no version banner\n' >&2; false ;;
+   *"OxTB version"*) ;;
+   *) printf 'no OxTB version banner\n' >&2; false ;;
 esac
-ok "$(printf '%s\n' "${version_out}" | grep -oE 'xtb version [0-9.]+ \([0-9a-f]+\)' | head -1 || true)"
+ok "$(printf '%s\n' "${version_out}" | grep -oE '(OxTB|xTB) version [0-9.]+' | tr '\n' ' ' || true)"
 
 cat >"${selfcheck_dir}/water.xyz" <<'WATER'
 3
