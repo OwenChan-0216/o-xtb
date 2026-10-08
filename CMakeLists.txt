@@ -32,6 +32,14 @@ project(
   LANGUAGES "C" "Fortran"
 )
 
+# Product version of OxTB, i.e. of the command, its banner and `--version`.
+# It is deliberately independent of `PROJECT_VERSION` above: the project
+# version feeds the shared library `VERSION`/`SOVERSION` (`liboxtb.so.6.7.1`,
+# soname `liboxtb.so.6`), the `libxtb.*` compatibility links and the CMake
+# package version file, i.e. the ABI lineage inherited from upstream xTB, which
+# must not move just because the command grew a product version of its own.
+set(OXTB_PRODUCT_VERSION "0.1.0")
+
 # Name of the command line program.  The project and its libraries are called
 # `o-xtb`, the installed/registered command stays `oxtb` (the `xtb` module and
 # symbol prefix of the sources is deliberately not renamed).

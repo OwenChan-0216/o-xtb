@@ -446,7 +446,7 @@ contains
       ! making a fancy version of this is hard, x is difficult in ASCII art
       call xtb_header(env%unit)
       ! make sure you cannot blame us for destroying your computer
-      call disclamer(env%unit)
+      call disclaimer(env%unit)
       ! how to cite this program
       call citation(env%unit)
       ! print current time
@@ -1870,7 +1870,7 @@ contains
             call terminate(0)
 
          case ('--license')
-            call disclamer(env%unit)
+            call disclaimer(env%unit)
             call terminate(0)
 
          case ('--version')

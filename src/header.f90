@@ -15,42 +15,101 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+! Modified by the o-xtb landscape task suite, 2026.
+
+!> Banner of the OxTB command line program.
+!>
+!> Prints the three line ASCII wordmark of the logo, the product description,
+!> the version lines of `xtb_version` and the legal notice.  Every line is
+!> centred in one common block width, so the banner keeps its shape in a
+!> monospace terminal; the wordmark itself is printed character for character
+!> (the backslashes and the trailing blanks are part of the drawing).
 subroutine xtb_header(iunit)
-   
+
    implicit none
    integer,intent(in) :: iunit
       !! I/O unit
 
-   write(iunit,'(a)') &
-   !< < < < < < < < < < < < < < < < < < > > > > > > > > > > > > > > > > > >!
-   "      -----------------------------------------------------------      ",&
-   "     |                   =====================                   |     ",&
-   "     |                           x T B                           |     ",&
-   "     |                   =====================                   |     ",&
-   "     |                         S. Grimme                         |     ",&
-   "     |          Mulliken Center for Theoretical Chemistry        |     ",&
-   "     |                    University of Bonn                     |     ",&
-   !     |  Version number by <major>.<minor>.<rev> (<author><date>) |     !
-   "      -----------------------------------------------------------      ",""
-   !< < < < < < < < < < < < < < < < < < > > > > > > > > > > > > > > > > > >!
-   call xtb_version(iunit)
+   !> Width of the banner block in characters: the length of the longest line
+   !> of the banner (the `Original Author - ...` line of `xtb_version`).
+   integer,parameter :: width = 94
+   !> OxTB wordmark, three lines, printed as authored.
+   character(len=24),parameter :: wordmark(3) = [character(len=24) :: &
+      " ___   _    _____  ___  ", &
+      "/ / \ \ \_/  | |  | |_) ", &
+      "\_\_/ /_/ \  |_|  |_|_) "]
+
+   integer :: i, offset
+
+   do i = 1, size(wordmark)
+      offset = max(0, (width - len_trim(wordmark(i))) / 2)
+      write(iunit,'(a)') repeat(' ', offset)//wordmark(i)
+   end do
+
+   call banner_line(iunit, &
+      & "OxTB - An Omni-functional PES Exploration and "// &
+      & "Exploitation Toolkit Based on xTB", width)
+   call banner_line(iunit, &
+      & "Original Author - S. Grimme from Mulliken Center for "// &
+      & "Theoretical Chemistry, University of Bonn", width)
+
+   call xtb_version(iunit, width)
+
+   !> The appropriate legal notices stay on the banner (GPL-3.0 section 5(d));
+   !> the full disclaimer text is printed by `disclaimer` (also on
+   !> `--license`) and stays next to the banner at startup.
+   call banner_line(iunit, &
+      & "Copyright (C) 2017-2020 Stefan Grimme, 2019-2020 "// &
+      & "Sebastian Ehlert and contributors", width)
+   call banner_line(iunit, &
+      & "LGPL-3.0-or-later - NO WARRANTY; see `oxtb "// &
+      & "--license` for the full text", width)
+   write(iunit,'(a)')
 
 end subroutine xtb_header
 
-subroutine xtb_version(iunit)
+!> Version lines of the OxTB banner.
+!>
+!> `oxtb_version` is the product version of this program, `engine_version`
+!> the version of the xTB engine it is built from (both generated into
+!> `xtb_version.fh`).
+subroutine xtb_version(iunit,width)
 
    implicit none
    integer,intent(in) :: iunit
       !! I/O unit
-   
+   integer,intent(in) :: width
+      !! Banner block width in characters, see `xtb_header`
+
    include 'xtb_version.fh'
-   write(iunit,'(3x,"*",*(1x,a))') &
-      & "xtb version", version, "compiled by", author, "on", date
+   call banner_line(iunit, "* OxTB version "//oxtb_version//" *", width)
+   call banner_line(iunit, "* xTB version "//engine_version//" *", width)
+   call banner_line(iunit, "Compiled on "//date, width)
    write(iunit,'(a)')
 
 end subroutine xtb_version
 
-subroutine disclamer(iunit)
+!> Write one banner line centred in `width` characters.
+!>
+!> The centring is the leading padding `(width - len)/2` `generic_header`
+!> below uses; a line longer than the block width is not truncated and starts
+!> in the first column.
+subroutine banner_line(iunit,line,width)
+
+   implicit none
+   integer,intent(in) :: iunit
+      !! I/O unit
+   character(len=*),intent(in) :: line
+      !! Banner line, trailing blanks are not printed
+   integer,intent(in) :: width
+      !! Banner block width in characters
+
+   write(iunit,'(a)') &
+      & repeat(' ', max(0, (width - len_trim(line)) / 2))//trim(line)
+
+end subroutine banner_line
+
+subroutine disclaimer(iunit)
 integer,intent(in) :: iunit
 write(iunit,'(3x,a)') &
    !< < < < < < < < < < < < < < < > > > > > > > > > > > > > > > >!
@@ -64,7 +123,7 @@ write(iunit,'(3x,a)') &
    "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the", &
    "GNU Lesser General Public License for more details.", &
    ""
-end subroutine disclamer
+end subroutine disclaimer
 
 subroutine gfn0_header(iunit)
 integer,intent(in) :: iunit

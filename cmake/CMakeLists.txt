@@ -109,6 +109,7 @@ set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ${dialects}" PARENT_SCOPE)
 
 # Populate xtb_version.fh with metadata
 set(version ${PROJECT_VERSION})
+set(oxtb_version ${OXTB_PRODUCT_VERSION})
 execute_process(COMMAND git rev-parse HEAD
   RESULT_VARIABLE git_return
   OUTPUT_VARIABLE commit)

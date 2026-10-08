@@ -69,6 +69,7 @@ mode mirrors one CMake test one-to-one:
   ircosc <exe> <input> <rundir>      -> xtb/landscape-irc-osc-window
   blasthreads <exe> <input> <rundir>  -> xtb/landscape-blas-threads
   blasthreads-timing <exe> <input> <rundir> -> xtb/landscape-blas-threads-timing
+  banner <exe> <input> <rundir>       -> xtb/landscape-banner
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
   method <exe> <input> <rundir> <hcn> <nh3> <nh3product>
@@ -5169,6 +5170,110 @@ def check_level_axes(exe, inp, rundir):
           "superloose echoed, budget 200 = clamp, explicit 8 and 4 win")
 
 
+# The startup banner (`src/header.f90`) is the only place where the product
+# version, the engine version and the legal notices are printed together, and
+# nothing covered it before this check (`xtb/Argparser_print_version` only ran
+# `--version` and looked at the exit status).  `xtb_header` centres every line
+# in one block width, so the check pins the exact indentation of the wordmark
+# and of every text line, both version numbers, the build date line, the legal
+# notice, the order of the block - and that the old boxed `x T B` banner is
+# gone.  The wordmark is compared **with** its trailing blanks, because those
+# are part of the drawing.
+BANNER_WIDTH = 94
+BANNER_WORDMARK = [
+    r" ___   _    _____  ___  ",
+    r"/ / \ \ \_/  | |  | |_) ",
+    r"\_\_/ /_/ \  |_|  |_|_) ",
+]
+BANNER_TEXT = [
+    "OxTB - An Omni-functional PES Exploration and Exploitation Toolkit "
+    "Based on xTB",
+    "Original Author - S. Grimme from Mulliken Center for Theoretical "
+    "Chemistry, University of Bonn",
+    "* OxTB version 0.1.0 *",
+    "* xTB version 6.7.1 *",
+    "Copyright (C) 2017-2020 Stefan Grimme, 2019-2020 Sebastian Ehlert and "
+    "contributors",
+    "LGPL-3.0-or-later - NO WARRANTY; see `oxtb --license` for the full text",
+]
+# The dashed box of the banner this check replaced.
+BANNER_OLD = "-" * 59
+# The legal notice of the banner, printed in the same block.
+BANNER_LEGAL = BANNER_TEXT[4:]
+
+
+def centred_banner_line(text):
+    """The line `xtb_header`/`banner_line` prints for `text`: centred in
+    `BANNER_WIDTH` characters, trailing blanks of the text kept."""
+    offset = max(0, (BANNER_WIDTH - len(text.rstrip())) // 2)
+    return " " * offset + text
+
+
+def check_banner(exe, inp, rundir):
+    """The OxTB banner: wordmark, versions, build date and legal notice.
+
+    Mirrors `xtb/landscape-banner`.  `--version` prints the banner alone, so
+    the whole block is compared line by line (including its indentation); a
+    normal run has to print the same banner *and* still print the full
+    disclaimer (`disclaimer`, the renamed `disclamer`), and `--license` has to
+    keep printing the licence text.
+    """
+    status, output = run(exe, inp, ["--version"], rundir)
+    if status != 0:
+        fail("--version terminated with status %d" % status, output)
+    lines = output.replace("\r\n", "\n").split("\n")
+
+    compiled = [line.strip() for line in lines
+                if line.strip().startswith("Compiled on ")]
+    if len(compiled) != 1:
+        fail("the banner has %d 'Compiled on' lines, expected exactly one"
+             % len(compiled), output)
+    date = compiled[0][len("Compiled on "):]
+    if not re.fullmatch(r"[0-9]{4}/[0-9]{2}/[0-9]{2}", date):
+        fail("the build date %r is not <year>/<month>/<day>" % date, output)
+
+    texts = (BANNER_WORDMARK + BANNER_TEXT[:4] + [compiled[0], ""]
+             + BANNER_LEGAL)
+    block = ["" if text == "" else centred_banner_line(text)
+             for text in texts]
+    try:
+        start = lines.index(block[0])
+    except ValueError:
+        fail("the banner wordmark is missing (expected %r)" % block[0], output)
+    if lines[start:start + len(block)] != block:
+        fail("the banner is not the expected centred block\nexpected: %r\ngot:      %r"
+             % (block, lines[start:start + len(block)]), output)
+    for line in lines:
+        if line.strip() == BANNER_OLD:
+            fail("the old boxed xTB banner is still printed", output)
+    print("--version banner: %d centred lines, product 0.1.0, engine 6.7.1, "
+          "build date %s" % (len(block), date))
+
+    status, output = run(exe, inp, ["--gfn", "2", "--sp", "--norestart"],
+                         rundir)
+    if status != 0:
+        fail("the GFN2 single point terminated with status %d" % status,
+             output)
+    for text in BANNER_WORDMARK + BANNER_TEXT:
+        if centred_banner_line(text) not in output.split("\n"):
+            fail("the banner line %r is missing from a normal run" % text,
+                 output)
+    if "Compiled on " not in output:
+        fail("the banner of a normal run has no build date", output)
+    if "GNU Lesser General Public License" not in output:
+        fail("the disclaimer is no longer printed at startup", output)
+
+    status, output = run(exe, inp, ["--license"], rundir)
+    if status != 0:
+        fail("--license terminated with status %d" % status, output)
+    if "but WITHOUT ANY WARRANTY" not in output:
+        fail("--license no longer prints the warranty disclaimer", output)
+    if "GNU Lesser General Public License" not in output:
+        fail("--license no longer prints the licence", output)
+    print("banner also printed by a normal run, disclaimer and --license "
+          "intact")
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -5332,6 +5437,8 @@ def main():
         check_blas_threads(exe, inp, rundir)
     elif mode == "blastiming":
         check_blas_threads_timing(exe, inp, rundir)
+    elif mode == "banner":
+        check_banner(exe, inp, rundir)
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

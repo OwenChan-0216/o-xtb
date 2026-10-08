@@ -4264,6 +4264,23 @@ add_test("xtb/landscape-dock-gfn-value"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-dock-gfn-value
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The startup banner (`src/header.f90`, `docs/_simplify-recon/116-oxtb-banner.md`)
+# replaced the boxed `x T B` banner with the OxTB wordmark, the product version
+# 0.1.0, the engine version and the legal notice of GPL-3.0 section 5(d).
+# Nothing covered the banner text before: `xtb/Argparser_print_version` ran
+# `--version` without looking at its output, so reverting `src/header.f90` left
+# every test green.  The check pins the centred block line by line (wordmark
+# blanks included), both version numbers, the build date line and the legal
+# notice, and it requires the full disclaimer of `--license` to survive the
+# rename of `disclamer` to `disclaimer`.
+add_test("xtb/landscape-banner"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=banner;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-banner"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-banner
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # ~340x OpenMP anti-scaling of many small single points out of the picture.
 # The stage 1 CLI checks of the same family
@@ -4332,6 +4349,7 @@ set_tests_properties(
   "xtb/landscape-native-runtypes-unaffected"
   "xtb/landscape-gfn-value"
   "xtb/landscape-dock-gfn-value"
+  "xtb/landscape-banner"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

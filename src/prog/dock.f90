@@ -111,7 +111,7 @@ contains
       !> Print an informative banner
       call dockingHeader(env%unit)
       !> make sure you cannot blame us for destroying your computer
-      call disclamer(env%unit)
+      call disclaimer(env%unit)
       !> Citations
       write(env%unit,'(3x,a)') &
         "Cite this work as:", &
