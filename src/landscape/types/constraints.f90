@@ -125,7 +125,7 @@ end subroutine landscape_project_frozen
 !> minimiser of `optimize/driver` (which receives the mask from
 !> `landscape_frozen_mask` at its call site).
 !>
-!> The band searches (`path/*`) and the reaction path correctors (`irc/*`)
+!> The band searches (`path/`) and the reaction path correctors (`irc/`)
 !> do **not** use this entry point: they **refuse** a frozen parameter state
 !> with an error instead, because the reaction path advance is defined in
 !> mass weighted arc length and the interaction of a frozen subspace with that

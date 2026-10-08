@@ -19,7 +19,7 @@
 !>
 !> This module is the single place in the landscape suite that touches the
 !> molecule data type and the xtb writer (`xtb_io_writer::writeMolecule`), as
-!> required by PLAN section 4.2: the `optimize/**` layer must stay free of the
+!> required by PLAN section 4.2: the `optimize/` layer must stay free of the
 !> xtb private types.
 !>
 !> The file names pass through the xtb file namespace (`get_namespace`), like

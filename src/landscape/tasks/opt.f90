@@ -22,7 +22,7 @@
 !> `xtb_landscape_optimize::landscape_optimize_model` and delegates the
 !> geometry/trajectory output to `xtb_landscape_log::landscape_write_files`.
 !> It is the only part of the landscape suite that holds the xtb private types
-!> (`TMolecule`, `TRestart`, `TCalculator`), keeping the `optimize/**` layer
+!> (`TMolecule`, `TRestart`, `TCalculator`), keeping the `optimize/` layer
 !> free of them (PLAN section 4.2).
 !>
 !> Units: coordinates in bohr, energies in hartree, gradients in hartree/bohr.

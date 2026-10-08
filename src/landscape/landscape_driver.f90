@@ -19,7 +19,7 @@
 !>
 !> `landscape_run` is the single place that turns a settings object into a
 !> task: it checks the preconditions that hold for every task (no periodic
-!> boundary conditions, PLAN section 11), selects the `tasks/*` implementation
+!> boundary conditions, PLAN section 11), selects the `tasks/` implementation
 !> through the task name of the settings type (`landscape_settings%task`) and
 !> prints the one line summary that closes a landscape run.
 !>

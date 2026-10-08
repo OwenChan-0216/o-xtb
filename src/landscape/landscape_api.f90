@@ -17,16 +17,16 @@
 
 !> Public entry point of the xtb landscape task suite.
 !>
-!> `run_landscape` is the only symbol of `src/landscape/**` that
+!> `run_landscape` is the only symbol of `src/landscape/` that
 !> `src/prog/main.F90` calls: the run type (`p_run_lopt`) selects the task
-!> settings, the driver dispatches to `tasks/*`, and the result is returned to
+!> settings, the driver dispatches to `tasks/`, and the result is returned to
 !> the caller.  Keeping the call site this narrow means the whole suite can be
 !> exercised from the unit tests with an analytic potential or with a real
 !> calculator, without going through the command line.
 !>
 !> Layer boundaries (PLAN section 4.2):
 !>
-!>  * `src/landscape/**` may `use` xtb private modules, xtb modules do **not**
+!>  * `src/landscape/` may `use` xtb private modules, xtb modules do **not**
 !>    depend on the landscape suite.  The only exceptions are the integration
 !>    points listed in PLAN section 12 (`src/setparam.f90`,
 !>    `src/set_module.f90`, `src/prog/main.F90`).
