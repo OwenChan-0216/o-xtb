@@ -88,4 +88,10 @@ AGENTS.md
 
 # Development and review material (reconnaissance, plans, per-stage reports,
 # validation evidence).  Kept on disk for review, deliberately not versioned.
-docs/
+# The three delivery documents are the exception: they are the published
+# contract of the landscape suite (PLAN, M7 validation) and of the CLI
+# redesign, and are versioned.
+docs/*
+!docs/xtb-landscape-PLAN.md
+!docs/xtb-landscape-M7-validation.md
+!docs/xtb-cli-redesign-delivery.md
