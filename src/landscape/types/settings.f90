@@ -713,7 +713,7 @@ module xtb_landscape_settings
    !> (`g_max`, `g_rms`, `d_max`, `d_rms`); their values were **not**
    !> re-calibrated for transition states in this round, so the question of
    !> PLAN experiment 4 (gradient noise vs. reachable force threshold) stays
-   !> open and is marked `[待校准]` here.
+   !> open and is marked `[to be calibrated]` here.
    !>
    !> Units: `trust`, `trust_min`, `trust_max`, `hlow`-related lengths in bohr,
    !> `hlow` and `evals_eps` in hartree/bohr^2, `imag_cutoff` in cm^-1,
@@ -809,7 +809,7 @@ module xtb_landscape_settings
       !> each image from the common midpoint.  This is the pysisyphus
       !> convention of PLAN section 5.3.6 (`1.8897e-2` bohr = 1e-2 Angstrom),
       !> not the VASP one where `DdR` denotes twice that value.  The
-      !> `[待校准]` marker is retired: report 28 section 6.4 measured that
+      !> `[to be calibrated]` marker is retired: report 28 section 6.4 measured that
       !> `delta x 8` changes the dimer curvature by 0.0013 % and the analytic
       !> Mueller-Brown check pins the value to 0.07 %, so the convention only
       !> has to be the documented one.
@@ -915,7 +915,7 @@ module xtb_landscape_settings
    !> publications.  `e_rise_steps`, `grad_tol` and `hessian_recalc` were
    !> **measured** on the analytic LEPS and Mueller-Brown surfaces in the M6
    !> validation round (report 42): the values below are the calibrated
-   !> defaults, the `[待校准]` markers of PLAN section 5.3.7 are retired where
+   !> defaults, the `[to be calibrated]` markers of PLAN section 5.3.7 are retired where
    !> a measurement exists and kept where none does.
    type, extends(landscape_settings) :: landscape_irc_settings
       !> Integration method, one of `p_landscape_irc_*`.  Default `hpc`: the
@@ -1001,7 +1001,7 @@ module xtb_landscape_settings
       real(wp) :: mbs_tol = 1.0e-5_wp
       !> Termination signal (c): the path is left when the energy has risen
       !> over this many consecutive recorded points (report 04 section 1.6)
-      !> [待校准].  A large value does **not** guarantee that the walk runs to
+      !> [to be calibrated].  A large value does **not** guarantee that the walk runs to
       !> the step budget: the GS limit cycle guard (`osc_window`) is an
       !> independent signal (d) and truncates a stalled walk on its own.
       integer :: e_rise_steps = 3
@@ -1011,7 +1011,7 @@ module xtb_landscape_settings
       !> MAPLE GS endpoint criterion (`f_rms_th = 5e-4` hartree/angstrom =
       !> 9.45e-4 hartree/bohr, report 04 section 1.2) rounded up; the Euclidean
       !> norm used for the recorded `|g|` is `sqrt(3N)` times this value
-      !> [待校准]
+      !> [to be calibrated]
       real(wp) :: grad_tol = 1.0e-3_wp
       !> Limit cycle guard of the GS macro step (`--lirc-osc-window`): stop
       !> the walk when this many consecutive macro steps cancel each other
