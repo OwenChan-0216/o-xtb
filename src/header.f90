@@ -20,7 +20,9 @@
 !> Banner of the OxTB command line program.
 !>
 !> Prints the three line ASCII wordmark of the logo, the product description,
-!> the version lines of `xtb_version` and the legal notice.  Every line is
+!> the author affiliation, the version lines of `xtb_version` and the legal
+!> notice.  The banner is split into four blocks - wordmark, product, authors,
+!> version plus legal notice - separated by a blank line.  Every line is
 !> centred in one common block of `width` characters, which is indented by
 !> `indent` so the banner stays inside the 80 columns of a standard terminal
 !> (`indent + width <= 80`); the wordmark itself is printed character for
@@ -55,15 +57,19 @@ subroutine xtb_header(iunit)
    do i = 1, size(wordmark)
       write(iunit,'(a)') repeat(' ', offset)//wordmark(i)
    end do
+   write(iunit,'(a)')
 
    call banner_line(iunit, &
       & "OxTB - An Omni-functional PES Exploration and "// &
       & "Exploitation", width, indent)
    call banner_line(iunit, "Toolkit Based on xTB", width, indent)
+   write(iunit,'(a)')
+
    call banner_line(iunit, "Original Author - S. Grimme", width, indent)
    call banner_line(iunit, &
       & "Mulliken Center for Theoretical Chemistry", width, indent)
    call banner_line(iunit, "University of Bonn", width, indent)
+   write(iunit,'(a)')
 
    call xtb_version(iunit, width, indent)
 

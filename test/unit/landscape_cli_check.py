@@ -5213,8 +5213,12 @@ def check_level_axes(exe, inp, rundir):
 # `BANNER_INDENT`, so the check pins the exact indentation of the wordmark and
 # of every text line, both version numbers, the build date line (commit hash
 # included), the legal notice, the order of the block - and that the old boxed
-# `x T B` banner is gone.  The wordmark is compared **with** its trailing
-# blanks, because those are part of the drawing.
+# `x T B` banner is gone.  The banner is four semantic blocks (wordmark,
+# product description, authors, version and legal notice) separated by one
+# blank line each; the blank line is part of the exact block below, so moving a
+# line across a boundary, removing a line and rewording a line all fail.  The
+# wordmark is compared **with** its trailing blanks, because those are part of
+# the drawing.
 #
 # Three properties are asserted on their own, not only through the exact
 # block: every printed banner line fits the 80 columns of a standard terminal,
@@ -5230,13 +5234,16 @@ BANNER_WORDMARK = [
     r"/ / \ \ \_/  | |  | |_) ",
     r"\_\_/ /_/ \  |_|  |_|_) ",
 ]
-BANNER_TEXT = [
+BANNER_DESCRIPTION = [
     "OxTB - An Omni-functional PES Exploration and Exploitation",
     "Toolkit Based on xTB",
+]
+BANNER_AFFILIATION = [
     "Original Author - S. Grimme",
     "Mulliken Center for Theoretical Chemistry",
     "University of Bonn",
 ]
+BANNER_TEXT = BANNER_DESCRIPTION + BANNER_AFFILIATION
 BANNER_VERSION = [
     "* OxTB version 0.1.0 *",
     "* xTB version 6.7.1 *",
@@ -5297,17 +5304,20 @@ def check_banner(exe, inp, rundir):
              "'Compiled on <date> from <hash>'" % compiled[0], output)
     date, banner_commit = match.group(1), match.group(2)
 
-    block = ([centred_wordmark(row) for row in BANNER_WORDMARK]
-             + [centred_banner_line(text) for text in BANNER_TEXT]
+    block = ([centred_wordmark(row) for row in BANNER_WORDMARK] + [""]
+             + [centred_banner_line(text) for text in BANNER_DESCRIPTION]
+             + [""]
+             + [centred_banner_line(text) for text in BANNER_AFFILIATION]
+             + [""]
              + [centred_banner_line(text) for text in BANNER_VERSION]
              + [centred_banner_line(compiled[0]), ""]
              + [centred_banner_line(text) for text in BANNER_LEGAL])
     # The product description line is stable while the wordmark is not, so it
     # is the anchor of the block: the wordmark starts `len(BANNER_WORDMARK)`
-    # lines above it.
-    anchor = centred_banner_line(BANNER_TEXT[0])
+    # lines above it, one more for the blank line between the two blocks.
+    anchor = centred_banner_line(BANNER_DESCRIPTION[0])
     try:
-        start = lines.index(anchor) - len(BANNER_WORDMARK)
+        start = lines.index(anchor) - len(BANNER_WORDMARK) - 1
     except ValueError:
         fail("the banner product line is missing (expected %r)" % anchor,
              output)
