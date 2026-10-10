@@ -4334,6 +4334,21 @@ add_test("xtb/landscape-banner"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-banner
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The runtime termination messages name the program: `src/prog/primary.f90`
+# hands `mctc_init` the name that `src/mctc/error.f90` prints as
+# `normal termination of ...` / `abnormal termination of ...` on stderr.  Both
+# said `xtb` until the rename and nothing covered them - `xtb/Argparser_print_help`
+# and `xtb/landscape-banner` look at stdout - so reverting the single literal
+# in `primary.f90` left every test green.  The check runs one successful and
+# one deliberately failing job (a missing input file) and reads stderr alone.
+add_test("xtb/landscape-program-name"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=programname;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-program-name"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-program-name
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # ~340x OpenMP anti-scaling of many small single points out of the picture.
 # The stage 1 CLI checks of the same family

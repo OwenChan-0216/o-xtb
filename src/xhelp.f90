@@ -104,7 +104,7 @@ subroutine help(iunit)
    implicit none
    integer, intent(in) :: iunit
    write(iunit,'(a)') &
-   "Usage: xtb [options] <geometry> [options]", &
+   "Usage: oxtb [options] <geometry> [options]", &
    "",&
    "<geometry> may be provided as valid TM coordinate file (*coord in Bohr),",&
    "in xmol format (*.xyz in Ångström), sdf or mol file format, PDB format",&
@@ -1039,7 +1039,7 @@ subroutine help(iunit)
    "The same limit can be requested from inside the program, without any",&
    "environment variable:",&
    "",&
-   "xtb mol.xyz --blas-threads 1",&
+   "oxtb mol.xyz --blas-threads 1",&
    "",&
    "It resolves the OpenBLAS (or MKL) runtime API with dlopen/dlsym, calls it and",&
    "prints the value read back; it does nothing at all unless the flag is given.",&
@@ -1076,7 +1076,7 @@ end subroutine help
 
 subroutine help_legacy
    use, intrinsic :: iso_fortran_env, only : id => output_unit
-   write(id,'(''Usage: xtb <geometry> [options]'',/)')
+   write(id,'(''Usage: oxtb <geometry> [options]'',/)')
 
    write(id,'(''<geometry> may be provided as'','//&
    &    'x,''valid TM coordinate file (*coord in Bohr) or'','//&

@@ -352,9 +352,9 @@ contains
       integer, intent(in) :: unit
 
       write (unit, '(a)') &
-         "Usage: xtb thermo [options] <geometry> [hessian]", &
+         "Usage: oxtb thermo [options] <geometry> [hessian]", &
          "", &
-         "<geometry> may be provided as any valid input to xtb", &
+         "<geometry> may be provided as any valid input to oxtb", &
          "the [hessian] file is read and processed depending on the selected options,", &
          "the default format is a Cartesian, non-mass-weighted Turbomole Hessian file", &
          "", &

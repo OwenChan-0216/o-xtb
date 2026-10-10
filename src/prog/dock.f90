@@ -780,9 +780,9 @@ contains
       integer, intent(in) :: iunit
 
       write (iunit, '(a)') &
-         "Usage: xtb dock <geometry> <geometry> [-options]", &
+         "Usage: oxtb dock <geometry> <geometry> [-options]", &
          "", &
-         "<geometry> may be provided as any valid input to xtb", &
+         "<geometry> may be provided as any valid input to oxtb", &
          "", &
          "Options:", &
          "", &

@@ -367,9 +367,9 @@ subroutine IRHelp(unit)
    integer, intent(in) :: unit
 
    write(unit, '(a)') &
-   "Usage: xtb ir [options] <geometry> --dftbplus <hessian> --born <born>", &
+   "Usage: oxtb ir [options] <geometry> --dftbplus <hessian> --born <born>", &
    "",&
-   "<geometry> may be provided as any valid input to xtb", &
+   "<geometry> may be provided as any valid input to oxtb", &
    "the [hessian] file is read and processed depending on the selected options,", &
    "the default format is a non-massweighted Turbomole hessian file", &
    "",&

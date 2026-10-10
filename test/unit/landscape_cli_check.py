@@ -70,6 +70,7 @@ mode mirrors one CMake test one-to-one:
   blasthreads <exe> <input> <rundir>  -> xtb/landscape-blas-threads
   blasthreads-timing <exe> <input> <rundir> -> xtb/landscape-blas-threads-timing
   banner <exe> <input> <rundir>       -> xtb/landscape-banner
+  programname <exe> <input> <rundir>  -> xtb/landscape-program-name
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
   method <exe> <input> <rundir> <hcn> <nh3> <nh3product>
@@ -159,6 +160,24 @@ def run(exe, inp, args, rundir):
         text=False,
     )
     return proc.returncode, decode(proc.stdout) + decode(proc.stderr)
+
+
+def run_split(exe, inp, args, rundir):
+    """Run xtb and return (status, stdout, stderr), the streams kept apart.
+
+    The termination lines of `src/mctc/error.f90` go to **stderr** while the
+    banner and the results go to stdout, so a check of the program name in
+    those lines has to read stderr alone; `run` above deliberately merges the
+    two streams.
+    """
+    os.makedirs(rundir, exist_ok=True)
+    proc = subprocess.run(
+        [exe, inp] + args,
+        cwd=rundir,
+        capture_output=True,
+        text=False,
+    )
+    return proc.returncode, decode(proc.stdout), decode(proc.stderr)
 
 
 def fail(message, output=""):
@@ -5367,6 +5386,50 @@ def check_banner(exe, inp, rundir):
           "intact")
 
 
+def check_programname(exe, inp, rundir):
+    """Both runtime termination messages name the program `oxtb`.
+
+    `src/prog/primary.f90` hands the program name to `mctc_init`, and
+    `src/mctc/error.f90` prints it as the `normal termination of ...` /
+    `abnormal termination of ...` line on **stderr**.  Both messages said
+    `xtb` until the rename, and nothing covered them (`--help` and the banner
+    print other text), so reverting the one literal in `primary.f90` left every
+    test green.  This check pins both directions: a successful run has to print
+    `normal termination of oxtb`, a deliberately failing run (a missing input
+    file) `abnormal termination of oxtb`, and neither may print the old name.
+    """
+    status, stdout, stderr = run_split(exe, inp, ["--gfn", "2", "--sp",
+                                                  "--norestart"], rundir)
+    if status != 0:
+        fail("the GFN2 single point terminated with status %d" % status,
+             stdout + stderr)
+    if "normal termination of oxtb" not in stderr:
+        fail("the successful run does not report 'normal termination of "
+             "oxtb' on stderr", stderr)
+    if "termination of xtb" in stderr:
+        fail("the successful run still names the program 'xtb' on stderr",
+             stderr)
+    print("successful run: 'normal termination of oxtb' on stderr")
+
+    # A missing input file makes `xtbMain` raise through the environment, which
+    # `src/mctc/error.f90` turns into the abnormal termination message; the
+    # file is removed first so a leftover from an earlier run cannot hide it.
+    missing = os.path.join(os.path.abspath(rundir), "oxtb-no-such-input.xyz")
+    if os.path.exists(missing):
+        os.remove(missing)
+    status, stdout, stderr = run_split(exe, missing, ["--gfn", "2", "--sp",
+                                                      "--norestart"], rundir)
+    if status == 0:
+        fail("a run with a missing input file exited 0", stdout + stderr)
+    if "abnormal termination of oxtb" not in stderr:
+        fail("the failing run does not report 'abnormal termination of "
+             "oxtb' on stderr", stderr)
+    if "termination of xtb" in stderr:
+        fail("the failing run still names the program 'xtb' on stderr",
+             stderr)
+    print("failing run: 'abnormal termination of oxtb' on stderr")
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -5532,6 +5595,8 @@ def main():
         check_blas_threads_timing(exe, inp, rundir)
     elif mode == "banner":
         check_banner(exe, inp, rundir)
+    elif mode == "programname":
+        check_programname(exe, inp, rundir)
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")
