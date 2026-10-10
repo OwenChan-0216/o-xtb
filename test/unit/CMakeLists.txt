@@ -4368,6 +4368,22 @@ add_test("xtb/landscape-help-topic"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-help-topic
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The `--help` page is coloured by `auto` (`docs/_simplify-recon/124-help-colour.md`):
+# a pipe is not a terminal, so the default page carries no escape byte - that is
+# what keeps every byte-for-byte capture of `--help` in the repo valid - while
+# `CLICOLOR_FORCE` forces colour and must change **only** escapes, i.e. the
+# stripped coloured page is byte-identical to the plain one.  The check covers
+# the index, a topic page and the unknown-topic error, and asserts the
+# precedence `CLICOLOR_FORCE` > `NO_COLOR` > terminal; it clears the two
+# variables first, so an ambient setting cannot decide the result.
+add_test("xtb/landscape-help-colour"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=helpcolour;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-help-colour"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-help-colour
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # ~340x OpenMP anti-scaling of many small single points out of the picture.
 # The stage 1 CLI checks of the same family
@@ -4439,6 +4455,7 @@ set_tests_properties(
   "xtb/landscape-dock-gfn-value"
   "xtb/landscape-banner"
   "xtb/landscape-help-topic"
+  "xtb/landscape-help-colour"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

@@ -101,6 +101,7 @@ write(iunit,'(3x,a)') &
 end subroutine citation
 
 subroutine help(iunit, topic, status)
+   use xtb_features, only : get_xtb_feature
    !> Write the `--help` page, or the full text of one option, or one
    !> category of the grouped index.
    implicit none
@@ -174,6 +175,18 @@ subroutine help(iunit, topic, status)
    integer :: n, i, icat
    character(len=:), allocatable :: norm, norm_lower
 
+   !> Basic ANSI SGR sequences (8/16 colour only, reset after each run);
+   !> they are decoration and are inserted into, never added to, the text
+   character(len=*), parameter :: csi = achar(27) // '['
+   character(len=*), parameter :: sgr_reset = csi // '0m'
+   character(len=*), parameter :: sgr_heading = csi // '1;36m'
+   character(len=*), parameter :: sgr_spelling = csi // '1m'
+   character(len=*), parameter :: sgr_usage = csi // '1;32m'
+   !> Whether the page is coloured; decided once here and passed to every
+   !> writer (no module-level state, PLAN section 5)
+   logical :: use_color
+
+   use_color = colour_wanted()
    n = 0
    call add("--scc, --sp", "runtypes", &
       "single point calculation", &
@@ -1182,7 +1195,7 @@ subroutine help(iunit, topic, status)
       "    backend is left untouched (default)"])
 
    if (len_trim(topic) == 0) then
-      call write_index(iunit)
+      call write_index(iunit, use_color)
       status = 0
       return
    end if
@@ -1191,30 +1204,87 @@ subroutine help(iunit, topic, status)
    norm_lower = to_lower(norm)
    do icat = 1, n_cat
       if (norm_lower == cat_key(icat)) then
-         call write_category(iunit, icat)
+         call write_category(iunit, icat, use_color)
          status = 0
          return
       end if
    end do
    do i = 1, n
       if (index(opts(i)%aliases_exact, "/" // norm // "/") > 0) then
-         call write_option(iunit, i)
+         call write_option(iunit, i, use_color)
          status = 0
          return
       end if
    end do
    do i = 1, n
       if (index(opts(i)%aliases, "/" // norm_lower // "/") > 0) then
-         call write_option(iunit, i)
+         call write_option(iunit, i, use_color)
          status = 0
          return
       end if
    end do
 
-   call write_unknown(iunit, topic)
+   call write_unknown(iunit, topic, use_color)
    status = 1
 
 contains
+
+   !> Whether the page should be coloured.  `CLICOLOR_FORCE` set to a value
+   !> other than `0` forces colour even into a pipe and wins over everything;
+   !> otherwise `NO_COLOR` set and non-empty disables it; otherwise colour
+   !> follows the output terminal (`color_support`, the same no-color.org
+   !> precedence the tail of the page and `man 1 oxtb` document).
+   function colour_wanted() result(use_color)
+      logical :: use_color
+      character(len=:), allocatable :: value
+      logical :: is_set, force
+
+      call read_env("CLICOLOR_FORCE", value, is_set)
+      force = is_set .and. trim(value) /= "0"
+      if (force) then
+         use_color = .true.
+      else
+         call read_env("NO_COLOR", value, is_set)
+         if (is_set) then
+            use_color = .false.
+         else
+            use_color = get_xtb_feature("color")
+         end if
+      end if
+   end function colour_wanted
+
+   !> Read an environment variable.  `is_set` is false when it is unset or
+   !> empty, which is what the colour conventions mean by "set".
+   subroutine read_env(name, value, is_set)
+      character(len=*), intent(in) :: name
+      character(len=:), allocatable, intent(out) :: value
+      logical, intent(out) :: is_set
+      integer :: length, stat
+
+      call get_environment_variable(name, length=length, status=stat)
+      is_set = stat == 0 .and. length > 0
+      if (is_set) then
+         allocate(character(len=length) :: value)
+         call get_environment_variable(name, value)
+      else
+         value = ""
+      end if
+   end subroutine read_env
+
+   !> Wrap `text` in one SGR run when colour is on and return it unchanged
+   !> otherwise, so the escape sequences are purely additive and stripping
+   !> them reproduces the plain page byte for byte.
+   function styled(text, sgr, use_color) result(res)
+      character(len=*), intent(in) :: text, sgr
+      logical, intent(in) :: use_color
+      character(len=:), allocatable :: res
+
+      if (use_color) then
+         res = sgr // text // sgr_reset
+      else
+         res = text
+      end if
+   end function styled
 
    !> Append one option to opts; called once per documented option.
    subroutine add(spellings, category, summary, detail)
@@ -1299,8 +1369,9 @@ contains
 
    !> The grouped index: preamble, one line per option under its category,
    !> then the machine settings, output conventions and man pointer.
-   subroutine write_index(iunit)
+   subroutine write_index(iunit, use_color)
       integer, intent(in) :: iunit
+      logical, intent(in) :: use_color
       integer :: icat, i
       write(iunit,'(a)') &
          "Usage: oxtb [options] <geometry> [options]", &
@@ -1319,38 +1390,42 @@ contains
          ""
       do icat = 1, n_cat
          write(iunit,'(a)') ''
-         write(iunit,'(a)') trim(cat_title(icat))
+         write(iunit,'(a)') styled(trim(cat_title(icat)), sgr_heading, use_color)
          do i = 1, n
             if (opts(i)%category == cat_key(icat)) &
-               call write_entry(iunit, i)
+               call write_entry(iunit, i, use_color)
          end do
       end do
       call write_tail(iunit)
    end subroutine write_index
 
    !> One category of the index, the heading and its option lines.
-   subroutine write_category(iunit, icat)
+   subroutine write_category(iunit, icat, use_color)
       integer, intent(in) :: iunit, icat
+      logical, intent(in) :: use_color
       integer :: i
-      write(iunit,'(a)') trim(cat_title(icat))
+      write(iunit,'(a)') styled(trim(cat_title(icat)), sgr_heading, use_color)
       do i = 1, n
          if (opts(i)%category == cat_key(icat)) &
-            call write_entry(iunit, i)
+            call write_entry(iunit, i, use_color)
       end do
    end subroutine write_category
 
    !> One index line: the spellings and the one line gloss.
-   subroutine write_entry(iunit, i)
+   subroutine write_entry(iunit, i, use_color)
       integer, intent(in) :: iunit, i
-      write(iunit,'(a)') "  " // trim(opts(i)%spellings) // "  " // &
+      logical, intent(in) :: use_color
+      write(iunit,'(a)') "  " // &
+         styled(trim(opts(i)%spellings), sgr_spelling, use_color) // "  " // &
          trim(opts(i)%summary)
    end subroutine write_entry
 
    !> The full text of one option: spellings, every detail line, blank.
-   subroutine write_option(iunit, i)
+   subroutine write_option(iunit, i, use_color)
       integer, intent(in) :: iunit, i
+      logical, intent(in) :: use_color
       integer :: j
-      write(iunit,'(a)') trim(opts(i)%spellings)
+      write(iunit,'(a)') styled(trim(opts(i)%spellings), sgr_spelling, use_color)
       do j = 1, size(opts(i)%detail)
          write(iunit,'(a)') trim(opts(i)%detail(j))
       end do
@@ -1379,6 +1454,14 @@ contains
          "where both reach the same knob the flag that appears last wins.", &
          "See man 1 oxtb for the full table.", &
          "", &
+         "Colour:", &
+         "", &
+         "this page is coloured on a terminal.  CLICOLOR_FORCE set to a value", &
+         "other than 0 forces colour even into a pipe and wins over everything", &
+         "else; otherwise NO_COLOR set to a non-empty value disables it; otherwise", &
+         "colour follows the output terminal, so a piped or redirected page", &
+         "carries no escape sequence and is the plain page.", &
+         "", &
          "Output Conventions:", &
          "", &
          "total energies are given in atomic units (Eh)", &
@@ -1390,18 +1473,22 @@ contains
    end subroutine write_tail
 
    !> The error of an unknown topic: it names the categories and the usage.
-   subroutine write_unknown(iunit, topic)
+   subroutine write_unknown(iunit, topic, use_color)
       integer, intent(in) :: iunit
       character(len=*), intent(in) :: topic
+      logical, intent(in) :: use_color
       integer :: icat
       write(iunit,'(a)') &
          "", &
          "Unknown help topic '" // trim(topic) // "'.", &
          "", &
-         "Usage: oxtb --help [TOPIC]", &
-         "  oxtb --help              grouped index of every option", &
-         "  oxtb --help <option>     full text of one option, e.g. oxtb --help --method", &
-         "  oxtb --help <category>   one category of the index", &
+         styled("Usage:", sgr_usage, use_color) // " oxtb --help [TOPIC]", &
+         "  " // styled("oxtb --help", sgr_usage, use_color) // &
+            "              grouped index of every option", &
+         "  " // styled("oxtb --help", sgr_usage, use_color) // &
+            " <option>     full text of one option, e.g. oxtb --help --method", &
+         "  " // styled("oxtb --help", sgr_usage, use_color) // &
+            " <category>   one category of the index", &
          "", &
          "Categories:"
       do icat = 1, n_cat

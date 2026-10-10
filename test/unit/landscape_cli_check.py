@@ -73,6 +73,8 @@ mode mirrors one CMake test one-to-one:
   programname <exe> <input> <rundir>  -> xtb/landscape-program-name
   helptopic <exe> <input> <rundir> <main.F90>
                                      -> xtb/landscape-help-topic
+  helpcolour <exe> <input> <rundir>
+                                     -> xtb/landscape-help-colour
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
   method <exe> <input> <rundir> <hcn> <nh3> <nh3product>
@@ -5589,6 +5591,88 @@ def check_help_topic(exe, inp, rundir, main_src):
     print("unknown topic: status %d, the 17 categories listed" % status)
 
 
+def run_help_raw(exe, rundir, args, overrides):
+    """Run `oxtb` with a controlled colour environment; return stderr-free
+    stdout as raw bytes.
+
+    The page goes to stdout alone (`normal termination` and the error trace
+    of an unknown topic go to stderr), so the byte comparison reads stdout.
+    `CLICOLOR_FORCE` and `NO_COLOR` are removed from the inherited environment
+    first, so an ambient setting cannot turn the check red or green for a
+    foreign reason; `overrides` then sets the ones the case needs.
+    """
+    os.makedirs(rundir, exist_ok=True)
+    env = dict(os.environ)
+    env.pop("CLICOLOR_FORCE", None)
+    env.pop("NO_COLOR", None)
+    env.update(overrides)
+    proc = subprocess.run([exe] + args, cwd=rundir, capture_output=True,
+                          text=False, env=env)
+    return proc.returncode, proc.stdout
+
+
+#: A basic ANSI SGR run: the help page uses no 256-colour codes (see
+#: `docs/_simplify-recon/124-help-colour.md`).
+HELP_SGR = re.compile(rb"\x1b\[[0-9;]*m")
+
+
+def check_help_colour(exe, inp, rundir):
+    """The `--help` page is coloured by `auto`, and the colour is additive.
+
+    A pipe is not a terminal, so the default page must carry no escape byte -
+    that is what keeps every byte-for-byte capture of `--help` in the repo
+    valid.  `CLICOLOR_FORCE` forces colour even into a pipe and must change
+    **only** escapes: the stripped coloured page is byte-identical to the
+    plain one, for the index, for a topic page and for the unknown-topic
+    error.  The precedence is `CLICOLOR_FORCE` > `NO_COLOR` > terminal.
+    """
+    cases = (
+        ("the index", ["--help"]),
+        ("a topic page", ["--help", "--method"]),
+        ("a category", ["--help", "saddle"]),
+        ("the unknown-topic error", ["--help", "nonsense"]),
+    )
+    for label, args in cases:
+        status, plain = run_help_raw(exe, rundir, args, {})
+        if b"\x1b" in plain:
+            fail("%s: the plain page carries an escape byte" % label,
+                 decode(plain))
+        forced_status, coloured = run_help_raw(
+            exe, rundir, args, {"CLICOLOR_FORCE": "1"})
+        if forced_status != status:
+            fail("%s: forcing colour changed the exit status (%d -> %d)"
+                 % (label, status, forced_status))
+        escapes = len(HELP_SGR.findall(coloured))
+        if escapes == 0:
+            fail("%s: CLICOLOR_FORCE=1 produced no escape sequence" % label,
+                 decode(coloured))
+        stripped = HELP_SGR.sub(b"", coloured)
+        if stripped != plain:
+            fail("%s: stripping the colour is not the plain page" % label,
+                 decode(stripped))
+        print("%s: %d SGR runs, the stripped page is byte-identical"
+              % (label, escapes))
+
+    # The precedence: CLICOLOR_FORCE wins over NO_COLOR (the deliberate
+    # override beats the plain opt-out, as `uv` documents it), NO_COLOR
+    # disables colour without a pipe, and a CLICOLOR_FORCE of `0` or an
+    # empty value is not a force.
+    _, both = run_help_raw(exe, rundir, ["--help"],
+                           {"NO_COLOR": "1", "CLICOLOR_FORCE": "1"})
+    if b"\x1b" not in both:
+        fail("CLICOLOR_FORCE=1 must win over NO_COLOR=1")
+    _, nocolor = run_help_raw(exe, rundir, ["--help"], {"NO_COLOR": "1"})
+    if b"\x1b" in nocolor:
+        fail("NO_COLOR=1 must disable colour")
+    _, zero = run_help_raw(exe, rundir, ["--help"], {"CLICOLOR_FORCE": "0"})
+    if b"\x1b" in zero:
+        fail("CLICOLOR_FORCE=0 is not a force")
+    _, empty = run_help_raw(exe, rundir, ["--help"], {"CLICOLOR_FORCE": ""})
+    if b"\x1b" in empty:
+        fail("an empty CLICOLOR_FORCE is not a force")
+    print("precedence: CLICOLOR_FORCE > NO_COLOR > terminal, asserted")
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -5760,6 +5844,8 @@ def main():
         if len(rest) < 1:
             fail("the helptopic mode needs the path of src/prog/main.F90")
         check_help_topic(exe, inp, rundir, rest[0])
+    elif mode == "helpcolour":
+        check_help_colour(exe, inp, rundir)
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

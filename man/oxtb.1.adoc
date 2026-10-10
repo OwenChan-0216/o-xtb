@@ -1013,6 +1013,14 @@ strength, and the strongest one comes first:
 `MKL_NUM_THREADS` is ignored by a build linked against OpenBLAS and
 `OPENBLAS_DEFAULT_NUM_THREADS` measured a no-op.
 
+The `--help` page is coloured on a terminal. `CLICOLOR_FORCE` set to a value
+other than `0` forces colour even into a pipe and wins over everything else;
+otherwise `NO_COLOR` set to a non-empty value disables it; otherwise colour
+follows the output terminal, so a piped or redirected page carries no escape
+sequence and is byte-for-byte what it is without colour. The colour is
+decoration only: stripping the escape sequences reproduces the plain page
+exactly.
+
 The same limit can be requested from inside the program, without any
 environment variable, with *--blas-threads* 'N': it calls the OpenBLAS (or
 MKL) runtime API through `dlopen`/`dlsym`, prints the thread count it read back
