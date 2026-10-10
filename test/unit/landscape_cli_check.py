@@ -71,6 +71,8 @@ mode mirrors one CMake test one-to-one:
   blasthreads-timing <exe> <input> <rundir> -> xtb/landscape-blas-threads-timing
   banner <exe> <input> <rundir>       -> xtb/landscape-banner
   programname <exe> <input> <rundir>  -> xtb/landscape-program-name
+  helptopic <exe> <input> <rundir> <main.F90>
+                                     -> xtb/landscape-help-topic
   error  <exe> <input> <rundir> <pattern> <arg>...  -> the `--lopt`/`--lscan`
                                           error branches of the CMake build
   method <exe> <input> <rundir> <hcn> <nh3> <nh3product>
@@ -5430,6 +5432,163 @@ def check_programname(exe, inp, rundir):
     print("failing run: 'abnormal termination of oxtb' on stderr")
 
 
+#: The category keys of the grouped `--help` index, in print order; the
+#: unknown-topic error has to list every one of them.
+HELP_CATEGORY_KEYS = (
+    "runtypes", "suite", "levels", "minimisation", "scan", "saddle",
+    "band", "irc", "frequencies", "hamiltonian", "electronic", "external",
+    "solvation", "analysis", "output", "workflow", "performance",
+)
+
+#: One sampled topic per category, as (topic, first line, distinctive phrase
+#: of the full text).  `--method` is the longest option block of the page.
+HELP_TOPIC_SAMPLES = (
+    ("--method", "--method NAME", "canonical name of --lopt-engine"),
+    ("--hess", "--hess", "numerical hessian calculation on input geometry"),
+    ("--lopt", "--lopt", "minimize the geometry with the landscape task suite"),
+    ("--lopt-engine", "--lopt-engine NAME",
+     "minimisation algorithm of the landscape suite"),
+    ("--lscan-coord", "--lscan-coord TYPE",
+     "type of the first scanned coordinate"),
+    ("--lts-trust", "--lts-trust VALUE", "initial trust radius of the step"),
+    ("--lts-product", "--lts-product NAME",
+     "product endpoint of a chain-of-states search"),
+    ("--lirc-step", "--lirc-step VALUE", "step length in bohr*amu^1/2"),
+    ("--lvib-temp", "--lvib-temp VALUE",
+     "temperature of the thermodynamic table in K"),
+    ("--gfn", "--gfn INT", "specify parametrisation of GFN-xTB"),
+    ("--chrg", "-c, --chrg, --charge INT", "specify molecular charge as INT"),
+    ("--tm", "--tm", "external Turbomole program for the energy"),
+    ("--alpb", "--alpb SOLVENT [STATE]", "analytical linearized Poisson-Boltzmann"),
+    ("--pop", "--pop", "Mulliken population analysis"),
+    ("--json", "--json", "write xtbout.json file"),
+    ("--input", "-I, --input FILE", "input source for xcontrol(7) instructions"),
+    ("--parallel", "-P, --parallel INT", "number of parallel processes"),
+)
+
+
+def run_help(exe, rundir, args):
+    """Run `oxtb` without a geometry and return (status, combined output)."""
+    os.makedirs(rundir, exist_ok=True)
+    proc = subprocess.run([exe] + args, cwd=rundir, capture_output=True,
+                          text=False)
+    return proc.returncode, decode(proc.stdout) + decode(proc.stderr)
+
+
+def index_spellings(text):
+    """The spelling set of a rendered grouped index page.
+
+    An index entry is one line `"  " + spellings + "  " + summary`; the
+    spellings never contain two consecutive spaces, so the first double space
+    separates them from the gloss.  The token and `--[no]x` rules are the ones
+    of `landscape_help_check.py`, so the rendered set is comparable with the
+    parser's set.
+    """
+    from landscape_help_check import TOKEN, SPLIT
+
+    flags = set()
+    for line in text.splitlines():
+        if not line.startswith("  -"):
+            continue
+        body = line[2:]
+        cut = body.find("  ")
+        spec = body[:cut] if cut >= 0 else body
+        for token in SPLIT.split(spec.strip()):
+            if not TOKEN.match(token):
+                continue
+            if "[no]" in token:
+                flags.add(token.replace("[no]", ""))
+                flags.add(token.replace("[no]", "no"))
+            else:
+                flags.add(token)
+    return flags
+
+
+def check_help_topic(exe, inp, rundir, main_src):
+    """The grouped `--help` index and its `--help <topic>` dispatch.
+
+    The expected spelling set is taken from the **parser** (`src/prog/main.F90`,
+    through the extractor of `landscape_help_check.py`), not from the help
+    source, so the check is falsifiable: dropping a spelling from the index
+    turns it red even though the help gate and the index would still agree with
+    each other.  The samples cover one option of every category, `--method`
+    (the longest block) included, and the unknown topic has to name the
+    categories and exit non-zero.
+    """
+    from landscape_help_check import implemented_flags
+
+    with open(main_src) as handle:
+        implemented = implemented_flags(handle.read())
+    if len(implemented) != 247:
+        fail("the parser implements %d spellings, expected 247"
+             % len(implemented))
+
+    status, page = run_help(exe, rundir, ["--help"])
+    if status != 0:
+        fail("oxtb --help terminated with status %d" % status, page)
+    shown = index_spellings(page)
+    missing = sorted(implemented - shown)
+    phantom = sorted(shown - implemented)
+    if missing:
+        fail("the index misses %d of the %d implemented spellings: %s"
+             % (len(missing), len(implemented), " ".join(missing)), page)
+    if phantom:
+        fail("the index shows %d spellings the parser does not implement: %s"
+             % (len(phantom), " ".join(phantom)), page)
+    print("index: %d spellings, the %d implemented ones, none phantom"
+          % (len(shown), len(implemented)))
+
+    for topic, first, phrase in HELP_TOPIC_SAMPLES:
+        status, out = run_help(exe, rundir, ["--help", topic])
+        if status != 0:
+            fail("oxtb --help %s terminated with status %d" % (topic, status),
+                 out)
+        lines = out.splitlines()
+        if not lines or lines[0].strip() != first:
+            fail("oxtb --help %s did not start with %r" % (topic, first), out)
+        if phrase not in out:
+            fail("oxtb --help %s misses the text %r" % (topic, phrase), out)
+        if len(lines) > 40:
+            fail("oxtb --help %s printed %d lines, the whole index?"
+                 % (topic, len(lines)), out)
+        if "Native run types" in out or "Landscape suite tasks" in out:
+            fail("oxtb --help %s printed the whole index" % topic, out)
+    print("topics: %d sampled options print their own full text"
+          % len(HELP_TOPIC_SAMPLES))
+
+    # A bare name and an upper case spelling are the same topic.
+    status, bare = run_help(exe, rundir, ["--help", "gfn"])
+    status2, upper = run_help(exe, rundir, ["--help", "--GFN"])
+    if status != 0 or status2 != 0 or bare != upper:
+        fail("--help gfn and --help --GFN differ", bare + upper)
+    print("topics: a bare and an upper case spelling resolve alike")
+
+    # One category: its heading and its options, nothing of the other groups.
+    status, cat = run_help(exe, rundir, ["--help", "saddle"])
+    if status != 0:
+        fail("oxtb --help saddle terminated with status %d" % status, cat)
+    lines = cat.splitlines()
+    if not lines or lines[0].strip() != "Saddle search options (--lts)":
+        fail("oxtb --help saddle did not start with the heading", cat)
+    for flag in ("--lts-method", "--lts-trust", "--lts-escape-step"):
+        if flag not in cat:
+            fail("oxtb --help saddle misses %s" % flag, cat)
+    if "Native run types" in cat or "--gfn" in cat:
+        fail("oxtb --help saddle printed another category", cat)
+    print("categories: --help saddle prints one group (%d lines)" % len(lines))
+
+    # An unknown topic is an error that lists the categories.
+    status, bad = run_help(exe, rundir, ["--help", "nonsense"])
+    if status == 0:
+        fail("oxtb --help nonsense exited 0", bad)
+    if "Unknown help topic" not in bad or "nonsense" not in bad:
+        fail("the unknown topic error does not name the topic", bad)
+    for key in HELP_CATEGORY_KEYS:
+        if key not in bad:
+            fail("the unknown topic error does not list %r" % key, bad)
+    print("unknown topic: status %d, the 17 categories listed" % status)
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -5597,6 +5756,10 @@ def main():
         check_banner(exe, inp, rundir)
     elif mode == "programname":
         check_programname(exe, inp, rundir)
+    elif mode == "helptopic":
+        if len(rest) < 1:
+            fail("the helptopic mode needs the path of src/prog/main.F90")
+        check_help_topic(exe, inp, rundir, rest[0])
     elif mode == "error":
         if len(rest) < 2:
             fail("the error mode needs a pattern and the xtb arguments")

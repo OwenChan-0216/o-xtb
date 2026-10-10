@@ -4349,6 +4349,25 @@ add_test("xtb/landscape-program-name"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-program-name
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# `--help` is a grouped index now (`docs/_simplify-recon/123-help-restructure.md`)
+# and `--help <topic>` prints one option, one category or an error.  Nothing
+# covered the dispatch before: `xtb/Argparser_print_help` only ran `--help` and
+# read its exit status.  `landscape_cli_check.py` mode `helptopic` compares the
+# spelling set of the rendered index with the set the **parser** implements
+# (`src/prog/main.F90`, the extractor of `landscape_help_check.py`), so a
+# spelling dropped from the index turns it red even though the help and man
+# gates would still agree with each other; it then samples one option of every
+# category (including the long `--method`), one category listing, the bare and
+# the upper case topic, and the unknown-topic error.  The source path is passed
+# because the index set is taken from the parser, not from the help source.
+add_test("xtb/landscape-help-topic"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=helptopic;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-help-topic;${PROJECT_SOURCE_DIR}/src/prog/main.F90"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-help-topic
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # Every new M7 CLI check runs real GFN2 calculations; one thread keeps the
 # ~340x OpenMP anti-scaling of many small single points out of the picture.
 # The stage 1 CLI checks of the same family
@@ -4419,6 +4438,7 @@ set_tests_properties(
   "xtb/landscape-gfn-value"
   "xtb/landscape-dock-gfn-value"
   "xtb/landscape-banner"
+  "xtb/landscape-help-topic"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

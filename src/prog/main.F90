@@ -1838,6 +1838,10 @@ contains
       character(len=:), allocatable :: unknown_flags, message
       integer :: unknown_count
 
+      !> Exit status of the `--help` page: 0 for a page, 1 for an unknown
+      !> topic (the topic lookup is in `src/xhelp.f90`)
+      integer :: help_status
+
       set%gfn_method = 2
       dipro%diprocalc = .false.
       coffee = .false.
@@ -1896,8 +1900,19 @@ contains
             end if
 
          case ('-h', '--help')
-            call help(env%unit)
-            call terminate(0)
+            ! An optional topic may follow: an option spelling (with or
+            ! without its dashes), a category key or any other word.  The
+            ! parser returns a bare word through `nextArg` and the
+            ! immediately following flag through `nextFlag`; a missing topic
+            ! prints the grouped index and an unknown one is an error.
+            call args%nextArg(sec)
+            if (.not. allocated(sec)) call args%nextFlag(sec)
+            if (allocated(sec)) then
+               call help(env%unit, sec, help_status)
+            else
+               call help(env%unit, '', help_status)
+            end if
+            call terminate(help_status)
 
          case ('--citation')
             call citation(env%unit)
