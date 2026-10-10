@@ -1,5 +1,5 @@
-XTB(1)
-======
+OXTB(1)
+=======
 :doctype: manpage
 
 // Modified by the o-xtb landscape task suite, 2026.
@@ -7,18 +7,18 @@ XTB(1)
 NAME
 ----
 
-xtb - performs semiempirical quantummechanical calculations,
+oxtb - performs semiempirical quantummechanical calculations,
       for version 6.0 and newer
 
 SYNOPSIS
 --------
 
-*xtb* ['OPTIONS'] 'FILE' ['OPTIONS']
+*oxtb* ['OPTIONS'] 'FILE' ['OPTIONS']
 
 DESCRIPTION
 -----------
 
-The `xtb(1)` program performs semiempirical quantummechanical calculations.
+The `oxtb(1)` program performs semiempirical quantummechanical calculations.
 The underlying effective Hamiltonian is derived from density functional
 tight binding (DFTB). This implementation of the xTB Hamiltonian is currently
 compatible with the zeroth, first and second level parametrisation for
@@ -49,16 +49,16 @@ the mctc-lib. Supported formats are:
 
 For a full list visit: https://grimme-lab.github.io/mctc-lib/page/index.html
 
-`xtb(1)` reads additionally `.CHRG` and `.UHF` files if present.
+`oxtb(1)` reads additionally `.CHRG` and `.UHF` files if present.
 
 INPUT SOURCES
 -------------
-`xtb(1)` gets its information from different sources. The one with highest
+`oxtb(1)` gets its information from different sources. The one with highest
 priority is the commandline with all allowed flags and arguments described below.
 The secondary source is the `xcontrol(7)` system, which can in principle
 use as many input files as wished. The `xcontrol(7)` system is the successor
 of the set-block as present in version 5.8.2 and earlier. This implementation
-of `xtb(1)` reads the `xcontrol(7)` from two of three possible sources,
+of `oxtb(1)` reads the `xcontrol(7)` from two of three possible sources,
 the local xcontrol file or the 'FILE' used to specify the geometry
 and the global configuration file found in the `XTBPATH`.
 
@@ -362,7 +362,7 @@ above), and by the redeployed `--opt` and `--ohess`; the sub-options below
 configure the selected task and the common `--ljson` switch is listed with
 the run types. Every sub-option selects a landscape run type itself, so
 combining one with a native run type is a **run type conflict** and aborts
-during argument parsing (`xtb mol.xyz --sp --lscan-fc 0.05` fails with a run type
+during argument parsing (`oxtb mol.xyz --sp --lscan-fc 0.05` fails with a run type
 conflict naming `--scc` and `--lscan-fc`); the native run types do not ignore
 these options, they never get that far. `--opt` and `--ohess` take the suite's
 `--method`, `--cycles`, `--acc` and `--ljson` but not the per-task sub-options.
@@ -927,7 +927,7 @@ GENERAL
      use 'FILE' as input source for `xcontrol(7)` instructions
 
 *--namespace* 'STRING'::
-     give this `xtb(1)` run a namespace. All files, even temporary
+     give this `oxtb(1)` run a namespace. All files, even temporary
      ones, will be named according to 'STRING' (might not work everywhere).
 
 *--[no]copy*::
@@ -973,16 +973,16 @@ GENERAL
 
 ENVIRONMENT VARIABLES
 ---------------------
-`xtb(1)` accesses a path-like variable to determine the location of its
+`oxtb(1)` accesses a path-like variable to determine the location of its
 parameter files, you have to provide the `XTBPATH` variable in the same
-syntax as the system `PATH` variable. If this variable is not set, `xtb(1)`
+syntax as the system `PATH` variable. If this variable is not set, `oxtb(1)`
 will try to generate the `XTBPATH` from the deprecated `XTBHOME` variable.
 In case the `XTBHOME` variable is not set it will be generated from the
 `HOME` variable. So in principle storing the parameter files in the users
 home directory is suffient but might lead to come cluttering.
 
 Since the `XTBHOME` variable is deprecated with version 6.0 and newer
-`xtb(1)` will issue a warning if `XTBHOME` is not part of the `XTBPATH`
+`oxtb(1)` will issue a warning if `XTBHOME` is not part of the `XTBPATH`
 since the `XTBHOME` variable is not used in production runs.
 
 `OMP_NUM_THREADS` sets the number of OpenMP threads. A threaded BLAS is the
@@ -1020,7 +1020,7 @@ from the backend and warns with `no OpenBLAS or MKL symbol found` when the
 linked backend exports no such symbol. That warning also covers a
 *statically* linked BLAS: its symbols exist only in `.symtab`, which is never
 part of the dynamic lookup scope, so the flag has no effect there although the
-symbol is present in the binary. Without the flag `xtb(1)` changes nothing.
+symbol is present in the binary. Without the flag `oxtb(1)` changes nothing.
 
 Both API pairs are resolved by symbol name: `openblas_set_num_threads` with its
 getter `openblas_get_num_threads`, and the oneMKL pair `mkl_set_num_threads` /
@@ -1064,7 +1064,7 @@ grows with the atom count; *--help* suggests `export OMP_STACKSIZE=4G`.
 LOCAL FILES
 -----------
 
-`xtb(1)` accesses a number of local files in the current working directory
+`oxtb(1)` accesses a number of local files in the current working directory
 and also writes some output in specific files. Note that not all input
 and output files allow the *--namespace* option.
 
@@ -1193,7 +1193,7 @@ TOUCH
    generated by successful MD
 
 *.xtbok*::
-   generated after each successful `xtb(1)` run
+   generated after each successful `oxtb(1)` run
 
 *.sccnotconverged*::
    generated after failed SCC with printlevel=2
@@ -1205,14 +1205,14 @@ NAMING CONVENTIONS
 
 WARNINGS
 --------
-`xtb(1)` can generate the two types of warnings, the first warning section
+`oxtb(1)` can generate the two types of warnings, the first warning section
 is printed immediately after the normal banner at startup, summing up the
 evaluation of all input sources (commandline, xcontrol, xtbrc). To check
 this warnings exclusively before running an expensive calculation a
 input check is implemented via the *--define* flag. Please, study this
 warnings carefully!
 
-After `xtb(1)` has evaluated the all input sources it immediately enters
+After `oxtb(1)` has evaluated the all input sources it immediately enters
 the production mode. Severe errors will lead to an abnormal termination
 which is signalled by the printout to STDERR and a non-zero return value
 (usually 128). All non-fatal errors are summerized in the end of the calculation
@@ -1239,7 +1239,7 @@ output will be shown here:
 EXIT STATUS
 -----------
 *0*::
-   normal termination of `xtb(1)`
+   normal termination of `oxtb(1)`
 
 *128*::
    Failure (termination via error stop generates 128 as return value)

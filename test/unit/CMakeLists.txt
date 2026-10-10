@@ -3887,7 +3887,7 @@ add_test("xtb/landscape-help-coverage"
 # The man page must not drift away from the implementation.  The repository has
 # no rendering tool chain (no asciidoctor/a2x/pandoc/groff/man), so
 # `landscape_man_check.py` replaces the missing renderer with a structural
-# validation of `man/xtb.1.adoc` and a coverage gate: every implemented suite
+# validation of `man/oxtb.1.adoc` and a coverage gate: every implemented suite
 # spelling has to occur as a `*--flag*::` **entry** (prose mentions do not
 # count), the man page must promise no flag the parser does not implement, every
 # entry needs a description, every section underline has to match its title and
@@ -3898,7 +3898,7 @@ add_test("xtb/landscape-man-coverage"
   ${CMAKE_COMMAND}
   -DPYTHON=${Python3_EXECUTABLE}
   -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/landscape_man_check.py
-  "-DARGS=${PROJECT_SOURCE_DIR}/src/prog/main.F90;${PROJECT_SOURCE_DIR}/src/xhelp.f90;${PROJECT_SOURCE_DIR}/man/xtb.1.adoc;${CMAKE_CURRENT_BINARY_DIR}/landscape-man-coverage"
+  "-DARGS=${PROJECT_SOURCE_DIR}/src/prog/main.F90;${PROJECT_SOURCE_DIR}/src/xhelp.f90;${PROJECT_SOURCE_DIR}/man/oxtb.1.adoc;${CMAKE_CURRENT_BINARY_DIR}/landscape-man-coverage"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-man-coverage
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 

@@ -6,16 +6,16 @@ XCONTROL(7)
 
 NAME
 ----
-xcontrol - instruction file for `xtb(1)` version 6.0 and newer
+xcontrol - instruction file for `oxtb(1)` version 6.0 and newer
 
 SYNOPSIS
 --------
-xtb -I,--input *xcontrol* 'FILE'
+oxtb -I,--input *xcontrol* 'FILE'
 
 DESCRIPTION
 -----------
 The `xcontrol(7)` instruction set is the successor of the set-block
-present in `xtb(1)` version 5.8 and earlier. The used instruction
+present in `oxtb(1)` version 5.8 and earlier. The used instruction
 set is similar to the data groups in Turbomole or the detailed
 input structure of ORCA. Every instruction is started by a flag (`$`)
 and terminated by the next flag. A instruction is only valid if
@@ -30,14 +30,14 @@ group instructions only open the option block without any further actions.
 A special instruction is the end instruction which is optional, as EOF
 is a valid alternative in this implementation.
 
-It should be noted that `xtb(1)` is able to produce `xcontrol(7)` instructions
-by itself. You can tell `xtb(1)` by *--copy* to
+It should be noted that `oxtb(1)` is able to produce `xcontrol(7)` instructions
+by itself. You can tell `oxtb(1)` by *--copy* to
 save you original instructions, note that this implementation will strip all
 comments while copying (print what you see, not what you read), to aid debugging.
 
 $fit
 ~~~~
-logical instruction to  set `xtb(1)` in `mfit(1)` compatibility mode
+logical instruction to  set `oxtb(1)` in `mfit(1)` compatibility mode
 and prints out further informations.
 This is a pure development feature and therefore should
 be absent in every productive run.
@@ -51,7 +51,7 @@ $seed 'int'
 ~~~~~~~~~~~
 initialize the random number generator from a single integer. The value is
 expanded deterministically to the seed-vector length required by the Fortran
-compiler. Without this instruction, `xtb(1)` obtains an initial state from the
+compiler. Without this instruction, `oxtb(1)` obtains an initial state from the
 Fortran runtime, derives one scalar from it, and then reseeds the generator from
 that scalar. The seed printed in the calculation setup is therefore sufficient
 to reconstruct the state rather than just identifying part of it; it is also
@@ -175,7 +175,7 @@ $external
     path to `mopac(1)` binary, will search `PATH` variable for binary if not set
 *mopac input*='STRING'::
     input string used for `mopac(1)` calculation, make sure it generates an
-    aux file for `xtb(1)` to read in.
+    aux file for `oxtb(1)` to read in.
 *mopac file*='STRING'::
     name of the `mopac(1)` input file
 
@@ -622,12 +622,12 @@ $write
 
 LEGACY
 ~~~~~~
-To ensure compatibility with older versions of the `xtb(1)` prior to version 6.0
+To ensure compatibility with older versions of the `oxtb(1)` prior to version 6.0
 a group instruction set is allowed which accepts the same syntax as the
 original set-block. Here we provide a list of set-block commands and their
 corresponding instructions in `xcontrol(7)`.
 
-NOTE: `xtb(1)` can read a set-block by itself and will print out a
+NOTE: `oxtb(1)` can read a set-block by itself and will print out a
       equivalent instruction set. This feature will be deprecated
       in future versions since the set-block is less flexible than
       `xcontrol(7)` and might be deactived without prior announcement!

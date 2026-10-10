@@ -2,7 +2,7 @@
 
 TXT  := RELEASE_NOTES
 ## 1   Executable programs or shell commands
-TXT1 := dftd4 cosmosolv cosmothermrd thermo xtb
+TXT1 := dftd4 cosmosolv cosmothermrd thermo oxtb
 ## 2   System calls
 TXT2 :=
 ## 3   Library calls (functions within program libraries)

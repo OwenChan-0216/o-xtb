@@ -353,7 +353,7 @@ install(
 # in place of the missing renderer.
 install(
    FILES
-   "${PROJECT_SOURCE_DIR}/man/xtb.1.adoc"
+   "${PROJECT_SOURCE_DIR}/man/oxtb.1.adoc"
    DESTINATION
    "${CMAKE_INSTALL_MANDIR}/man1"
 )

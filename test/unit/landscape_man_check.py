@@ -16,7 +16,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
-"""`man/xtb.1.adoc` consistency check of the landscape suite options.
+"""`man/oxtb.1.adoc` consistency check of the landscape suite options.
 
 The repository has no rendering tool chain (asciidoctor, a2x, pandoc, groff
 and man are all absent), so the man page cannot be rendered here.  This check
@@ -46,7 +46,7 @@ The suite spelling sets are extracted with exactly the rules of
 `landscape_help_check.py` (imported from the same directory, so the two gates
 cannot drift apart).  Usage:
 
-    landscape_man_check.py <src/prog/main.F90> <src/xhelp.f90> <man/xtb.1.adoc> [rundir]
+    landscape_man_check.py <src/prog/main.F90> <src/xhelp.f90> <man/oxtb.1.adoc> [rundir]
 
 The exit status is non-zero when a gate fails; the diagnostic lists of the
 native (non-suite) spellings are printed but never gated.
@@ -163,7 +163,7 @@ def structural_findings(text):
 def main():
     if len(sys.argv) < 4:
         print(
-            "usage: landscape_man_check.py main.F90 xhelp.F90 man/xtb.1.adoc "
+            "usage: landscape_man_check.py main.F90 xhelp.F90 man/oxtb.1.adoc "
             "[rundir]"
         )
         return 2
