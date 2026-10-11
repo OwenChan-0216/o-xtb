@@ -1468,7 +1468,7 @@ contains
          "gaps/HL energies are given in eV", &
          "", &
          "More information can be obtained by `man 1 oxtb` and `man 7 xcontrol`", &
-         "or at https://xtb-docs.readthedocs.io/en/latest/contents.html", &
+         "or at https://xtb-docs.readthedocs.io/en/latest/", &
          ""
    end subroutine write_tail
 
