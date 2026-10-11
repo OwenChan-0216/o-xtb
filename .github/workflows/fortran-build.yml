@@ -60,7 +60,21 @@ jobs:
          # assertion itself is unchanged and the check still runs in the local
          # `ctest -R landscape` suite.
          - name: Run unit tests
-           run: ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing'
+           # The failing-test list goes to the job summary as well as to the log:
+           # reading the log needs an authenticated API call, the summary does not.
+           run: |
+             set +e
+             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
+             status=${PIPESTATUS[0]}
+             {
+               echo "### Unit tests: exit ${status}"
+               if [ "${status}" -ne 0 ]; then
+                 echo '```'
+                 sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40
+                 echo '```'
+               fi
+             } >> "$GITHUB_STEP_SUMMARY"
+             exit "${status}"
            working-directory: ${{ env.BUILD_DIR }}
            env:
             OMP_NUM_THREADS: 2,1
@@ -103,7 +117,21 @@ jobs:
               exit 1
             fi
          - name: Run unit tests
-           run: ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing'
+           # The failing-test list goes to the job summary as well as to the log:
+           # reading the log needs an authenticated API call, the summary does not.
+           run: |
+             set +e
+             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
+             status=${PIPESTATUS[0]}
+             {
+               echo "### Unit tests: exit ${status}"
+               if [ "${status}" -ne 0 ]; then
+                 echo '```'
+                 sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40
+                 echo '```'
+               fi
+             } >> "$GITHUB_STEP_SUMMARY"
+             exit "${status}"
            working-directory: ${{ env.BUILD_DIR }}
            env:
             OMP_NUM_THREADS: 2,1
@@ -163,7 +191,21 @@ jobs:
               exit 1
             fi
          - name: Run unit tests
-           run: ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing'
+           # The failing-test list goes to the job summary as well as to the log:
+           # reading the log needs an authenticated API call, the summary does not.
+           run: |
+             set +e
+             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
+             status=${PIPESTATUS[0]}
+             {
+               echo "### Unit tests: exit ${status}"
+               if [ "${status}" -ne 0 ]; then
+                 echo '```'
+                 sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40
+                 echo '```'
+               fi
+             } >> "$GITHUB_STEP_SUMMARY"
+             exit "${status}"
            working-directory: ${{ env.BUILD_DIR }}
            env:
             OMP_NUM_THREADS: 2,1

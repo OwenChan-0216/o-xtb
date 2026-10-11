@@ -1,193 +1,229 @@
-# Semiempirical Extended Tight-Binding Program Package
+# o-xtb
 
-[![License](https://img.shields.io/github/license/grimme-lab/xtb)](https://github.com/grimme-lab/xtb/blob/master/COPYING)
-[![Latest Version](https://img.shields.io/github/v/release/grimme-lab/xtb)](https://github.com/grimme-lab/xtb/releases/latest)
-[![DOI](https://img.shields.io/badge/DOI-10.1002%2Fwcms.1493-blue)](https://doi.org/10.1002/wcms.1493)
-[![Github Downloads All Releases](https://img.shields.io/github/downloads/grimme-lab/xtb/total)](https://github.com/grimme-lab/xtb/releases)
-
-This is the official repository of the `xtb` program package developed by the Grimme group in Bonn.
-
-<div align="center">
-<img src="./assets/logo/xtb.svg" alt="Extended Tight Binding" width="220">
-</div>
+`o-xtb` is a fork of the semiempirical extended tight-binding program package
+[`xtb`](https://github.com/grimme-lab/xtb) (version 6.7.1), extended with a
+potential-energy-surface task suite.  The electronic-structure methods, the
+parameter files and the original implementation come from that upstream
+project; this repository adds the `sp`, `opt`, `scan`, `ts`, `freq` and `irc`
+tasks on top of the same engine.  The command the build installs is `oxtb`.
 
 ## Table of Contents
+- [What it is](#what-it-is)
 - [Installation](#installation)
+- [Quick start](#quick-start)
+- [Command line](#command-line)
+- [Machine-readable output](#machine-readable-output)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
+- [Upstream](#upstream)
 - [Citations](#citations)
-- [Licence](#license)
+- [License](#license)
+
+## What it is
+
+`o-xtb` adds a complete potential-energy-surface (PES) task suite to the xTB
+engine.  The suite covers six tasks:
+
+| Task | Run type | Covers |
+|------|----------|--------|
+| Single point | `--sp` | energy and gradient at the input geometry |
+| Optimisation | `--opt`, `--lopt` | minimisation (sd, cg, lbfgs, bfgs, diis, rfo) |
+| Scan | `--lscan` | relaxed or rigid scan of one or two internal coordinates |
+| Transition state | `--lts` | PRFO, B-PRFO, dimer, NEB, CI-NEB, AutoNEB, string, GSM |
+| Frequencies | `--lvib` | numerical Hessian, normal modes and thermochemistry |
+| IRC | `--lirc` | GS, HPC, LQA, EulerPC |
+
+The suite exists because the optimiser that xTB ships is task-incomplete: it
+only minimises.  Upstream xTB, and therefore the engine in this tree, has no
+transition-state optimiser, no NEB or dimer search and no intrinsic reaction
+coordinate, so nothing above a minimum is reachable with the native engines
+alone (`--method ancopt` is the legacy minimiser, still available).  Every
+suite task is built on the same xTB calculator (`class(TCalculator)`) and
+reuses its energy, gradient and numerical Hessian, so the underlying GFN
+methods and parameters are unchanged.
+
+Product version `0.1.0`, engine xTB `6.7.1`.
+
+Names: the command and the project are `oxtb` / `o-xtb`, but output file names
+keep their historical xTB spellings (`xtbopt.xyz`, `xtbscan.log`,
+`xtbout.json`, `xtb.trj`).  That is deliberate.
 
 ## Installation
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/grimme-lab/xtb/fortran-build.yml?branch=main)](https://github.com/grimme-lab/xtb/actions)
+### One command: the static release
 
-Statically linked binaries (Intel Compiler) can be found at the [latest release page](https://github.com/grimme-lab/xtb/releases/latest), a version for Linux (Intel 18.0.2, GLIBC 2.19) and Windows (Intel 2022, GNU-15) is provided.
-The `xtb` program and library are packaged on conda-forge for Linux (x86\_64, aarch64, ppc64le) and MacOS (x86\_64, arm64).
-For homebrew users a custom tap is available at [grimme-lab/homebrew-qc](https://github.com/grimme-lab/homebrew-qc) providing prebuilt MacOS/x86\_64 binaries, for MacOS/arm64 binaries will be compiled on installation automatically.
-
-Bleeding edge releases (Linux and Windows) of the latest source from this repository are available on the [continuous release tag](https://github.com/grimme-lab/xtb/releases/tag/bleed).
-
-This projects supports two build systems, meson and CMake.
-A short guide on the usage of each is given here, follow the linked instructions for a more detailed information ([meson guide](./meson/README.adoc), [CMake guide](./cmake/README.adoc)).
-
-**Compilers**:
-  1. ifort(<=2021.10.0), icc(<=2021.10.0)
-  2. gfortran, gcc
-  3. ifx, icx (some versions may not work)
-
-Known issues with combinations:
-  1. GCC-13 + MacOS + AArch64
-
-
-### Meson
-
-Using [meson](https://mesonbuild.com/) as build system requires you to install a fairly new version like 0.62 or newer (except 1.8.0).
-To use the default backend of meson you have to install [ninja](https://ninja-build.org/) version 1.7 or newer.
+`install.sh` configures, builds, tests, installs, registers and self-checks a
+fully static executable in one step, and is idempotent:
 
 ```bash
-export FC=ifort CC=icc
-meson setup build --buildtype release --optimization 2 -Dfortran_link_args="-qopenmp"
-ninja -C build test
+./install.sh
 ```
 
-> [!IMPORTANT]
-> Compilation with `meson` on macOS differs slightly from the protocol for Linux-based systems. Different BLAS libraries can lead to deviating results in rare cases – please stick to the following instructions.
+It stops at the first failing step and leaves that step's exit status behind.
+The defaults can be overridden with environment variables: `XTB_PREFIX` (the
+install prefix, default `$HOME/programs/o-xtb`), `XTB_BIN_DIR` (the
+registration directory, default `$HOME/.local/bin`), `XTB_CMAKE` and
+`XTB_JOBS`.
 
-<details>
-  <summary><b>Setting up meson on macOS</b></summary>
+The static release builds with `WITH_OBJECT=OFF`, so it deliberately ships no
+C API: a fully static executable cannot be linked against the shared library
+`liboxtb.so`.  Build with `WITH_OBJECT=ON` (a dynamic build) if you need
+`liboxtb.so` and `xtb.h`.
 
-#### Compiling with meson on macOS
-
-1. **Use Homebrew for Package Management**: Install dependencies like `gcc`, `gfortran`, and `openblas` using Homebrew.
-[Further information](https://brew.sh/) on how to setup `brew`.
-Example:
-   ```bash
-   brew install gcc gfortran openblas
-   ```
-2. **meson setup call with appropriate environment variables**: Use the following adapted `meson setup` call to compile `xtb` on macOS. Obviously, the paths to the libraries might differ on your system.
-   ```bash
-   LDFLAGS="-L/opt/homebrew/opt/openblas/lib" CPPFLAGS="-I/opt/homebrew/opt/openblas/include" FC=gfortran-14 CC=gcc-14 meson setup _build --buildtype release -Dlapack=openblas
-   ```
-</details>
-<br>
-
-Make sure the testsuite is running without errors.
-
-To install the `xtb` binaries to `/usr/local` use (might require `sudo`)
+### Manual CMake build
 
 ```bash
-ninja -C build install
+cmake -S . -B build \
+      -DWITH_TBLITE=OFF -DWITH_CPCMX=OFF -DWITH_TESTS=ON \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG"
+cmake --build build -j
+ctest --test-dir build -R landscape
 ```
 
-For more information on the build with meson see the instructions [here](./meson/README.adoc).
+`WITH_TBLITE=OFF` and `WITH_CPCMX=OFF` are required: with CMake 4.3.2 the
+`toml-f` dependency fails to build otherwise.  The executable is
+`build/oxtb`.
 
+Compilers and dependencies:
 
-### CMake
+- GNU Fortran (`gfortran`) is the supported compiler.  `-O2` is the supported
+  optimisation level and this checkout is not supported at `-O3` (CMake's
+  `Release` default is `-O3` for GNU), so `CMAKE_Fortran_FLAGS_RELEASE` pins
+  `-O2` explicitly.
+- CMake 3.17 or newer (`cmake_minimum_required` in `CMakeLists.txt`) and a
+  BLAS/LAPACK implementation are required.
 
-The CMake build system requires both make and CMake to be installed, the latter has to be version 3.9 or newer.
+## Quick start
 
-Building `xtb` with CMake works with the following chain of commands:
+All examples use water; save this as `water.xyz`:
+
+```
+3
+water
+O   0.00000000000000   0.00000000000000   0.00000000000000
+H   0.75860200000000   0.00000000000000  -0.50428400000000
+H  -0.75860200000000   0.00000000000000  -0.50428400000000
+```
+
+A single point (`--sp`, GFN2-xTB):
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-make -C build
-make -C build test
+oxtb water.xyz --sp --gfn 2
 ```
 
-To install the `xtb` binaries to `/usr/local` use (might require `sudo`)
+```
+         :: total energy              -5.065772968305 Eh    ::
+```
+
+A geometry optimisation (`--opt`, which runs the suite L-BFGS minimiser):
 
 ```bash
-make -C build install
+oxtb water.xyz --opt --gfn 2
 ```
 
-For more detailed information on the build with CMake see the instructions [here](./cmake/README.adoc).
-
-
-### Conda
-
-[![Conda Version](https://img.shields.io/conda/vn/conda-forge/xtb.svg)](https://anaconda.org/conda-forge/xtb)
-
-Installing `xtb` from the `conda-forge` channel can be achieved by adding `conda-forge` to your channels with:
-
 ```
-conda config --add channels conda-forge
+ landscape: lbfgs minimisation
+ ...
+ landscape: converged
+ steps:          5
+ final energy:        -5.070544444843 Eh
+ final gradient:    6.984305E-05 Eh/bohr
+ ...
+ wrote xtbopt.xyz
 ```
 
-Once the `conda-forge` channel has been enabled, `xtb` can be installed with:
+A suite task, a relaxed scan of the O-H1 distance (`--lscan`):
 
-```
-conda install xtb
-```
-
-It is possible to list all of the versions of `xtb` available on your platform with:
-
-```
-conda search xtb --channel conda-forge
+```bash
+oxtb water.xyz --lscan --gfn 2 \
+   --lscan-coord distance --lscan-atoms 1,2 --lscan-step 0.1 --lscan-nstep 4
 ```
 
+```
+    point      value/Ang reached/Ang drift/Ang         energy/Eh      residual      steps  conv
+        1       0.91092234       0.92781628       0.01689394      -5.069638201154   5.9247E-05      8 T
+        2       1.01092234       0.99578699      -0.01513535      -5.069515287587   1.9459E-04      9 T
+        3       1.11092234       1.07514461      -0.03577772      -5.061998815351   4.2842E-05      8 T
+        4       1.21092234       1.16343009      -0.04749224      -5.048656668183   1.7950E-04      8 T
+        5       1.31092234       1.25793646      -0.05298587      -5.031593674422   1.4239E-04      8 T
+ ...
+ wrote xtbscan.log with 9 frame(s), 0 failed point(s) omitted
+```
+
+The scan sweeps forward and back and reports the hysteresis between the two
+branches; the five rows above are the forward half of a sweep that finishes
+with four points back down the coordinate and writes nine frames to
+`xtbscan.log`.  Energies are in hartree, the coordinate in ångström.
+
+## Command line
+
+`oxtb --help` prints a grouped index of every option in 17 categories
+(`runtypes`, `suite`, `levels`, `minimisation`, `scan`, `saddle`, `band`,
+`irc`, `frequencies`, `hamiltonian`, `electronic`, `external`, `solvation`,
+`analysis`, `output`, `workflow`, `performance`).  The full text of one option
+and one whole category are reachable too:
+
+```bash
+oxtb --help              # the grouped index
+oxtb --help --method     # full text of one option
+oxtb --help suite        # one category
+```
+
+An unknown topic exits 1 with an error that names the category keys.  Colour
+is automatic: a terminal gets the coloured page, a pipe or a redirect gets the
+plain page with no escape bytes.  `CLICOLOR_FORCE=1` forces colour even into a
+pipe and wins over everything else; `NO_COLOR=1` disables it.
+
+`--method` is the canonical selector for the algorithm of the current task.
+It is the single name of `--lopt-engine`, `--lscan-method`, `--lts-method`
+and `--lirc-method`, is not case-sensitive, and a value that does not fit the
+run type aborts the run.
+
+## Machine-readable output
+
+Pass `--ljson` to write one `landscape_<task>.json` document per run, for
+every task, whether it is a native run type or a suite task: `--sp` writes
+`landscape_sp.json`, `--lvib` writes `landscape_vib.json`.  Every document
+carries `format: 2` and the same top-level core keys in the same order:
+
+```
+format, task, status, status_name, converged, message, n_atoms, energy,
+geometry (unit = bohr, symbols, coordinates), provenance,
+counters, values, flags, history
+```
+
+Task-specific data stays inside `counters`, `values`, `flags` and `history`,
+so a single parser reads every task.  The older `--json` option is unchanged
+and still writes the legacy `xtbout.json` (which the task suite does not
+touch).
 
 ## Documentation
 
-[![Documentation Status](https://readthedocs.org/projects/xtb-docs/badge/?version=latest)](https://xtb-docs.readthedocs.io/en/latest/?badge=latest)
+- `man 1 oxtb` and `man 7 xcontrol` — the manual pages, installed from
+  `man/oxtb.1.adoc` and `man/xcontrol.7.adoc` as AsciiDoc sources under
+  `share/man`.
 
-The `xtb` documentation is hosted at [read-the-docs](https://xtb-docs.readthedocs.io/en/latest/).
-
+The documentation site under `docs/docs-site/` is being built and is **not
+published yet**: its `mkdocs.yml` still carries placeholder URLs and there is
+no online render.  When it is published it will hold the user guide, the
+generated CLI reference and a method-notes chapter.
 
 ## Contributing
 
 Please read our [contributing guidelines](CONTRIBUTING.md)
 before contributing to this project.
 
+## Upstream
 
-### Contributors
+`o-xtb` is a fork of the [`xtb`](https://github.com/grimme-lab/xtb) program
+package by the Grimme group at the University of Bonn.  The scientific methods,
+the parameter files and the original implementation come from that project; the
+history of this repository includes its commits.
 
-We are developing this program to make our research possible.
-Many of the features that `xtb` has today have been added because there
-was a dire need for them and we had many contributors who made these
-features reality:
-
-- P. Atkinson ([@patrickatkinson](https://github.com/patrickatkinson))
-- [C. Bannwarth](https://www.ipc.rwth-aachen.de/cms/IPC/Das-Institut/IPC-Arbeitsgruppen/~onnkh) ([@cbannwarth](https://github.com/cbannwarth))
-- F. Bohle ([@fabothch](https://github.com/fabothch))
-- [G. Brandenburg](http://www.gerit-brandenburg.de/) ([@gbrandenburg](https://github.com/gbrandenburg))
-- [E. Caldeweyher](https://eikecaldeweyher.de/) ([@f3rmion](https://github.com/f3rmion))
-- M. Checinski
-- S. Dohm ([@thch-dohm](https://github.com/thch-dohm))
-- S. Ehlert ([@awvwgk](https://github.com/awvwgk))
-- S. Ehrlich
-- M. Friede ([@marvinfriede](https://github.com/marvinfriede))
-- T. Froitzheim ([@thfroitzheim](https://github.com/thfroitzheim))
-- I. Gerasimov ([@foxtran](https://github.com/foxtran))
-- [S. Grimme](https://www.chemie.uni-bonn.de/pctc/mulliken-center/grimme/) ([@stefangrimme](https://github.com/stefangrimme))
-- C. Hölzer ([@hoelzerC](https://github.com/hoelzerc))
-- A. Katbashev ([@Albkat](https://github.com/albkat))
-- J. Koopman ([@JayTheDog](https://github.com/jaythedog))
-- C. Lavinge ([@clavigne](https://github.com/clavigne))
-- S. Lehtola ([@susilehtola](https://github.com/susilehtola))
-- F. März
-- M. Müller ([@marcelmbn](https://github.com/marcelmbn))
-- F. Musil ([@felixmusil](https://github.com/felixmusil))
-- H. Neugebauer ([@haneug](https://github.com/haneug))
-- J. Pisarek
-- C. Plett ([@cplett](https://github.com/cplett))
-- P. Pracht ([@pprcht](https://github.com/pprcht))
-- F. Pultar ([@pultar](https://github.com/pultar))
-- J. Seibert ([@liljay42](https://github.com/liljay42))
-- L. M. Seidler ([@lmseidler](https://github.com/lmseidler))
-- P. Shushkov
-- S. Spicher ([@sespic](https://github.com/sespic))
-- M. Stahn ([@MtoLStoN](https://github.com/mtolston))
-- M. Steiner ([@steinmig](https://github.com/steinmig))
-- T. Strunk ([@timostrunk](https://github.com/timostrunk))
-- J. Stückrath ([@jbstueckrath](https://github.com/jbstueckrath))
-- T. Rose ([@Thomas3R](https://github.com/thomas3r))
-- J. Unsleber ([@nabbelbabbel](https://github.com/nabbelbabbel))
-
-Contributors are listed in alphabetical order.
-Some contributions predate the GitHub release of this project and are not visible in the repository commit history.
-For the contributor data from the commit history since then look [here](https://github.com/grimme-lab/xtb/graphs/contributors).
-
+The contributors of the upstream project are listed on the upstream repository
+(<https://github.com/grimme-lab/xtb/graphs/contributors>) and in its own README.
+This repository does not restate them, because it is not the upstream project.
 
 ## Citations
 
