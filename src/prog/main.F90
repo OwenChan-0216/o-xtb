@@ -333,6 +333,17 @@ contains
          call argParser%nextFile(fname)
       end select
 
+      !> `argParser%nextFile` declares its output as `intent(out)`, so it
+      !> deallocates the argument and only allocates it again when it finds a
+      !> file argument.  An argument the parser does not classify as a file (a
+      !> path that does not exist, for example) therefore leaves `fname`
+      !> unallocated, and assigning from an unallocated deferred-length
+      !> character is undefined behaviour - it segfaults in a checked build
+      !> (`-fcheck=all`, `-O0`) while an optimised build happens to survive.
+      !> Give it a defined value so the error path below can report the real
+      !> problem.
+      if (.not. allocated(fname)) fname = ''
+
       if (.not. allocated(xcontrol)) then
          if (copycontrol) then
             xcontrol = 'xtb.inp'
