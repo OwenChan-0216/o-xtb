@@ -3902,6 +3902,36 @@ add_test("xtb/landscape-man-coverage"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-man-coverage
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The documentation site gate.  `docs/docs-site/tools/check_site.py` is the
+# dependency-free local equivalent of `mkdocs build --strict`: it needs neither
+# MkDocs nor a network, so it runs here.  It regenerates the command-line
+# chapters from `src/xhelp.f90` when they are absent, then checks that every
+# navigation entry maps to a file, that the generated pages have not drifted,
+# that every internal Markdown link resolves, that the `--ljson` key lists on
+# the reference page equal the enforced oracle of `landscape_e2e_check.py`, and
+# that no internal engineering report is linked.  The generated chapters are
+# untracked build output (see `.gitignore`), which is why the check can
+# generate them; once they exist it only reads, so a read-only checkout passes.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/docs_site_py.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${PYTHON}" "${SCRIPT}" ${ARGS}
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "check_site.py failed with status ${status}\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-docs-site"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${PROJECT_SOURCE_DIR}/docs/docs-site/tools/check_site.py
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-docs-site
+  -P "${CMAKE_CURRENT_BINARY_DIR}/docs_site_py.cmake")
+
 # The dangerous builtin defaults are echoed as a `[NOTICE]` line, and the
 # explicit flag silences the notice (CLI redesign sections 8.3 and 17.3).
 # `landscape_cli_check.py` mode `echo` runs both routes of a case and asserts

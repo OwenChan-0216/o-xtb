@@ -1,0 +1,100 @@
+# MkDocs configuration of the o-xtb documentation site.
+#
+# Build (from the repository root, in a virtual environment):
+#
+#     python3 -m venv .venv && . .venv/bin/activate
+#     pip install -r docs/docs-site/requirements.txt
+#     python docs/docs-site/tools/gen_cli_reference.py     # generated chapter
+#     python docs/docs-site/tools/check_site.py            # local gate
+#     mkdocs build --strict -f docs/docs-site/mkdocs.yml
+#
+# `site_dir` defaults to `site/` next to this file (`docs/docs-site/site/`).
+#
+# The corpus is Markdown only.  The command-line reference under `cli/` is
+# generated from `src/xhelp.f90` and is deliberately not committed (see
+# `.gitignore`); run the generator before the build.
+
+# --- PLACEHOLDERS: the remote repository and the Pages URL do not exist yet ---
+# The owner has not created the hosting remote.  Both URLs below are
+# placeholders and MUST be replaced with the real ones before the first
+# deploy; until then the canonical URL and the "edit this page" link are wrong
+# by construction.  Nothing else in the site depends on them.
+site_name: o-xtb
+site_url: https://example.invalid/o-xtb/
+repo_url: https://example.invalid/o-xtb
+site_description: >-
+  Documentation for o-xtb, a fork of xTB 6.7.1 that adds a complete potential
+  energy surface task suite: geometry optimisation, surface scans, transition
+  states, frequencies, and intrinsic reaction coordinates.
+
+docs_dir: docs
+
+theme:
+  name: material
+  # `font: false` keeps the built site free of external hosts: without it
+  # Material injects Google Fonts <link>s that the reader's browser fetches at
+  # runtime.  Search is the theme's bundled client-side lunr, so the site has
+  # zero external requests.
+  font: false
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - toc.follow
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - User guide:
+      - Overview: user-guide/index.md
+      - Geometry optimisation: user-guide/opt.md
+      - Surface scans: user-guide/scan.md
+      - Transition states: user-guide/ts.md
+      - Frequencies and thermochemistry: user-guide/freq.md
+      - Reaction paths: user-guide/irc.md
+  - Reference:
+      - Command line: reference/cli.md
+      - Command line reference:
+          - Overview: cli/index.md
+          - Native run types: cli/runtypes.md
+          - Landscape suite tasks: cli/suite.md
+          - Method selector and level keywords: cli/levels.md
+          - Minimisation options (--lopt): cli/minimisation.md
+          - Scan options (--lscan): cli/scan.md
+          - Saddle search options (--lts): cli/saddle.md
+          - Band and chain-of-states options (--lts): cli/band.md
+          - IRC options (--lirc): cli/irc.md
+          - Frequency and thermochemistry options (--lvib): cli/frequencies.md
+          - Method and Hamiltonian: cli/hamiltonian.md
+          - Molecule and electronic-structure settings: cli/electronic.md
+          - External engines and embedding: cli/external.md
+          - Solvation and environment: cli/solvation.md
+          - Analysis and property requests: cli/analysis.md
+          - Output and machine-readable: cli/output.md
+          - Input, workflow and diagnostics: cli/workflow.md
+          - Performance and machine settings: cli/performance.md
+      - JSON output (--ljson): reference/ljson.md
+      - Output files: reference/files.md
+  - Method notes:
+      - Overview: method-notes/index.md
+      - The IRC line search: method-notes/irc-line-search.md
+  - API reference: api/index.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight
+
+# `--strict` turns warnings into errors.  MkDocs 1.6 defaults
+# `validation.anchors` to `info`, so a link to a heading that does not exist
+# would pass silently; `warn` makes it fail the build like a broken page link.
+validation:
+  anchors: warn

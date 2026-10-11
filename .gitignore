@@ -72,10 +72,12 @@ xtbscan.log
 irc.log
 irc_*.xyz
 landscape_*.json
+xtbout.json
 
 
 # python build artefacts
 __pycache__/
+.venv/
 python/dist
 python/build
 *.egg-info
@@ -91,7 +93,30 @@ AGENTS.md
 # The three delivery documents are the exception: they are the published
 # contract of the landscape suite (PLAN, M7 validation) and of the CLI
 # redesign, and are versioned.
+#
+# --- documentation site corpus: versioned (owner ruling D1) -----------------
+# The site corpus at docs/docs-site/ is versioned; the rest of docs/ stays
+# untracked.  git cannot re-include a path whose parent directory is excluded,
+# so the excluded component (docs/docs-site) is re-included first; its contents
+# then need no rule because docs/* does not cross "/".  Do NOT add
+# "!docs/docs-site/**": as the last matching pattern it would override every
+# artifact rule above and stage suite artefacts (landscape_*.json, xtbopt.xyz,
+# hessian, vibspectrum, xtbscan.log, site/, __pycache__/, ...) into the repo.
 docs/*
 !docs/xtb-landscape-PLAN.md
 !docs/xtb-landscape-M7-validation.md
 !docs/xtb-cli-redesign-delivery.md
+!docs/docs-site/
+# `mkdocs build` output and the generated pages never enter git; their single
+# source of truth is src/xhelp.f90, man/*.adoc and the Fortran sources.
+# The API directory is special: generated FORD output is ignored, but the
+# hand-written entry point `api/index.md` is tracked, so the rule ignores the
+# directory *contents* (`api/*`) and re-includes the stub.  The directory form
+# `docs/docs-site/docs/api/` (trailing slash) must NOT be used: git will not
+# descend into an excluded directory, so the `!` line could never re-include
+# the stub.
+docs/docs-site/site/
+docs/docs-site/docs/cli/
+docs/docs-site/docs/man/
+docs/docs-site/docs/api/*
+!docs/docs-site/docs/api/index.md

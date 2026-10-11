@@ -1,0 +1,16 @@
+# The pinned documentation toolchain.
+#
+# MkDocs 1.6.1 refuses to build if `mkdocs-material` and its extensions are not
+# compatible, so the resolved set installed by this file must match the
+# generated site's theme.  These are the exact versions measured for o-xtb;
+# the two packages below are pinned and the transitive set is resolved by pip.
+#
+# Install into a virtual environment (the system Python here is externally
+# managed, PEP 668):
+#
+#     python3 -m venv .venv && . .venv/bin/activate
+#     pip install -r docs/docs-site/requirements.txt
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+mkdocs-material-extensions==1.3.1
+pymdown-extensions==12.2
