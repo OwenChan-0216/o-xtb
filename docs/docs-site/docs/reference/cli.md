@@ -22,7 +22,7 @@ produce; the site gate (`docs/docs-site/tools/check_site.py`) and CI use it.
 
 The option table is grouped into 17 categories, one page each; the grouped
 index is printed by `oxtb --help` and a single category by
-`oxtb --help <category>` (for example `oxtb --help saddle`).  The same category
+`oxtb --help <CATEGORY>` (for example `oxtb --help saddle`).  The same category
 keys are the page names:
 
 **[Open the generated reference](../cli/index.md)** - it lists every option, its

@@ -27,7 +27,7 @@ Every file below was produced by a run of a build of this repository.  The
 
 | File | Flag | Content |
 |---|---|---|
-| `landscape_<task>.json` | `--ljson` | the structured result document, format 2 (see [JSON output](ljson.md)); `<task>` is `sp`, `opt`, `scan`, `ts`, `vib`, `irc`, ... |
+| `landscape_<TASK>.json` | `--ljson` | the structured result document, format 2 (see [JSON output](ljson.md)); `<task>` is `sp`, `opt`, `scan`, `ts`, `vib`, `irc`, ... |
 | `xtbout.json` | `--json` | the older property dump; a separate format, unchanged by `--ljson` |
 
 ## Files nearly every run writes

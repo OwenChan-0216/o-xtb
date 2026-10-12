@@ -16,7 +16,7 @@ Common to every family:
 
 * the engine is GFN2-xTB by default (`--gfn 2`); `--gfn 0/1/ff` are the other
   methods;
-* `--ljson` writes a structured `landscape_<task>.json` document for every task
+* `--ljson` writes a structured `landscape_<TASK>.json` document for every task
   (see [JSON output](../reference/ljson.md));
 * the convergence level and the step budget are chosen with the family's
   `--l*-level` flag; an explicit `--acc`, `--l*-max-steps` or `--cycles` wins

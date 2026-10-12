@@ -182,7 +182,7 @@ run type aborts the run.
 
 ## Machine-readable output
 
-Pass `--ljson` to write one `landscape_<task>.json` document per run, for
+Pass `--ljson` to write one `landscape_<TASK>.json` document per run, for
 every task, whether it is a native run type or a suite task: `--sp` writes
 `landscape_sp.json`, `--lvib` writes `landscape_vib.json`.  Every document
 carries `format: 2` and the same top-level core keys in the same order:

@@ -202,7 +202,7 @@ subroutine help(iunit, topic, status)
       "    the upstream names crude, sloppy, loose, lax, normal (default), tight,", &
       "    verytight, extreme, the spelling vtight and the suite-only superloose; the", &
       "    run echoes the level it uses"])
-   call add("--cycles [int]", "runtypes", &
+   call add("--cycles [INT]", "runtypes", &
       "maximum number of optimisation cycles", &
       [character(len=160) :: "    maximum number of optimization cycles."])
    call add("--hess", "runtypes", &
@@ -238,7 +238,7 @@ subroutine help(iunit, topic, status)
    call add("--md", "runtypes", &
       "molecular dynamics from the input geometry", &
       [character(len=160) :: "    molecular dynamics simulation on start geometry"])
-   call add("--metadyn [int]", "runtypes", &
+   call add("--metadyn [INT]", "runtypes", &
       "metadynamics with int snapshots", &
       [character(len=160) :: &
       "    meta dynamics simulation on start geometry, saving int snapshots of the", &
@@ -289,9 +289,9 @@ subroutine help(iunit, topic, status)
       "deprecated; the run aborts", &
       [character(len=160) :: "    deprecated; the run aborts with a message"])
    call add("--ljson", "suite", &
-      "write landscape_<task>.json for every task", &
+      "write landscape_<TASK>.json for every task", &
       [character(len=160) :: &
-      "    write the structured result landscape_<task>.json for every task: native", &
+      "    write the structured result landscape_<TASK>.json for every task: native", &
       "    (--sp, --grad, --opt, --hess, --ohess, --md, ...) and landscape (--lopt,", &
       "    --lscan, --lts, --lirc, --lvib).  The document carries a uniform core", &
       "    block (task, status, converged, energy, n_atoms, geometry, provenance)", &
@@ -895,7 +895,7 @@ subroutine help(iunit, topic, status)
    call add("--lvib-freq-scal VALUE", "frequencies", &
       "frequency scaling factor of the thermochemistry", &
       [character(len=160) :: "    frequency scaling factor of the thermochemistry (default 1.0)"])
-   call add("--ceh <grad> [REAL]", "hamiltonian", &
+   call add("--ceh <GRAD> [REAL]", "hamiltonian", &
       "CEH charges and numerical gradients", &
       [character(len=160) :: &
       "    calculate CEH (Charge-Extended Hückel model) charges and write them to the ceh.charges file", &
@@ -1374,16 +1374,16 @@ contains
       logical, intent(in) :: use_color
       integer :: icat, i
       write(iunit,'(a)') &
-         "Usage: oxtb [options] <geometry> [options]", &
+         "Usage: oxtb [OPTIONS] <GEOMETRY> [OPTIONS]", &
          "", &
-         "<geometry> may be provided as valid TM coordinate file (*coord in Bohr),", &
+         "<GEOMETRY> may be provided as valid TM coordinate file (*coord in Bohr),", &
          "in xmol format (*.xyz in Ångström), sdf or mol file format, PDB format", &
          "genFormat input or Vasp's POSCAR format.", &
          "", &
          "For a full list visit: https://grimme-lab.github.io/mctc-lib/page/index.html", &
          "", &
-         "Full text of one option: oxtb --help <option>  (e.g. oxtb --help --method)", &
-         "One category of the index: oxtb --help <category>; the categories are:", &
+         "Full text of one option: oxtb --help <OPTION>  (e.g. oxtb --help --method)", &
+         "One category of the index: oxtb --help <CATEGORY>; the categories are:", &
          "runtypes, suite, levels, minimisation, scan, saddle, band, irc,", &
          "frequencies, hamiltonian, electronic, external, solvation, analysis,", &
          "output, workflow, performance", &
@@ -1486,9 +1486,9 @@ contains
          "  " // styled("oxtb --help", sgr_usage, use_color) // &
             "              grouped index of every option", &
          "  " // styled("oxtb --help", sgr_usage, use_color) // &
-            " <option>     full text of one option, e.g. oxtb --help --method", &
+            " <OPTION>     full text of one option, e.g. oxtb --help --method", &
          "  " // styled("oxtb --help", sgr_usage, use_color) // &
-            " <category>   one category of the index", &
+            " <CATEGORY>   one category of the index", &
          "", &
          "Categories:"
       do icat = 1, n_cat

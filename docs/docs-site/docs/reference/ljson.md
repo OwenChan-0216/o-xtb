@@ -2,7 +2,7 @@
 
 `--ljson` is the **single machine-readable entry point for every task**.  The
 six suite tasks and the native run types all write one
-`landscape_<task>.json` document, so a single parser reads every task.  The
+`landscape_<TASK>.json` document, so a single parser reads every task.  The
 historical `landscape_` prefix is kept for the native tasks too.
 
 ```bash

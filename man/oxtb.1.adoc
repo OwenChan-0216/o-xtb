@@ -86,7 +86,7 @@ OPTIONS
 *--tblite* ::
     use tblite library as implementation for xTB
     
-*--ceh <grad> [REAL]* ::
+*--ceh <GRAD> [REAL]* ::
       calculate CEH (Charge-Extended Hückel model) charges and write them to the ceh.charges file,
       optionally, calculate numerical gradients and write them to the ceh.charges.numgrad file
       with an adjustable step size for the numerical gradients.
@@ -290,7 +290,7 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     SUITE OPTIONS
 
 *--ljson*::
-    write the structured result `landscape_<task>.json` for every task - native
+    write the structured result `landscape_<TASK>.json` for every task - native
     (`--sp`, `--grad`, `--opt`, `--hess`, ...) and landscape (`--lopt`,
     `--lscan`, `--lts`, `--lirc`, `--lvib`).  The document has a uniform core
     block (task, status, energy, geometry, provenance) plus the task specific
@@ -325,7 +325,7 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
 *--md*::
     molecular dynamics simulation on start geometry
 
-*--metadyn* ['int']::
+*--metadyn* ['INT']::
     meta dynamics simulation on start geometry, saving 'int' snapshots
     of the trajectory to bias the simulation
 
