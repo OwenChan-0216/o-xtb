@@ -1,0 +1,20 @@
+ landscape transition state search: string
+ electronic temperature (frozen):      300.000 K
+ initial trust radius:    3.779500E-01 bohr
+ Hessian source: numerical
+ termination: the located stationary point is a minimum (0 imaginary modes), not a first order saddle point
+ --------------------------------------------------------------
+ landscape: the located stationary point is a minimum (0 imaginary modes), not a first order saddle point
+ converged:      F
+ steps:          10
+ energy calls:   251
+ cache misses:   648
+ final energy:       -56.909436864261 Eh
+ final gradient:    4.236989E-03 Eh/bohr
+ max gradient:      1.747134E-03 Eh/bohr
+ etemp:               300.000 K
+ --------------------------------------------------------------
+ convergence history
+ criteria (gmax,grms,dmax,drms):  F F F F
+ confirmation imaginary modes: 0
+ is a first order saddle: F

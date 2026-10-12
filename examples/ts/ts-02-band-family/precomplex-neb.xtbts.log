@@ -1,0 +1,21 @@
+ landscape transition state search: neb
+ electronic temperature (frozen):      300.000 K
+ initial trust radius:    3.779500E-01 bohr
+ Hessian source: numerical
+ termination: the located stationary point is a higher order saddle (3 imaginary modes), not a first order saddle point
+ --------------------------------------------------------------
+ landscape: the located stationary point is a higher order saddle (3 imaginary modes), not a first order saddle point
+ converged:      F
+ steps:          152
+ energy calls:   1683
+ cache misses:   1882
+ final energy:       -56.806546544400 Eh
+ final gradient:    9.453210E-03 Eh/bohr
+ max gradient:      3.228198E-03 Eh/bohr
+ etemp:               300.000 K
+ --------------------------------------------------------------
+ convergence history
+ criteria (gmax,grms,dmax,drms):  F F F F
+ confirmation imaginary modes: 3
+ is a first order saddle: F
+ most negative frequency:           -34.30 cm^-1

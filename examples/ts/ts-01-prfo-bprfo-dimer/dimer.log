@@ -1,0 +1,747 @@
+                             ___  __    _____ ____  
+                            / / \ \ \_/  | |  | |_) 
+                            \_\_/ /_/ \  |_|  |_|_) 
+
+           OxTB - An Omni-functional PES Exploration and Exploitation
+                              Toolkit Based on xTB
+
+                          Original Author - S. Grimme
+                   Mulliken Center for Theoretical Chemistry
+                               University of Bonn
+
+                             * OxTB version 0.1.0 *
+                             * xTB version 6.7.1 *
+                      Compiled on 2026/10/12 from c712f9e
+
+                     Copyright (C) 2017-2020 Stefan Grimme,
+                  2019-2020 Sebastian Ehlert and contributors
+                        LGPL-3.0-or-later - NO WARRANTY;
+                     see `oxtb --license` for the full text
+
+   xtb is free software: you can redistribute it and/or modify it under
+   the terms of the GNU Lesser General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   xtb is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU Lesser General Public License for more details.
+   
+   Cite this work as:
+   * C. Bannwarth, E. Caldeweyher, S. Ehlert, A. Hansen, P. Pracht,
+     J. Seibert, S. Spicher, S. Grimme, WIREs Comput. Mol. Sci., 2020, 11,
+     e01493. DOI: 10.1002/wcms.1493
+   
+   for GFN2-xTB:
+   * C. Bannwarth, S. Ehlert and S. Grimme., J. Chem. Theory Comput., 2019,
+     15, 1652-1671. DOI: 10.1021/acs.jctc.8b01176
+   for GFN1-xTB:
+   * S. Grimme, C. Bannwarth, P. Shushkov, J. Chem. Theory Comput., 2017,
+     13, 1989-2009. DOI: 10.1021/acs.jctc.7b00118
+   for GFN0-xTB:
+   * P. Pracht, E. Caldeweyher, S. Ehlert, S. Grimme, ChemRxiv, 2019, preprint.
+     DOI: 10.26434/chemrxiv.8326202.v1
+   for GFN-FF:
+   * S. Spicher and S. Grimme, Angew. Chem. Int. Ed., 2020, 59, 15665-15673.
+     DOI: 10.1002/anie.202004239
+   
+   for ALPB and GBSA implicit solvation:
+   * S. Ehlert, M. Stahn, S. Spicher, S. Grimme, J. Chem. Theory Comput.,
+     2021, 17, 4250-4261. DOI: 10.1021/acs.jctc.1c00471
+   
+   for ddCOSMO and CPCM-X implicit solvation:
+   * M. Stahn, S. Ehlert, S. Grimme, J. Phys. Chem. A,
+     2023, XX, XXXX-XXXX. DOI: 10.1021/acs.jpca.3c04382
+   
+   for DFT-D4:
+   * E. Caldeweyher, C. Bannwarth and S. Grimme, J. Chem. Phys., 2017,
+     147, 034112. DOI: 10.1063/1.4993215
+   * E. Caldeweyher, S. Ehlert, A. Hansen, H. Neugebauer, S. Spicher,
+     C. Bannwarth and S. Grimme, J. Chem. Phys., 2019, 150, 154122.
+     DOI: 10.1063/1.5090222
+   * E. Caldeweyher, J.-M. Mewes, S. Ehlert and S. Grimme, Phys. Chem. Chem. Phys.
+     2020, 22, 8499-8512. DOI: 10.1039/D0CP00502A
+   
+   for sTDA-xTB:
+   * S. Grimme and C. Bannwarth, J. Chem. Phys., 2016, 145, 054103.
+     DOI: 10.1063/1.4959605
+   
+   in the mass-spec context:
+   * V. Asgeirsson, C. Bauer and S. Grimme, Chem. Sci., 2017, 8, 4879.
+     DOI: 10.1039/c7sc00601b
+   * J. Koopman and S. Grimme, ACS Omega 2019, 4, 12, 15120-15133.
+     DOI: 10.1021/acsomega.9b02011
+   
+   for metadynamics refer to:
+   * S. Grimme, J. Chem. Theory Comput., 2019, 155, 2847-2862
+     DOI: 10.1021/acs.jctc.9b00143
+   
+   for SPH calculations refer to:
+   * S. Spicher and S. Grimme, J. Chem. Theory Comput., 2021, 17, 1701-1714
+     DOI: 10.1021/acs.jctc.0c01306
+   
+   for ONIOM refer to:
+   * C. Plett, A. Katbashev, S. Ehlert, S. Grimme, M. Bursch,
+     Phys. Chem. Chem. Phys., 2023, 25, 17860-17868. DOI: 10.1039/D3CP02178E
+   
+   for DIPRO refer to:
+   * J. Kohn, N. Gildemeister, S. Grimme, D. Fazzi, A. Hansen,
+     J. Chem. Phys. 159, 144106 (2023). DOI: 10.1063/5.0167484
+   
+   for PTB refer to:
+   * S. Grimme, M. Mueller, A. Hansen, J. Chem. Phys., 2023, 158, 124111.
+     DOI: 10.1063/5.0137838
+   
+   for O1NumHess refer to:
+   * B. Wang, S. Luo, Z. Wang, W. Liu,
+     J. Chem. Theory Comput. 21, 10893-10909.
+     DOI: 10.1021/acs.jctc.5c01354
+   
+   with help from (in alphabetical order)
+   P. Atkinson, C. Bannwarth, F. Bohle, G. Brandenburg, E. Caldeweyher,
+   M. Checinski, S. Dohm, S. Ehlert, S. Ehrlich, M. Friede, T. Froitzheim,
+   I. Gerasimov, C. Hölzer, A. Katbashev, J. Kohn, J. Koopman, C. Lavigne,
+   S. Lehtola, F. März, M. Müller, F. Musil, H. Neugebauer, J. Pisarek,
+   C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
+   M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
+   
+ * started run on 2026/10/13 at 02:05:02.084     
+   ID    Z sym.   atoms
+    1    6 C      1-7, 16-22
+    2    8 O      8, 9, 23, 24
+    3    1 H      10-15, 25-30
+
+           -------------------------------------------------
+          |                Calculation Setup                |
+           -------------------------------------------------
+
+          program call               : oxtb input-displaced.xyz --gfn 2 --lts --lts-method dimer --lts-level normal --lts-max-steps 150 --lts-delta 0.1 --lts-ninit force --lts-rot-max-iter 30 --namespace dimer --norestart
+          calculation namespace      : dimer
+          coordinate file            : input-displaced.xyz
+          omp threads                :                     1
+          random seed                :            1883618193
+
+
+molecular fragmentation (1/2 indicates fragments):
+111111111211111222222222222222
+# atoms in fragment 1/2:    14    16
+ fragment masses (1/2) :      121.11      123.13
+CMA distance (Bohr)    :  13.518
+constraining FC (au)   :  0.0500
+
+           -------------------------------------------------
+          |                 G F N 2 - x T B                 |
+           -------------------------------------------------
+
+        Reference                      10.1021/acs.jctc.8b01176
+      * Hamiltonian:
+        H0-scaling (s, p, d)           1.850000    2.230000    2.230000
+        zeta-weighting                 0.500000
+      * Dispersion:
+        s8                             2.700000
+        a1                             0.520000
+        a2                             5.000000
+        s9                             5.000000
+      * Repulsion:
+        kExp                           1.500000    1.000000
+        rExp                           1.000000
+      * Coulomb:
+        alpha                          2.000000
+        third order                    shell-resolved
+        anisotropic                    true
+        a3                             3.000000
+        a5                             4.000000
+        cn-shift                       1.200000
+        cn-exp                         4.000000
+        max-rad                        5.000000
+
+
+          ...................................................
+          :                      SETUP                      :
+          :.................................................:
+          :  # basis functions                  84          :
+          :  # atomic orbitals                  84          :
+          :  # shells                           48          :
+          :  # electrons                        92          :
+          :  max. iterations                   250          :
+          :  Hamiltonian                  GFN2-xTB          :
+          :  restarted?                      false          :
+          :  GBSA solvation                  false          :
+          :  PC potential                    false          :
+          :  electronic temp.          300.0000000     K    :
+          :  accuracy                    1.0000000          :
+          :  -> integral cutoff          0.2500000E+02      :
+          :  -> integral neglect         0.1000000E-07      :
+          :  -> SCF convergence          0.1000000E-05 Eh   :
+          :  -> wf. convergence          0.1000000E-03 e    :
+          :  Broyden damping             0.4000000          :
+          :  net charge                          0          :
+          :  unpaired electrons                  0          :
+          ...................................................
+
+ iter      E             dE          RMSdq      gap      omega  full diag
+   1    -53.0157522 -0.530158E+02  0.534E+00    3.79       0.0  T
+   2    -53.0703226 -0.545703E-01  0.299E+00    3.50       1.0  T
+   3    -53.0654973  0.482523E-02  0.116E+00    3.73       1.0  T
+   4    -53.0752652 -0.976792E-02  0.211E-01    3.63       1.0  T
+   5    -53.0762381 -0.972846E-03  0.921E-02    3.66       1.0  T
+   6    -53.0764300 -0.191946E-03  0.344E-02    3.65       1.0  T
+   7    -53.0764355 -0.547365E-05  0.112E-02    3.65       1.6  T
+   8    -53.0764356 -0.128361E-06  0.448E-03    3.65       4.1  T
+   9    -53.0764359 -0.235252E-06  0.157E-03    3.65      11.6  T
+  10    -53.0764359 -0.243592E-07  0.621E-04    3.65      29.4  T
+  11    -53.0764359 -0.959005E-09  0.285E-04    3.65      64.0  T
+
+   *** convergence criteria satisfied after 11 iterations ***
+
+         #    Occupation            Energy/Eh            Energy/eV
+      -------------------------------------------------------------
+         1        2.0000           -0.7354823             -20.0135
+       ...           ...                  ...                  ...
+        40        2.0000           -0.4331891             -11.7877
+        41        2.0000           -0.4319272             -11.7533
+        42        2.0000           -0.4216273             -11.4731
+        43        2.0000           -0.4213771             -11.4663
+        44        2.0000           -0.4190920             -11.4041
+        45        2.0000           -0.4190889             -11.4040
+        46        2.0000           -0.4115240             -11.1981 (HOMO)
+        47                         -0.2773961              -7.5483 (LUMO)
+        48                         -0.2764306              -7.5221
+        49                         -0.2365344              -6.4364
+        50                         -0.2365339              -6.4364
+        51                         -0.1920728              -5.2266
+       ...                                ...                  ...
+        84                          0.6842761              18.6201
+      -------------------------------------------------------------
+                  HL-Gap            0.1341279 Eh            3.6498 eV
+             Fermi-level           -0.3444600 Eh           -9.3732 eV
+
+ SCC (total)                   0 d,  0 h,  0 min,  0.017 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.558%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.165%)
+ classical contributions        ...        0 min,  0.000 sec (  0.145%)
+ integral evaluation            ...        0 min,  0.002 sec ( 13.557%)
+ iterations                     ...        0 min,  0.008 sec ( 45.784%)
+ molecular gradient             ...        0 min,  0.006 sec ( 38.304%)
+ printout                       ...        0 min,  0.000 sec (  0.449%)
+
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+         ::                     SUMMARY                     ::
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+         :: total energy             -52.346270143237 Eh    ::
+         :: gradient norm              0.127088647239 Eh/a0 ::
+         :: HOMO-LUMO gap              3.649804813874 eV    ::
+         ::.................................................::
+         :: SCC energy               -53.076837037671 Eh    ::
+         :: -> isotropic ES            0.100242701108 Eh    ::
+         :: -> anisotropic ES         -0.006467534738 Eh    ::
+         :: -> anisotropic XC          0.014974350035 Eh    ::
+         :: -> dispersion             -0.027215053357 Eh    ::
+         :: repulsion energy           0.730566894434 Eh    ::
+         :: add. restraining           0.000000000000 Eh    ::
+         :: total charge               0.000000000000 e     ::
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+ landscape: transition state search (dimer)
+ initial trust radius:        3.779500E-01 bohr
+ maximum trust radius:        1.889700E+00 bohr
+ maximum number of steps:  150
+ energy tolerance:            5.000000E-06 Eh
+ restart policy:           off
+ Hessian source:           numerical
+ Hessian step:                5.000000E-03 bohr
+ Hessian SCC accuracy:        3.000000E-01
+ dimer separation:          1.000000E-01 bohr
+ dimer rotation probe:      1.000000E-04 rad
+ dimer rotation iterations: 30
+ dimer initial axis:       force (seed 42
+ )
+ electronic temperature:        300.000 K (frozen for the whole run)
+ dimer initial axis: force direction (seed 42)
+ dimer separation:   1.000000E-01 bohr, finite difference step  1.889700E-03 bohr
+    iter            energy/Eh        dE/(kcal/mol)   gmax/(Eh/bohr)  dmax/bohr     stepmax/bohr
+      1     -52.353740705232      -4.6878  2.342770E-02  6.440135E-02  2.834600E-01
+   dimer rotation: iterations 24, torque rms  2.059762E-04 max  8.186958E-04 Eh/bohr, converged=T
+   dimer curvature:   -9.340882E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.270874E-01 Eh/bohr, step  1.202524E-01 bohr, mobility  9.462180E-01 (kappa  1.056839E+00 Eh/bohr^2)
+      2     -52.351697508055       1.2821  6.757467E-02  6.142728E-02  2.834600E-01
+   dimer rotation: iterations 4, torque rms  1.907270E-04 max  7.601547E-04 Eh/bohr, converged=T
+   dimer curvature:   -9.723398E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  4.443114E-02 Eh/bohr, step  1.647322E-01 bohr, mobility  2.230434E+00 (kappa  2.203821E-01 Eh/bohr^2)
+      3     -52.353808262835      -1.3245  6.468554E-02  8.307782E-02  2.834600E-01
+   dimer rotation: iterations 4, torque rms  1.786894E-04 max  7.973046E-04 Eh/bohr, converged=T
+   dimer curvature:   -9.188182E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.209012E-01 Eh/bohr, step  1.567695E-01 bohr, mobility  8.050679E-01 (kappa  1.242131E+00 Eh/bohr^2)
+      4     -52.358206660977      -2.7600  1.424787E-02  9.488808E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.067791E-04 max  9.840707E-04 Eh/bohr, converged=T
+   dimer curvature:   -8.109323E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.145443E-01 Eh/bohr, step  1.868139E-01 bohr, mobility  8.032911E-01 (kappa  1.244879E+00 Eh/bohr^2)
+      5     -52.352871143843       3.3481  5.956860E-02  6.302333E-02  2.834600E-01
+   dimer rotation: iterations 3, torque rms  2.603192E-04 max  1.269012E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.008103E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  3.675927E-02 Eh/bohr, step  1.773856E-01 bohr, mobility  2.230434E+00 (kappa  3.768517E-01 Eh/bohr^2)
+      6     -52.358918228135      -3.7946  1.560988E-02  5.234755E-02  2.834600E-01
+   dimer rotation: iterations 4, torque rms  1.983893E-04 max  7.802516E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.266611E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.154889E-01 Eh/bohr, step  1.024023E-01 bohr, mobility  8.866852E-01 (kappa  1.127796E+00 Eh/bohr^2)
+      7     -52.360368631318      -0.9101  9.863815E-03  3.298675E-02  2.834600E-01
+   dimer rotation: iterations 3, torque rms  2.535156E-04 max  9.164597E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.408259E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  3.167082E-02 Eh/bohr, step  7.063968E-02 bohr, mobility  2.230434E+00 (kappa  2.913574E-01 Eh/bohr^2)
+      8     -52.361290842728      -0.5787  4.665514E-03  4.258221E-02  2.834600E-01
+   dimer rotation: iterations 2, torque rms  1.739157E-04 max  8.969086E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.849490E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.310471E-02 Eh/bohr, step  1.016941E-01 bohr, mobility  2.029384E+00 (kappa  4.927604E-01 Eh/bohr^2)
+      9     -52.360820303050       0.2953  1.060821E-02  3.569763E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.260784E-04 max  1.112283E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.600916E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.527609E-02 Eh/bohr, step  1.082509E-01 bohr, mobility  1.939378E+00 (kappa  5.156292E-01 Eh/bohr^2)
+     10     -52.361479006583      -0.4133  6.889926E-03  2.199456E-02  2.834600E-01
+   dimer rotation: iterations 2, torque rms  1.997895E-04 max  1.184855E-03 Eh/bohr, converged=T
+   dimer curvature:   -8.393643E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.534459E-02 Eh/bohr, step  5.254814E-02 bohr, mobility  2.073348E+00 (kappa  4.823118E-01 Eh/bohr^2)
+     11     -52.361753179706      -0.1720  3.945011E-03  8.863356E-03  2.834600E-01
+   dimer rotation: iterations 2, torque rms  1.759395E-04 max  1.004854E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.901093E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.049109E-02 Eh/bohr, step  2.646461E-02 bohr, mobility  1.291518E+00 (kappa  7.742824E-01 Eh/bohr^2)
+     12     -52.361943866927      -0.1197  6.784135E-03  1.666171E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.069768E-04 max  1.091832E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.934687E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.180689E-02 Eh/bohr, step  3.801964E-02 bohr, mobility  2.230434E+00 (kappa  4.347120E-01 Eh/bohr^2)
+     13     -52.362136187470      -0.1207  3.271732E-03  1.557827E-02  2.834600E-01
+   dimer rotation: iterations 2, torque rms  1.623617E-04 max  1.015863E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.775842E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.527858E-02 Eh/bohr, step  4.394216E-02 bohr, mobility  1.203110E+00 (kappa  8.311792E-01 Eh/bohr^2)
+     14     -52.362143339014      -0.0045  7.138574E-03  1.960530E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.731021E-04 max  1.033044E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.441569E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.041002E-02 Eh/bohr, step  5.009758E-02 bohr, mobility  1.934658E+00 (kappa  5.168871E-01 Eh/bohr^2)
+     15     -52.362245928795      -0.0644  8.987490E-03  1.076363E-02  2.834600E-01
+   dimer rotation: iterations 2, torque rms  1.719811E-04 max  9.737327E-04 Eh/bohr, converged=T
+   dimer curvature:   -7.039453E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.700234E-02 Eh/bohr, step  4.894485E-02 bohr, mobility  1.366762E+00 (kappa  7.316564E-01 Eh/bohr^2)
+     16     -52.362573288523      -0.2054  3.843169E-03  1.878136E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.046014E-04 max  1.094938E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.838662E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.839290E-02 Eh/bohr, step  5.746167E-02 bohr, mobility  1.495026E+00 (kappa  6.688846E-01 Eh/bohr^2)
+     17     -52.362877344424      -0.1908  4.930270E-03  1.624651E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.611834E-04 max  1.281676E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.927862E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.328151E-02 Eh/bohr, step  6.677180E-02 bohr, mobility  2.057386E+00 (kappa  4.860537E-01 Eh/bohr^2)
+     18     -52.363200482040      -0.2028  4.284699E-03  1.878958E-02  2.834600E-01
+   dimer rotation: iterations 2, torque rms  2.021454E-04 max  1.228246E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.101072E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.607583E-02 Eh/bohr, step  7.239620E-02 bohr, mobility  1.274171E+00 (kappa  7.848242E-01 Eh/bohr^2)
+     19     -52.363309966204      -0.0687  5.011670E-03  2.045514E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.513633E-04 max  1.355640E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.119253E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.185243E-02 Eh/bohr, step  7.656867E-02 bohr, mobility  1.218011E+00 (kappa  8.210107E-01 Eh/bohr^2)
+     20     -52.363281315172       0.0180  6.429809E-03  2.121231E-02  2.834600E-01
+   dimer rotation: iterations 2, torque rms  2.247586E-04 max  1.338211E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.067988E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.233728E-02 Eh/bohr, step  7.628326E-02 bohr, mobility  1.471664E+00 (kappa  6.795031E-01 Eh/bohr^2)
+     21     -52.363355880139      -0.0468  3.628278E-03  2.047696E-02  2.834600E-01
+   dimer rotation: iterations 2, torque rms  1.914314E-04 max  1.148660E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.072743E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.673955E-02 Eh/bohr, step  7.679424E-02 bohr, mobility  1.323830E+00 (kappa  7.553840E-01 Eh/bohr^2)
+     22     -52.363444713221      -0.0557  8.103826E-03  2.217348E-02  2.834600E-01
+   dimer rotation: iterations 2, torque rms  1.722323E-04 max  1.120246E-03 Eh/bohr, converged=T
+   dimer curvature:   -7.101928E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.285710E-02 Eh/bohr, step  8.018822E-02 bohr, mobility  2.230434E+00 (kappa  3.692878E-01 Eh/bohr^2)
+     23     -52.363628646330      -0.1154  5.889160E-03  2.250522E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.428332E-04 max  1.147662E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.942752E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.792663E-02 Eh/bohr, step  8.143447E-02 bohr, mobility  1.255906E+00 (kappa  7.962376E-01 Eh/bohr^2)
+     24     -52.363711460352      -0.0520  3.697076E-03  2.245835E-02  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.480239E-04 max  1.177636E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.618124E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.498916E-02 Eh/bohr, step  8.430191E-02 bohr, mobility  1.114726E+00 (kappa  8.970810E-01 Eh/bohr^2)
+     25     -52.363768882907      -0.0360  2.310862E-03  6.108249E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.319741E-04 max  1.217630E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.218126E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  8.330558E-03 Eh/bohr, step  1.374634E-02 bohr, mobility  1.650110E+00 (kappa  6.060203E-01 Eh/bohr^2)
+     26     -52.363793776099      -0.0156  1.889047E-03  3.412289E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.264027E-04 max  1.188567E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.328095E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  5.802044E-03 Eh/bohr, step  8.609502E-03 bohr, mobility  1.483874E+00 (kappa  6.739116E-01 Eh/bohr^2)
+     27     -52.363813578166      -0.0124  2.182863E-03  4.157156E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.148868E-04 max  1.177962E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.320371E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  4.186613E-03 Eh/bohr, step  1.114113E-02 bohr, mobility  1.703775E+00 (kappa  5.869320E-01 Eh/bohr^2)
+     28     -52.363838348912      -0.0155  1.253031E-03  5.215680E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.076638E-04 max  1.134165E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.346126E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  5.107893E-03 Eh/bohr, step  1.348777E-02 bohr, mobility  1.152830E+00 (kappa  8.674303E-01 Eh/bohr^2)
+     29     -52.363854075354      -0.0099  1.700126E-03  6.187811E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.965938E-04 max  1.069280E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.400407E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  3.350607E-03 Eh/bohr, step  1.673001E-02 bohr, mobility  2.230434E+00 (kappa  3.622701E-01 Eh/bohr^2)
+     30     -52.363879032563      -0.0157  1.893362E-03  4.736425E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.878848E-04 max  9.872164E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.456550E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  5.331291E-03 Eh/bohr, step  1.779272E-02 bohr, mobility  1.247631E+00 (kappa  8.015188E-01 Eh/bohr^2)
+     31     -52.363903584905      -0.0154  1.047734E-03  6.778256E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.766517E-04 max  8.993277E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.462783E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  4.817307E-03 Eh/bohr, step  1.994169E-02 bohr, mobility  1.262734E+00 (kappa  7.919323E-01 Eh/bohr^2)
+     32     -52.363902206195       0.0009  2.094750E-03  7.406506E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.652577E-04 max  8.018563E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.417889E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  3.084906E-03 Eh/bohr, step  2.048014E-02 bohr, mobility  1.290575E+00 (kappa  7.748486E-01 Eh/bohr^2)
+     33     -52.363903991980      -0.0011  2.083471E-03  5.963631E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.699981E-04 max  7.354581E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.378128E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  5.266900E-03 Eh/bohr, step  2.036760E-02 bohr, mobility  1.097237E+00 (kappa  9.113798E-01 Eh/bohr^2)
+     34     -52.363897011069       0.0044  1.240457E-03  6.695313E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.732748E-04 max  8.383317E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.385972E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  4.393281E-03 Eh/bohr, step  2.054047E-02 bohr, mobility  1.272439E+00 (kappa  7.858922E-01 Eh/bohr^2)
+     35     -52.363907478436      -0.0066  1.154636E-03  1.690777E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.748562E-04 max  8.494417E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.443828E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  3.938045E-03 Eh/bohr, step  5.330298E-03 bohr, mobility  1.353539E+00 (kappa  7.388039E-01 Eh/bohr^2)
+     36     -52.363912623675      -0.0032  9.450612E-04  2.015282E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.641513E-04 max  8.075328E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.438192E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.421220E-03 Eh/bohr, step  4.256173E-03 bohr, mobility  1.757863E+00 (kappa  5.688726E-01 Eh/bohr^2)
+     37     -52.363917768206      -0.0032  1.236168E-03  2.206478E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.677670E-04 max  8.176729E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.461628E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.184334E-03 Eh/bohr, step  5.295629E-03 bohr, mobility  1.439764E+00 (kappa  6.945584E-01 Eh/bohr^2)
+     38     -52.363924062123      -0.0039  5.892784E-04  2.759466E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.653298E-04 max  7.869834E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.484156E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.412279E-03 Eh/bohr, step  6.615053E-03 bohr, mobility  1.156465E+00 (kappa  8.647039E-01 Eh/bohr^2)
+     39     -52.363929329523      -0.0033  9.097572E-04  3.830191E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.579789E-04 max  7.294194E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.495981E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.562180E-03 Eh/bohr, step  8.170887E-03 bohr, mobility  2.230434E+00 (kappa  2.995802E-01 Eh/bohr^2)
+     40     -52.363936472772      -0.0045  6.201936E-04  3.639436E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.565683E-04 max  6.974469E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.491446E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.304535E-03 Eh/bohr, step  9.016597E-03 bohr, mobility  1.229612E+00 (kappa  8.132646E-01 Eh/bohr^2)
+     41     -52.363940780958      -0.0027  6.346111E-04  3.689196E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.595430E-04 max  7.141153E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.491725E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.619686E-03 Eh/bohr, step  1.015501E-02 bohr, mobility  1.536398E+00 (kappa  6.508728E-01 Eh/bohr^2)
+     42     -52.363941383238      -0.0004  9.472132E-04  4.041420E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.650526E-04 max  7.756265E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.500714E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.804980E-03 Eh/bohr, step  1.029281E-02 bohr, mobility  1.103687E+00 (kappa  9.060543E-01 Eh/bohr^2)
+     43     -52.363942962202      -0.0010  5.605520E-04  4.676648E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.697935E-04 max  8.439199E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.503578E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.448198E-03 Eh/bohr, step  1.045813E-02 bohr, mobility  1.133982E+00 (kappa  8.818485E-01 Eh/bohr^2)
+     44     -52.363942063147       0.0006  9.529523E-04  4.286374E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.724139E-04 max  9.154234E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.493429E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.743688E-03 Eh/bohr, step  1.063576E-02 bohr, mobility  1.825469E+00 (kappa  5.478045E-01 Eh/bohr^2)
+     45     -52.363940340320       0.0011  9.219916E-04  3.530857E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.790210E-04 max  9.800997E-04 Eh/bohr, converged=T
+   dimer curvature:   -6.476644E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.301837E-03 Eh/bohr, step  1.036629E-02 bohr, mobility  1.193467E+00 (kappa  8.378950E-01 Eh/bohr^2)
+     46     -52.363939010041       0.0008  7.073471E-04  4.018313E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.878735E-04 max  1.039449E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.476403E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.421935E-03 Eh/bohr, step  1.030739E-02 bohr, mobility  1.237276E+00 (kappa  8.082273E-01 Eh/bohr^2)
+     47     -52.363935452771       0.0022  1.129681E-03  3.818986E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.950168E-04 max  1.096044E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.495972E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.828407E-03 Eh/bohr, step  9.834762E-03 bohr, mobility  1.797111E+00 (kappa  5.564487E-01 Eh/bohr^2)
+     48     -52.363936167866      -0.0004  1.165086E-03  3.027818E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.998321E-04 max  1.147680E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.511674E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.645077E-03 Eh/bohr, step  9.481363E-03 bohr, mobility  1.400733E+00 (kappa  7.139119E-01 Eh/bohr^2)
+     49     -52.363937494893      -0.0008  7.955164E-04  2.847183E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.042089E-04 max  1.185014E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.500062E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.270876E-03 Eh/bohr, step  9.913356E-03 bohr, mobility  1.472365E+00 (kappa  6.791794E-01 Eh/bohr^2)
+     50     -52.363939107984      -0.0010  8.923042E-04  2.704878E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.107582E-04 max  1.203515E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.471158E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.051175E-03 Eh/bohr, step  9.866447E-03 bohr, mobility  1.758937E+00 (kappa  5.685251E-01 Eh/bohr^2)
+     51     -52.363944778911      -0.0036  6.407762E-04  2.923135E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.152821E-04 max  1.211347E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.465505E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.524301E-03 Eh/bohr, step  1.045386E-02 bohr, mobility  1.406645E+00 (kappa  7.109113E-01 Eh/bohr^2)
+     52     -52.363951729477      -0.0044  9.747351E-04  3.205213E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.141094E-04 max  1.217433E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.486365E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.870429E-03 Eh/bohr, step  1.174523E-02 bohr, mobility  2.230434E+00 (kappa  3.494458E-01 Eh/bohr^2)
+     53     -52.363960043081      -0.0052  7.782253E-04  3.405252E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.095999E-04 max  1.211871E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.515616E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.443097E-03 Eh/bohr, step  1.242717E-02 bohr, mobility  1.182009E+00 (kappa  8.460171E-01 Eh/bohr^2)
+     54     -52.363965008580      -0.0031  5.369121E-04  3.562047E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.057590E-04 max  1.192612E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.535014E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.839756E-03 Eh/bohr, step  1.308937E-02 bohr, mobility  1.081049E+00 (kappa  9.250276E-01 Eh/bohr^2)
+     55     -52.363965501541      -0.0003  7.772932E-04  3.593678E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.042314E-04 max  1.163162E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.546994E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.386764E-03 Eh/bohr, step  1.325935E-02 bohr, mobility  1.444329E+00 (kappa  6.923630E-01 Eh/bohr^2)
+     56     -52.363967018442      -0.0010  4.792315E-04  3.533770E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  2.014881E-04 max  1.132399E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.562750E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.282533E-03 Eh/bohr, step  1.334084E-02 bohr, mobility  1.137437E+00 (kappa  8.791696E-01 Eh/bohr^2)
+     57     -52.363965556351       0.0009  8.458325E-04  3.731241E-03  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.942662E-04 max  1.105753E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.583709E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  1.565387E-03 Eh/bohr, step  1.353248E-02 bohr, mobility  1.852636E+00 (kappa  5.397714E-01 Eh/bohr^2)
+     58     -52.363967980984      -0.0015  2.234564E-04  8.733030E-04  2.834600E-01
+   dimer rotation: iterations 1, torque rms  1.869495E-04 max  1.080533E-03 Eh/bohr, converged=T
+   dimer curvature:   -6.597367E-02 Eh/bohr^2 (Eq. 2)
+   dimer translation: |F_dagger|  2.156619E-03 Eh/bohr, step  2.265722E-03 bohr, mobility  1.050590E+00 (kappa  9.518465E-01 Eh/bohr^2)
+ dimer final curvature:   -6.597367E-02 Eh/bohr^2
+ transition mode: index 0, eigenvalue      -0.06597367 Eh/bohr^2
+ transition vector component:     0.684025 (cartesian 1 of atom 25)
+ transition vector overlap:     1.000000
+ saddle confirmation - imaginary modes: 1
+ most negative frequency:         -1208.09 cm^-1
+ confirmation: first order saddle point
+ --------------------------------------------------------------
+ landscape: converged
+ converged:      T
+ steps:          58
+ energy calls:   413
+ cache misses:   593
+ final energy:       -52.363967980984 Eh
+ final gradient:    8.624056E-04 Eh/bohr
+ max gradient:      2.234564E-04 Eh/bohr
+ etemp:               300.000 K
+ --------------------------------------------------------------
+ convergence history
+ criteria (gmax,grms,dmax,drms):  T T T T
+    iter        energy            gnorm          trust
+      1     -52.353740705232    4.443114E-02    2.834600E-01
+      2     -52.351697508055    1.209012E-01    2.834600E-01
+      3     -52.353808262835    1.145443E-01    2.834600E-01
+      4     -52.358206660977    3.675927E-02    2.834600E-01
+      5     -52.352871143843    1.154889E-01    2.834600E-01
+      6     -52.358918228135    3.167082E-02    2.834600E-01
+      7     -52.360368631318    2.310471E-02    2.834600E-01
+      8     -52.361290842728    1.527609E-02    2.834600E-01
+      9     -52.360820303050    2.534459E-02    2.834600E-01
+     10     -52.361479006583    2.049109E-02    2.834600E-01
+     11     -52.361753179706    1.180689E-02    2.834600E-01
+     12     -52.361943866927    1.527858E-02    2.834600E-01
+     13     -52.362136187470    1.041002E-02    2.834600E-01
+     14     -52.362143339014    1.700234E-02    2.834600E-01
+     15     -52.362245928795    1.839290E-02    2.834600E-01
+     16     -52.362573288523    1.328151E-02    2.834600E-01
+     17     -52.362877344424    1.607583E-02    2.834600E-01
+     18     -52.363200482040    1.185243E-02    2.834600E-01
+     19     -52.363309966204    1.233728E-02    2.834600E-01
+     20     -52.363281315172    1.673955E-02    2.834600E-01
+     21     -52.363355880139    1.285710E-02    2.834600E-01
+     22     -52.363444713221    1.792663E-02    2.834600E-01
+     23     -52.363628646330    1.498916E-02    2.834600E-01
+     24     -52.363711460352    8.330558E-03    2.834600E-01
+     25     -52.363768882907    5.802044E-03    2.834600E-01
+     26     -52.363793776099    4.186613E-03    2.834600E-01
+     27     -52.363813578166    5.107893E-03    2.834600E-01
+     28     -52.363838348912    3.350607E-03    2.834600E-01
+     29     -52.363854075354    5.331291E-03    2.834600E-01
+     30     -52.363879032563    4.817307E-03    2.834600E-01
+     31     -52.363903584905    3.084906E-03    2.834600E-01
+     32     -52.363902206195    5.266900E-03    2.834600E-01
+     33     -52.363903991980    4.393281E-03    2.834600E-01
+     34     -52.363897011069    3.938045E-03    2.834600E-01
+     35     -52.363907478436    2.421220E-03    2.834600E-01
+     36     -52.363912623675    2.184334E-03    2.834600E-01
+     37     -52.363917768206    2.412279E-03    2.834600E-01
+     38     -52.363924062123    1.562180E-03    2.834600E-01
+     39     -52.363929329523    2.304535E-03    2.834600E-01
+     40     -52.363936472772    1.619686E-03    2.834600E-01
+     41     -52.363940780958    1.804980E-03    2.834600E-01
+     42     -52.363941383238    2.448198E-03    2.834600E-01
+     43     -52.363942962202    1.743688E-03    2.834600E-01
+     44     -52.363942063147    2.301837E-03    2.834600E-01
+     45     -52.363940340320    2.421935E-03    2.834600E-01
+     46     -52.363939010041    1.828407E-03    2.834600E-01
+     47     -52.363935452771    2.645077E-03    2.834600E-01
+     48     -52.363936167866    2.270876E-03    2.834600E-01
+     49     -52.363937494893    2.051175E-03    2.834600E-01
+     50     -52.363939107984    2.524301E-03    2.834600E-01
+     51     -52.363944778911    1.870429E-03    2.834600E-01
+     52     -52.363951729477    2.443097E-03    2.834600E-01
+     53     -52.363960043081    1.839756E-03    2.834600E-01
+     54     -52.363965008580    1.386764E-03    2.834600E-01
+     55     -52.363965501541    2.282533E-03    2.834600E-01
+     56     -52.363967018442    1.565387E-03    2.834600E-01
+     57     -52.363965556351    2.156619E-03    2.834600E-01
+     58     -52.363967980984    8.624056E-04    2.834600E-01
+ wrote dimer.xtbts.xyz
+ wrote dimer.xtbts.log
+ landscape engine: energy evaluations 593
+ landscape engine: cache hits         0
+ landscape engine: Hessians           1
+ landscape engine: Hessian-vector     0
+ landscape engine: unconverged SCC    0
+ landscape engine: restart policy     off
+ landscape engine: SCC accuracy              1.000000
+ landscape engine: etemp                   300.000 K
+ landscape engine: hessian source     numerical
+ landscape task terminated: converged
+           -------------------------------------------------
+          |                Property Printout                |
+           -------------------------------------------------
+
+    * Orbital Energies and Occupations
+
+         #    Occupation            Energy/Eh            Energy/eV
+      -------------------------------------------------------------
+         1        2.0000           -0.7354823             -20.0135
+       ...           ...                  ...                  ...
+        34        2.0000           -0.4736727             -12.8893
+        35        2.0000           -0.4622065             -12.5773
+        36        2.0000           -0.4585604             -12.4781
+        37        2.0000           -0.4529310             -12.3249
+        38        2.0000           -0.4463882             -12.1468
+        39        2.0000           -0.4384532             -11.9309
+        40        2.0000           -0.4331891             -11.7877
+        41        2.0000           -0.4319272             -11.7533
+        42        2.0000           -0.4216273             -11.4731
+        43        2.0000           -0.4213771             -11.4663
+        44        2.0000           -0.4190920             -11.4041
+        45        2.0000           -0.4190889             -11.4040
+        46        2.0000           -0.4115240             -11.1981 (HOMO)
+        47                         -0.2773961              -7.5483 (LUMO)
+        48                         -0.2764306              -7.5221
+        49                         -0.2365344              -6.4364
+        50                         -0.2365339              -6.4364
+        51                         -0.1920728              -5.2266
+        52                         -0.1913802              -5.2077
+        53                         -0.0937017              -2.5498
+        54                         -0.0935916              -2.5468
+        55                         -0.0649355              -1.7670
+        56                         -0.0373536              -1.0164
+        57                          0.1056029               2.8736
+       ...                                ...                  ...
+        84                          0.6842761              18.6201
+      -------------------------------------------------------------
+                  HL-Gap            0.1341279 Eh            3.6498 eV
+             Fermi-level           -0.3444600 Eh           -9.3732 eV
+
+     #   Z          covCN         q      C6AA      α(0)
+     1   6 C        2.974    -0.014    28.362     8.736
+     2   6 C        2.922    -0.022    28.544     8.761
+     3   6 C        2.918    -0.026    28.653     8.778
+     4   6 C        2.920    -0.020    28.513     8.757
+     5   6 C        2.918    -0.026    28.657     8.779
+     6   6 C        2.922    -0.018    28.447     8.746
+     7   6 C        2.697     0.361    20.867     7.476
+     8   8 O        1.340    -0.408    21.406     6.224
+     9   8 O        1.339    -0.456    22.377     6.364
+    10   1 H        0.965     0.381     0.511     1.117
+    11   1 H        0.926     0.057     2.232     2.336
+    12   1 H        0.926     0.042     2.428     2.437
+    13   1 H        0.926     0.041     2.432     2.438
+    14   1 H        0.926     0.042     2.419     2.432
+    15   1 H        0.926     0.064     2.149     2.292
+    16   6 C        2.974    -0.014    28.362     8.736
+    17   6 C        2.922    -0.022    28.544     8.761
+    18   6 C        2.918    -0.026    28.653     8.778
+    19   6 C        2.920    -0.020    28.513     8.757
+    20   6 C        2.918    -0.026    28.657     8.779
+    21   6 C        2.922    -0.018    28.447     8.746
+    22   6 C        2.697     0.361    20.867     7.476
+    23   8 O        1.340    -0.408    21.405     6.224
+    24   8 O        1.338    -0.456    22.378     6.364
+    25   1 H        0.965     0.381     0.511     1.117
+    26   1 H        0.926     0.057     2.232     2.336
+    27   1 H        0.926     0.042     2.428     2.437
+    28   1 H        0.926     0.041     2.432     2.438
+    29   1 H        0.926     0.042     2.419     2.432
+    30   1 H        0.926     0.064     2.149     2.292
+
+ Mol. C6AA /au·bohr⁶  :      11746.673536
+ Mol. C8AA /au·bohr⁸  :     286000.468973
+ Mol. α(0) /au        :        171.348559
+
+
+Wiberg/Mayer (AO) data.
+largest (>0.10) Wiberg bond orders for each atom
+
+ ---------------------------------------------------------------------------
+     #   Z sym  total        # sym  WBO       # sym  WBO       # sym  WBO
+ ---------------------------------------------------------------------------
+     1   6 C    3.986 --     6 C    1.387     2 C    1.385     7 C    1.009
+                             4 C    0.102
+     2   6 C    3.989 --     3 C    1.455     1 C    1.385    11 H    0.967
+                             5 C    0.107
+     3   6 C    3.992 --     2 C    1.455     4 C    1.432    12 H    0.970
+                             6 C    0.108
+     4   6 C    3.992 --     5 C    1.433     3 C    1.432    13 H    0.971
+                             1 C    0.102
+     5   6 C    3.991 --     6 C    1.454     4 C    1.433    14 H    0.970
+                             2 C    0.107
+     6   6 C    3.987 --     5 C    1.454     1 C    1.387    15 H    0.965
+                             3 C    0.108
+     7   6 C    3.918 --     8 O    1.500     9 O    1.345     1 C    1.009
+     8   8 O    2.199 --     7 C    1.500    25 H    0.353     9 O    0.184
+     9   8 O    2.143 --     7 C    1.345    10 H    0.456     8 O    0.184
+    10   1 H    0.854 --     9 O    0.456    23 O    0.353
+    11   1 H    0.997 --     2 C    0.967
+    12   1 H    0.998 --     3 C    0.970
+    13   1 H    0.998 --     4 C    0.971
+    14   1 H    0.998 --     5 C    0.970
+    15   1 H    0.996 --     6 C    0.965
+    16   6 C    3.986 --    21 C    1.387    17 C    1.385    22 C    1.009
+                            19 C    0.102
+    17   6 C    3.989 --    18 C    1.455    16 C    1.385    26 H    0.967
+                            20 C    0.107
+    18   6 C    3.992 --    17 C    1.455    19 C    1.432    27 H    0.970
+                            21 C    0.108
+    19   6 C    3.992 --    20 C    1.433    18 C    1.432    28 H    0.971
+                            16 C    0.102
+    20   6 C    3.991 --    21 C    1.454    19 C    1.433    29 H    0.970
+Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+normal termination of oxtb
+                            17 C    0.107
+    21   6 C    3.987 --    20 C    1.454    16 C    1.387    30 H    0.965
+                            18 C    0.108
+    22   6 C    3.918 --    23 O    1.500    24 O    1.345    16 C    1.009
+    23   8 O    2.199 --    22 C    1.500    10 H    0.353    24 O    0.184
+    24   8 O    2.143 --    22 C    1.345    25 H    0.456    23 O    0.184
+    25   1 H    0.854 --    24 O    0.456     8 O    0.353
+    26   1 H    0.997 --    17 C    0.967
+    27   1 H    0.998 --    18 C    0.970
+    28   1 H    0.998 --    19 C    0.971
+    29   1 H    0.998 --    20 C    0.970
+    30   1 H    0.996 --    21 C    0.965
+ ---------------------------------------------------------------------------
+
+Topologies differ in total number of bonds
+Writing topology from bond orders to xtbtopo.mol
+
+molecular dipole:
+                 x           y           z       tot (Debye)
+ q only:        0.000      -0.001      -0.000
+   full:        0.000      -0.001       0.000       0.001
+molecular quadrupole (traceless):
+                xx          xy          yy          xz          yz          zz
+ q only:       23.131       1.454     -10.499       0.000       0.000     -12.632
+  q+dip:       28.127       1.463      -9.738       0.000       0.000     -18.389
+   full:       24.624       1.225     -12.861       0.000       0.000     -11.762
+
+
+           -------------------------------------------------
+          | TOTAL ENERGY              -52.363967980984 Eh   |
+          | GRADIENT NORM               0.000862405594 Eh/α |
+          | HOMO-LUMO GAP               3.649804813874 eV   |
+           -------------------------------------------------
+
+------------------------------------------------------------------------
+ * finished run on 2026/10/13 at 02:05:10.905     
+------------------------------------------------------------------------
+ total:
+ * wall-time:     0 d,  0 h,  0 min,  8.821 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  8.820 sec
+ * ratio c/w:     1.000 speedup
+ SCF:
+ * wall-time:     0 d,  0 h,  0 min,  0.017 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.017 sec
+ * ratio c/w:     1.000 speedup
+

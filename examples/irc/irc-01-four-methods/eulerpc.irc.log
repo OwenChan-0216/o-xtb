@@ -1,0 +1,53 @@
+ landscape intrinsic reaction coordinate: eulerpc
+ electronic temperature (frozen):      300.000 K
+ step length:  1.000000E-01 bohr*amu^1/2
+ imaginary modes of the transition state: 1
+ phase component (forward):     0.61299732 (cartesian 1 of atom 25)
+ directions exchanged: F
+ 
+ forward direction
+    point          s/(bohr*amu^1/2)        energy/Eh      |g|/(Eh/bohr)   E/g
+        1         0.0500000000     -52.362460996532    8.147046E-02      1
+        2         0.1500000000     -52.366831114991    6.412092E-02      1
+        3         0.2500000000     -52.370466548895    4.623264E-02      1
+        4         0.3500000000     -52.372909538223    2.413132E-02      1
+        5         0.4479821635     -52.373571383244    1.261839E-02      2
+        6         0.5433091475     -52.373302920748    2.034059E-02      2
+        7         0.6390107242     -52.373559517252    1.633355E-02      2
+        8         0.7336961942     -52.373330769314    1.947856E-02      2
+ mean energy/gradient evaluations per point:       1.50
+ 
+ backward direction
+    point          s/(bohr*amu^1/2)        energy/Eh      |g|/(Eh/bohr)   E/g
+        1         0.0500000000     -52.359368799870    8.283360E-02      1
+        2         0.1500000000     -52.363729904983    6.786466E-02      1
+        3         0.2500000000     -52.367704372519    5.531358E-02      1
+        4         0.3500000000     -52.370986769108    4.096839E-02      1
+        5         0.4499940303     -52.373080248777    2.211491E-02      2
+        6         0.5478847918     -52.373483722184    1.694391E-02      2
+        7         0.6439821263     -52.373304128478    1.869872E-02      2
+        8         0.7404505568     -52.373510196886    1.783179E-02      2
+        9         0.8362516721     -52.373334592158    1.850498E-02      2
+       10         0.9325439325     -52.373516925654    1.806443E-02      2
+       11         1.0283468738     -52.373352719505    1.845777E-02      2
+       12         1.1246002885     -52.373519402327    1.815416E-02      2
+       13         1.2204229663     -52.373365378680    1.848112E-02      2
+       14         1.3166461406     -52.373518153904    1.828694E-02      2
+       15         1.4124396256     -52.373370095484    1.884733E-02      2
+ mean energy/gradient evaluations per point:       1.73
+ 
+ forward endpoint energy:      -52.373330769314 Eh
+ forward arc length:               0.733696 bohr*amu^1/2
+ backward endpoint energy:     -52.373370095484 Eh
+ backward arc length:              1.412440 bohr*amu^1/2
+ termination forward:  energy_rise
+ termination backward: energy_rise
+ arc length s is the accumulated chord length of the macro steps (not comparable with the integrated length of --lirc-method lqa)
+ endpoint rmsd criterion: rmsd <= rmsd_end = 0.18897000
+ endpoint rmsd is Kabsch aligned (mass free proper rotation onto the relaxed minimum)
+ forward reached minimum:  T (rmsd     0.007040 bohr)
+ forward relaxed minimum:       -52.373772215553 Eh (8 relaxation steps)
+ backward reached minimum: T (rmsd     0.006778 bohr)
+ backward relaxed minimum:      -52.373771204505 Eh (8 relaxation steps)
+ points whose sphere relaxation was pinned at the micro cycle budget: forward 0 of 8 points
+                             backward 0 of 15 points

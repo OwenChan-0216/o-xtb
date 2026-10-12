@@ -1,0 +1,273 @@
+                             ___  __    _____ ____  
+                            / / \ \ \_/  | |  | |_) 
+                            \_\_/ /_/ \  |_|  |_|_) 
+
+           OxTB - An Omni-functional PES Exploration and Exploitation
+                              Toolkit Based on xTB
+
+                          Original Author - S. Grimme
+                   Mulliken Center for Theoretical Chemistry
+                               University of Bonn
+
+                             * OxTB version 0.1.0 *
+                             * xTB version 6.7.1 *
+                      Compiled on 2026/10/12 from c712f9e
+
+                     Copyright (C) 2017-2020 Stefan Grimme,
+                  2019-2020 Sebastian Ehlert and contributors
+                        LGPL-3.0-or-later - NO WARRANTY;
+                     see `oxtb --license` for the full text
+
+   xtb is free software: you can redistribute it and/or modify it under
+   the terms of the GNU Lesser General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
+   xtb is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU Lesser General Public License for more details.
+   
+   Cite this work as:
+   * C. Bannwarth, E. Caldeweyher, S. Ehlert, A. Hansen, P. Pracht,
+     J. Seibert, S. Spicher, S. Grimme, WIREs Comput. Mol. Sci., 2020, 11,
+     e01493. DOI: 10.1002/wcms.1493
+   
+   for GFN2-xTB:
+   * C. Bannwarth, S. Ehlert and S. Grimme., J. Chem. Theory Comput., 2019,
+     15, 1652-1671. DOI: 10.1021/acs.jctc.8b01176
+   for GFN1-xTB:
+   * S. Grimme, C. Bannwarth, P. Shushkov, J. Chem. Theory Comput., 2017,
+     13, 1989-2009. DOI: 10.1021/acs.jctc.7b00118
+   for GFN0-xTB:
+   * P. Pracht, E. Caldeweyher, S. Ehlert, S. Grimme, ChemRxiv, 2019, preprint.
+     DOI: 10.26434/chemrxiv.8326202.v1
+   for GFN-FF:
+   * S. Spicher and S. Grimme, Angew. Chem. Int. Ed., 2020, 59, 15665-15673.
+     DOI: 10.1002/anie.202004239
+   
+   for ALPB and GBSA implicit solvation:
+   * S. Ehlert, M. Stahn, S. Spicher, S. Grimme, J. Chem. Theory Comput.,
+     2021, 17, 4250-4261. DOI: 10.1021/acs.jctc.1c00471
+   
+   for ddCOSMO and CPCM-X implicit solvation:
+   * M. Stahn, S. Ehlert, S. Grimme, J. Phys. Chem. A,
+     2023, XX, XXXX-XXXX. DOI: 10.1021/acs.jpca.3c04382
+   
+   for DFT-D4:
+   * E. Caldeweyher, C. Bannwarth and S. Grimme, J. Chem. Phys., 2017,
+     147, 034112. DOI: 10.1063/1.4993215
+   * E. Caldeweyher, S. Ehlert, A. Hansen, H. Neugebauer, S. Spicher,
+     C. Bannwarth and S. Grimme, J. Chem. Phys., 2019, 150, 154122.
+     DOI: 10.1063/1.5090222
+   * E. Caldeweyher, J.-M. Mewes, S. Ehlert and S. Grimme, Phys. Chem. Chem. Phys.
+     2020, 22, 8499-8512. DOI: 10.1039/D0CP00502A
+   
+   for sTDA-xTB:
+   * S. Grimme and C. Bannwarth, J. Chem. Phys., 2016, 145, 054103.
+     DOI: 10.1063/1.4959605
+   
+   in the mass-spec context:
+   * V. Asgeirsson, C. Bauer and S. Grimme, Chem. Sci., 2017, 8, 4879.
+     DOI: 10.1039/c7sc00601b
+   * J. Koopman and S. Grimme, ACS Omega 2019, 4, 12, 15120-15133.
+     DOI: 10.1021/acsomega.9b02011
+   
+   for metadynamics refer to:
+   * S. Grimme, J. Chem. Theory Comput., 2019, 155, 2847-2862
+     DOI: 10.1021/acs.jctc.9b00143
+   
+   for SPH calculations refer to:
+   * S. Spicher and S. Grimme, J. Chem. Theory Comput., 2021, 17, 1701-1714
+     DOI: 10.1021/acs.jctc.0c01306
+   
+   for ONIOM refer to:
+   * C. Plett, A. Katbashev, S. Ehlert, S. Grimme, M. Bursch,
+     Phys. Chem. Chem. Phys., 2023, 25, 17860-17868. DOI: 10.1039/D3CP02178E
+   
+   for DIPRO refer to:
+   * J. Kohn, N. Gildemeister, S. Grimme, D. Fazzi, A. Hansen,
+     J. Chem. Phys. 159, 144106 (2023). DOI: 10.1063/5.0167484
+   
+   for PTB refer to:
+   * S. Grimme, M. Mueller, A. Hansen, J. Chem. Phys., 2023, 158, 124111.
+     DOI: 10.1063/5.0137838
+   
+   for O1NumHess refer to:
+   * B. Wang, S. Luo, Z. Wang, W. Liu,
+     J. Chem. Theory Comput. 21, 10893-10909.
+     DOI: 10.1021/acs.jctc.5c01354
+   
+   with help from (in alphabetical order)
+   P. Atkinson, C. Bannwarth, F. Bohle, G. Brandenburg, E. Caldeweyher,
+   M. Checinski, S. Dohm, S. Ehlert, S. Ehrlich, M. Friede, T. Froitzheim,
+   I. Gerasimov, C. Hölzer, A. Katbashev, J. Kohn, J. Koopman, C. Lavigne,
+   S. Lehtola, F. März, M. Müller, F. Musil, H. Neugebauer, J. Pisarek,
+   C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
+   M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
+   
+ * started run on 2026/10/13 at 01:12:33.685     
+   ID    Z sym.   atoms
+    1    6 C      1-7, 16-22
+    2    8 O      8, 9, 23, 24
+    3    1 H      10-15, 25-30
+
+           -------------------------------------------------
+          |                Calculation Setup                |
+           -------------------------------------------------
+
+          program call               : oxtb input.xyz --gfn ff --sp --norestart
+          coordinate file            : input.xyz
+          omp threads                :                     1
+          random seed                :             967902442
+
+
+molecular fragmentation (1/2 indicates fragments):
+111111111111111222222222222222
+# atoms in fragment 1/2:    15    15
+ fragment masses (1/2) :      122.12      122.12
+CMA distance (Bohr)    :  13.529
+constraining FC (au)   :  0.0500
+
+          ==================== Thresholds ====================
+          CN  :   150.00000
+          rep :   500.00000
+          disp:  2500.00000
+          HB1 :   250.00000
+          HB2 :   450.00000
+
+          Pauling EN used:
+          Z : 1  EN :  2.20
+          Z : 6  EN :  2.55
+          Z : 8  EN :  3.44
+          electric field strengths (au): 0.000
+
+           ------------------------------------------------- 
+          |           Force Field Initialization            |
+           ------------------------------------------------- 
+
+          distances ...
+          ----------------------------------------
+          generating topology and atomic info file ...
+          pair mat ...
+          computing topology distances matrix with Floyd-Warshall algo ...
+          making topology EEQ charges ...
+          #fragments for EEQ constrain: 2
+          fragment charges from <charges> : -0.000 -0.000
+          ----------------------------------------
+          generating topology and atomic info file ...
+          pair mat ...
+          computing topology distances matrix with Floyd-Warshall algo ...
+          making topology EEQ charges ...
+          rings ...
+          # BATM   220
+          # H in HB   12
+          doing iterative Hueckel for 2 subsystem(s) ...
+
+  atom   neighbors  erfCN metchar sp-hybrid imet pi  qest     coordinates
+    1  C       3    2.82   0.00         2    0    1   0.015   -6.415634   -0.322802    0.000000
+    2  C       3    2.82   0.00         2    0    1  -0.012   -7.786824    1.924585    0.000000
+    3  C       3    2.81   0.00         2    0    1  -0.016  -10.396488    1.857541   -0.000000
+    4  C       3    2.81   0.00         2    0    1  -0.021  -11.648100   -0.443761   -0.000000
+    5  C       3    2.81   0.00         2    0    1  -0.016  -10.288306   -2.682629   -0.000000
+    6  C       3    2.82   0.00         2    0    1  -0.012   -7.677997   -2.631748    0.000000
+    7  C       3    2.80   0.00         2    0    1   0.232   -3.618519   -0.215906    0.000000
+    8  O       1    0.98   0.00         2    0    1  -0.370   -2.465588    1.787045    0.000000
+    9  O       2    1.91   0.00         3    0    1  -0.412   -2.502071   -2.426565   -0.000000
+   10  H       1    0.97   0.01         0    0    0   0.258   -0.603900   -2.274147   -0.000000
+   11  H       1    0.97   0.00         0    0    0   0.073   -6.776474    3.696857    0.000000
+   12  H       1    0.97   0.00         0    0    0   0.070  -11.460827    3.598147   -0.000000
+   13  H       1    0.97   0.00         0    0    0   0.068  -13.688568   -0.494256   -0.000000
+   14  H       1    0.97   0.00         0    0    0   0.070  -11.266588   -4.473040   -0.000000
+   15  H       1    0.97   0.00         0    0    0   0.073   -6.597373   -4.360046    0.000000
+   16  C       3    2.82   0.00         2    0    1   0.015    6.415634    0.322802    0.000000
+   17  C       3    2.82   0.00         2    0    1  -0.012    7.786824   -1.924585    0.000000
+   18  C       3    2.81   0.00         2    0    1  -0.016   10.396488   -1.857541    0.000000
+   19  C       3    2.81   0.00         2    0    1  -0.021   11.648100    0.443761   -0.000000
+   20  C       3    2.81   0.00         2    0    1  -0.016   10.288306    2.682629   -0.000000
+   21  C       3    2.82   0.00         2    0    1  -0.012    7.677997    2.631748   -0.000000
+   22  C       3    2.80   0.00         2    0    1   0.232    3.618519    0.215906   -0.000000
+   23  O       1    0.98   0.00         2    0    1  -0.370    2.465588   -1.787045   -0.000000
+   24  O       2    1.91   0.00         3    0    1  -0.412    2.502071    2.426565    0.000000
+   25  H       1    0.97   0.01         0    0    0   0.258    0.603900    2.274147    0.000000
+   26  H       1    0.97   0.00         0    0    0   0.073    6.776474   -3.696857    0.000000
+   27  H       1    0.97   0.00         0    0    0   0.070   11.460827   -3.598147    0.000000
+   28  H       1    0.97   0.00         0    0    0   0.068   13.688568    0.494256   -0.000000
+   29  H       1    0.97   0.00         0    0    0   0.070   11.266588    4.473040   -0.000000
+   30  H       1    0.97   0.00         0    0    0   0.073    6.597373    4.360046   -0.000000
+
+          #atoms :   30
+          #bonds :   30
+          #angl  :   44
+          #tors  :   74
+          #nmol  :   2
+          #optfrag :   2
+           ------------------------------------------------- 
+          |                   G F N - F F                   |
+          |          A general generic force-field          |
+          |                  Version 1.0.3                  | 
+           ------------------------------------------------- 
+          Number of HB bonds (bound hydrogen)     590
+          Number of HB bonds (unbound hydrogen)   108
+          Number of XB bonds                      0
+
+ E+G (total)                   0 d,  0 h,  0 min,  0.000 sec
+ distance/D3 list               ...        0 min,  0.000 sec (  0.486%)
+ non bonded repulsion           ...        0 min,  0.000 sec (  7.005%)
+ dCN                            ...        0 min,  0.000 sec (  3.839%)
+ EEQ energy and q               ...        0 min,  0.000 sec (  7.838%)
+ D3                             ...        0 min,  0.000 sec ( 10.019%)
+ EEQ gradient                   ...        0 min,  0.000 sec (  1.871%)
+ bonds                          ...        0 min,  0.000 sec (  4.570%)
+ bend and torsion               ...        0 min,  0.000 sec (  6.902%)
+ bonded ATM                     ...        0 min,  0.000 sec (  2.917%)
+ HB/XB (incl list setup)        ...        0 min,  0.000 sec ( 53.193%)
+
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+         ::                     SUMMARY                     ::
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+         :: total energy              -5.993927655063 Eh    ::
+         :: gradient norm              0.089562046257 Eh/a0 ::
+         ::.................................................::
+         :: bond energy               -6.093580693272 Eh    ::
+         :: angle energy               0.003868842463 Eh    ::
+         :: torsion energy             0.000000000000 Eh    ::
+         :: repulsion energy           0.436013744044 Eh    ::
+         :: electrostat energy        -0.299938982966 Eh    ::
+         :: dispersion energy         -0.020335655416 Eh    ::
+         :: HB energy                 -0.013287642486 Eh    ::
+         :: XB energy                  0.000000000000 Eh    ::
+         :: bonded atm energy         -0.006667267429 Eh    ::
+         :: external energy            0.000000000000 Eh    ::
+         :: add. restraining           0.000000000000 Eh    ::
+         :: total charge              -0.000000000000 e     ::
+         :::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
+           -------------------------------------------------
+Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+normal termination of oxtb
+          |                Property Printout                |
+           -------------------------------------------------
+
+molecular dipole:
+                 x           y           z       tot (Debye)
+ q only:       -0.000      -0.000       0.000       0.000
+
+           -------------------------------------------------
+          | TOTAL ENERGY               -5.993927655063 Eh   |
+          | GRADIENT NORM               0.089562046257 Eh/α |
+           -------------------------------------------------
+
+------------------------------------------------------------------------
+ * finished run on 2026/10/13 at 01:12:33.688     
+------------------------------------------------------------------------
+ total:
+ * wall-time:     0 d,  0 h,  0 min,  0.004 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.004 sec
+ * ratio c/w:     1.000 speedup
+ SCF:
+ * wall-time:     0 d,  0 h,  0 min,  0.000 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.000 sec
+ * ratio c/w:     0.998 speedup
+

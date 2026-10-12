@@ -1,0 +1,4 @@
+# The repository-wide .gitignore excludes the suite output names (hessian,
+# vibspectrum, xtbscan.log, landscape_*.json, ...).  Re-include everything in
+# the example cases so the committed folder is self-contained.
+!*
