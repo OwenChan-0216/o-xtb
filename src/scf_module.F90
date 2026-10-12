@@ -564,6 +564,12 @@ subroutine scf(env, mol, wfn, basis, pcem, xtbData, solvation, &
    call count_qpint(nqp, qpint, neglect)
 
    ! prepare aes stuff
+   ! `mdlst`/`mqlst` are passed to `scc` unconditionally, and `scc` receives
+   ! them through non-allocatable dummies: they must be allocated even when the
+   ! charge model carries no multipoles (GFN0/GFN1), where `ndp`/`nqp` are zero
+   ! and the arrays are never read.  Passing them unallocated is undefined
+   ! behaviour that a checked build rejects.
+   allocate(mdlst(2,ndp),mqlst(2,nqp))
    if (allocated(xtbData%multipole)) then
       if (mol%npbc > 0) then
          call env%error("Multipoles not available with PBC", source)
@@ -572,8 +578,7 @@ subroutine scf(env, mol, wfn, basis, pcem, xtbData, solvation, &
       allocate(aes)
       call init(aes, xtbData%multipole)
 
-      ! allocate arrays for lists and fill (to exploit sparsity)
-      allocate(mdlst(2,ndp),mqlst(2,nqp))
+      ! fill the lists (to exploit sparsity)
       call setdqlist(basis%nao,ndp,nqp,neglect,dpint,qpint,mdlst,mqlst)
       ! set up 1/R^n * damping function terms
       ii=mol%n*(mol%n+1)/2

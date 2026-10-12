@@ -57,6 +57,7 @@
 !> Units: Hessian in hartree/bohr^2, gradient in hartree/bohr, displacements
 !> and trust radii in bohr, energies in hartree.
 module xtb_landscape_saddle_prfo
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
    use xtb_mctc_accuracy, only : wp
    use xtb_type_environment, only : TEnvironment
    use xtb_landscape_settings, only : landscape_ts_settings, &
@@ -1016,13 +1017,17 @@ subroutine reset_result(result)
 end subroutine reset_result
 
 !> True if a value is finite (elemental, so it accepts scalars and arrays).
+!>
+!> `ieee_is_finite` inspects the representation, so, unlike `abs(v) <= huge`,
+!> it does not raise the invalid exception on a NaN - a checked build
+!> (`-ffpe-trap=invalid`) aborts on that comparison.
 elemental function real_is_finite(v) result(finite)
    !> Value to test
    real(wp), intent(in) :: v
    !> True if the value is finite
    logical :: finite
 
-   finite = abs(v) <= huge(1.0_wp)
+   finite = ieee_is_finite(v)
 
 end function real_is_finite
 

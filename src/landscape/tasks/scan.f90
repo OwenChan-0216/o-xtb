@@ -244,7 +244,15 @@ subroutine landscape_scan(env, mol, chk, calc, settings, result)
          if (.not. profile%converged(i)) cycle
          if (.not. profile%energy_valid(i)) cycle
          n_valid = n_valid + 1
-         if (n_valid == 1 .or. profile%energy(i) < best_energy) then
+         ! Block if, not `n_valid == 1 .or. ...`: `best_energy` starts from the
+         ! NaN sentinel, and Fortran does not require the right operand to be
+         ! short circuited, so the comparison with that NaN would be evaluated
+         ! on the first valid point and trap under -ffpe-trap=invalid.
+         if (n_valid == 1) then
+            best_energy = profile%energy(i)
+            best_residual = profile%residual(i)
+            xbest = profile%xyz(:, i)
+         else if (profile%energy(i) < best_energy) then
             best_energy = profile%energy(i)
             best_residual = profile%residual(i)
             xbest = profile%xyz(:, i)

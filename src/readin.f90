@@ -57,9 +57,20 @@ function xfind(name) result(fname)
    character(len=*),intent(in)  :: name
    character(len=:),allocatable :: fname
    character(len=:),allocatable :: dum
+   character(len=:),allocatable :: search_path
    logical :: exist
 
-   call rdpath(xenv%path,name,dum,exist)
+   ! `xenv%path` is a deferred-length allocatable that only the main program
+   ! assigns; an entry point that does not (the docking submodule) would pass
+   ! the unallocated component to `rdpath`'s non-allocatable dummy, which is
+   ! undefined behaviour and aborts a checked build.  An unset path simply
+   ! searches nothing.
+   if (allocated(xenv%path)) then
+      search_path = xenv%path
+   else
+      search_path = ''
+   end if
+   call rdpath(search_path,name,dum,exist)
    if (exist) then
       fname = dum
    else

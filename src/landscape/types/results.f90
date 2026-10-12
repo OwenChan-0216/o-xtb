@@ -367,7 +367,13 @@ subroutine landscape_result_add_step(self, step)
       allocate(self%steps(32))
    else if (self%n_steps >= size(self%steps)) then
       capacity = max(2*size(self%steps), self%n_steps + 1)
-      allocate(buffer(capacity), source=self%steps)
+      ! `source=` requires the source shape to equal the shape of the
+      ! allocate-object, and the grown buffer is deliberately larger than the
+      ! recorded steps: copy the old steps into the front of the new storage
+      ! explicitly (a checked build traps on the shape mismatch, an optimised
+      ! one copies only the front and leaves the rest at its default).
+      allocate(buffer(capacity))
+      buffer(1:size(self%steps)) = self%steps
       call move_alloc(buffer, self%steps)
    end if
    self%n_steps = self%n_steps + 1
@@ -473,7 +479,11 @@ subroutine append_real(vector, n, value)
    if (.not. allocated(vector)) allocate(vector(32))
    if (n > size(vector)) then
       capacity = max(2*size(vector), n)
-      allocate(buffer(capacity), source=vector)
+      ! `source=` requires equal shapes and the grown buffer is larger, so the
+      ! old values are copied into the front explicitly (a checked build traps
+      ! on the shape mismatch).
+      allocate(buffer(capacity))
+      buffer(1:size(vector)) = vector
       call move_alloc(buffer, vector)
    end if
    vector(n) = value
@@ -495,7 +505,8 @@ subroutine append_int(vector, n, value)
    if (.not. allocated(vector)) allocate(vector(32), source=0)
    if (n > size(vector)) then
       capacity = max(2*size(vector), n)
-      allocate(buffer(capacity), source=vector)
+      allocate(buffer(capacity))
+      buffer(1:size(vector)) = vector
       call move_alloc(buffer, vector)
    end if
    vector(n) = value

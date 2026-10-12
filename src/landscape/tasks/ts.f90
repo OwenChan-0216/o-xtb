@@ -1530,7 +1530,14 @@ subroutine collect_string_candidates(images, energies, candidates, cand_energies
    n_cand = 0
    best = 0
    do k = 2, n - 1
-      if (best == 0 .or. energies(k) > energies(best)) best = k
+      ! A block if, not `best == 0 .or. ...`: Fortran does not require the
+      ! right operand to be short circuited, so the first iteration would read
+      ! `energies(0)`, which a bounds checked build rejects.
+      if (best == 0) then
+         best = k
+      else if (energies(k) > energies(best)) then
+         best = k
+      end if
       if (energies(k) > energies(k - 1) .and. energies(k) > energies(k + 1)) then
          n_cand = n_cand + 1
          index(n_cand) = k

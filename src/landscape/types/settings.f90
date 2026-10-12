@@ -33,7 +33,8 @@
 !>   - Engine control defaults are copied from xtb (`src/setparam.f90:221-287`,
 !>     `src/type/setvar.f90:156-158`).
 module xtb_landscape_settings
-   use, intrinsic :: ieee_arithmetic, only : ieee_value, ieee_quiet_nan
+   use, intrinsic :: ieee_arithmetic, only : ieee_value, ieee_quiet_nan, &
+      & ieee_is_finite, ieee_is_nan
    use xtb_mctc_accuracy, only : wp
    use xtb_type_environment, only : TEnvironment
    implicit none(type, external)
@@ -57,6 +58,7 @@ module xtb_landscape_settings
    public :: landscape_restart_name, landscape_conv_level_known
    public :: landscape_convergence_measures, landscape_log_failed
    public :: landscape_missing_value, landscape_value_present
+   public :: landscape_max_abs
    public :: p_landscape_scan_coord_distance, p_landscape_scan_coord_angle
    public :: p_landscape_scan_coord_dihedral
    public :: landscape_scan_coord_name, landscape_scan_coord_from_name
@@ -1135,7 +1137,7 @@ pure subroutine landscape_convergence_measures(gradient, displ, g_max, g_rms, d_
 
    n = size(gradient)
    if (n > 0) then
-      g_max = maxval(abs(gradient))
+      g_max = landscape_max_abs(gradient)
       g_rms = sqrt(sum(gradient**2)/real(n, wp))
    else
       g_max = 0.0_wp
@@ -1144,7 +1146,7 @@ pure subroutine landscape_convergence_measures(gradient, displ, g_max, g_rms, d_
 
    n = size(displ)
    if (n > 0) then
-      d_max = maxval(abs(displ))
+      d_max = landscape_max_abs(displ)
       d_rms = sqrt(sum(displ**2)/real(n, wp))
    else
       d_max = 0.0_wp
@@ -1817,17 +1819,45 @@ end function landscape_missing_value
 
 !> True if a real value is present, i.e. neither NaN nor +/- Inf.
 !>
-!> `NaN <= huge` and `Inf <= huge` are both false, so one comparison rejects
-!> every non-finite value.  Elemental, so it also tests a whole array.
+!> `ieee_is_finite` inspects the representation, so, unlike `abs(value) <=
+!> huge`, it does not raise the invalid exception when `value` is a NaN - a
+!> checked build (`-ffpe-trap=invalid`) aborts on such a comparison, and this
+!> predicate is the guard for exactly that case.  Elemental, so it also tests
+!> a whole array.
 elemental function landscape_value_present(value) result(present)
    !> Value to test
    real(wp), intent(in) :: value
    !> True if the value is finite
    logical :: present
 
-   present = abs(value) <= huge(1.0_wp)
+   present = ieee_is_finite(value)
 
 end function landscape_value_present
+
+!> Largest absolute component of a vector, NaN safe.
+!>
+!> `maxval(abs(x))` raises the invalid exception as soon as one component is
+!> a NaN, which aborts a checked build.  This propagates the NaN instead and
+!> leaves every finite or infinite input unchanged, so it can serve as a
+!> diagnostic over a gradient that has already been recognised as non-finite.
+pure function landscape_max_abs(x) result(maxabs)
+   !> Vector to reduce
+   real(wp), intent(in) :: x(:)
+   !> Largest absolute component (NaN if a component is NaN)
+   real(wp) :: maxabs
+
+   integer :: i
+
+   maxabs = 0.0_wp
+   do i = 1, size(x)
+      if (ieee_is_nan(x(i))) then
+         maxabs = x(i)
+         exit
+      end if
+      maxabs = max(maxabs, abs(x(i)))
+   end do
+
+end function landscape_max_abs
 
 !> Human readable name of a Hessian update formula identifier
 pure function landscape_hessian_update_name(update) result(name)

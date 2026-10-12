@@ -667,6 +667,16 @@ subroutine eeq_chrgeq_qonly(mol,env,chrgeq,cn,q,lverbose)
       verbose = .false.
    endif
 
+   ! `eeq_chrgeq_core` receives every one of these as a non-allocatable dummy,
+   ! so they have to be allocated even though the `.false.` gradient and
+   ! partial-charge flags mean the core never reads them.  Passing the
+   ! unallocated allocatables is undefined behaviour and a checked build
+   ! (`-fcheck=all`) rejects it with "Allocatable actual argument 'dcndr' is
+   ! not allocated".
+   allocate(dcndr(3,mol%n,mol%n),dcndL(3,3,mol%n))
+   allocate(dqdr(3,mol%n,mol%n),dqdL(3,3,mol%n))
+   allocate(gradient(3,mol%n),sigma(3,3))
+
    call eeq_chrgeq_core(mol,env,chrgeq,cn,dcndr,dcndL,q,dqdr,dqdL, &
       &                 energy,gradient,sigma,verbose,.false.,.false.)
 

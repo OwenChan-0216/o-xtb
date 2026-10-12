@@ -317,12 +317,32 @@ subroutine calculate_cell_parameters(lattice, lat_len, lat_ang)
   lat_len(2) = sqrt(lattice(1,2)**2 + lattice(2,2)**2 + lattice(3,2)**2) ! b
   lat_len(3) = sqrt(lattice(1,3)**2 + lattice(2,3)**2 + lattice(3,3)**2) ! c
 
-  ! Calculate angles (in degrees)
-  lat_ang(1) = acosd(dot_product(lattice(:,2),lattice(:,3))/(lat_len(2)*lat_len(3))) ! angle "oposite" of a
-  lat_ang(2) = acosd(dot_product(lattice(:,1),lattice(:,3))/(lat_len(1)*lat_len(3))) ! angle "oposite" of b
-  lat_ang(3) = acosd(dot_product(lattice(:,1),lattice(:,2))/(lat_len(1)*lat_len(2))) ! angle "oposite" of c
+  ! Calculate angles (in degrees).  `cell_angle` guards both the zero cell
+  ! vector of a non-periodic molecule routed to the periodic optimizer (0/0)
+  ! and the rounding that can push a cosine just outside [-1,1]; either one
+  ! aborts a build with -ffpe-trap=invalid, and both are silently NaN in an
+  ! optimised one.
+  lat_ang(1) = acosd(cell_angle(lattice(:,2),lattice(:,3),lat_len(2),lat_len(3))) ! angle "oposite" of a
+  lat_ang(2) = acosd(cell_angle(lattice(:,1),lattice(:,3),lat_len(1),lat_len(3))) ! angle "oposite" of b
+  lat_ang(3) = acosd(cell_angle(lattice(:,1),lattice(:,2),lat_len(1),lat_len(2))) ! angle "oposite" of c
 
 end subroutine calculate_cell_parameters
+
+!> Cosine of the angle between two cell vectors, safe for the acos() domain.
+!>
+!> Returns 0 for a zero cell vector (no angle is defined) and clamps a
+!> rounding error to the [-1,1] domain of acos.
+pure function cell_angle(a, b, la, lb) result(cosine)
+  real(wp), intent(in) :: a(3), b(3)
+  real(wp), intent(in) :: la, lb
+  real(wp) :: cosine
+
+  if (la <= 0.0_wp .or. lb <= 0.0_wp) then
+    cosine = 0.0_wp
+  else
+    cosine = max(-1.0_wp, min(1.0_wp, dot_product(a, b)/(la*lb)))
+  end if
+end function cell_angle
 
 ! Function to convert radians to degrees degrees = rad*180/pi
 pure function acosd(x) result(degrees)

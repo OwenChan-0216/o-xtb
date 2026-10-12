@@ -1136,7 +1136,14 @@ pure function highest_energy_node(energies) result(node)
 
    node = 0
    do k = 2, size(energies) - 1
-      if (node == 0 .or. energies(k) > energies(node)) node = k
+      ! A block if, not `node == 0 .or. ...`: Fortran does not require the
+      ! right operand to be short circuited, so the first iteration would read
+      ! `energies(0)`, which a bounds checked build rejects.
+      if (node == 0) then
+         node = k
+      else if (energies(k) > energies(node)) then
+         node = k
+      end if
    end do
 
 end function highest_energy_node

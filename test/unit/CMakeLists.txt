@@ -1001,9 +1001,17 @@ add_test("xtb/landscape-scan-cli"
 # `test/unit/landscape_cli_check.py` implements exactly the same conditions
 # as a standalone script (test `landscape scan failed point`).
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_scan_fail.cmake" [=[
+# The rundir has to start clean and the run must not read a restart file: this
+# case asserts that the deliberately stretched scan points FAIL, and a
+# `landscape3.xtbrestart` left behind by an earlier run of the same case makes
+# every point restart from it, converge, and report no failure at all.
+# Measured: the case passes from a clean rundir and fails intermittently once
+# that file is there.  Same convention as the other cases here
+# (`file(REMOVE_RECURSE)` plus `--norestart`).
+file(REMOVE_RECURSE "${RUNDIR}")
 file(MAKE_DIRECTORY "${RUNDIR}")
 execute_process(
-  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lscan --lscan-mode rigid
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --norestart --lscan --lscan-mode rigid
           --lscan-coord distance --lscan-atoms 1,2 --lscan-step 5.0
           --lscan-nstep 2 --namespace landscape3
   WORKING_DIRECTORY "${RUNDIR}"

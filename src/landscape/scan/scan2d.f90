@@ -36,6 +36,7 @@
 !> Units: coordinates in bohr, energies in hartree, distances in bohr, angles
 !> in radian.
 module xtb_landscape_scan2d
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_constants, only : pi
    use xtb_mctc_convert, only : autoaa
@@ -200,8 +201,15 @@ subroutine landscape_scan2d(env, base, at, settings, x0, grid, fail)
       j = grid%visit_j(ipoint)
       if (.not. grid%converged(i, j)) cycle
       if (.not. grid%energy_valid(i, j)) cycle
-      if (.not. landscape_value_present(grid%min_energy) .or. &
-            & grid%energy(i, j) < grid%min_energy) then
+      ! Block if, not one `.or.` condition: the first valid point has to set
+      ! the baseline, and `min_energy` starts from the NaN sentinel, which
+      ! Fortran does not require the right operand to short circuit around.
+      if (.not. landscape_value_present(grid%min_energy)) then
+         grid%min_energy = grid%energy(i, j)
+         grid%min_i = i
+         grid%min_j = j
+         grid%min_visit = ipoint
+      else if (grid%energy(i, j) < grid%min_energy) then
          grid%min_energy = grid%energy(i, j)
          grid%min_i = i
          grid%min_j = j
@@ -212,6 +220,9 @@ subroutine landscape_scan2d(env, base, at, settings, x0, grid, fail)
    do ipoint = 2, grid%n_points
       delta = abs(grid%energy(grid%visit_i(ipoint), grid%visit_j(ipoint)) - &
          & grid%energy(grid%visit_i(ipoint - 1), grid%visit_j(ipoint - 1)))
+      ! A failed point carries the NaN sentinel; comparing it would raise the
+      ! invalid exception, so such a pair contributes no jump at all.
+      if (.not. ieee_is_finite(delta)) cycle
       if (delta > grid%max_jump) then
          grid%max_jump = delta
          grid%jump_from1 = grid%values1(grid%visit_i(ipoint - 1))

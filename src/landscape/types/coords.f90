@@ -51,7 +51,7 @@ module xtb_landscape_coords
    use xtb_type_environment, only : TEnvironment
    use xtb_type_molecule, only : TMolecule
    use xtb_param_atomicmass, only : getAtomicMass
-   use xtb_landscape_settings, only : landscape_log_failed
+   use xtb_landscape_settings, only : landscape_log_failed, landscape_max_abs
    implicit none(type, external)
    private
 
@@ -132,15 +132,14 @@ pure function vec_rms(x) result(rms)
 end function vec_rms
 
 !> Largest absolute component of a vector
+!>
+!> NaN safe (`landscape_max_abs`): `maxval(abs(x))` raises the invalid
+!> exception on a NaN component, which aborts a checked build.
 pure function vec_maxabs(x) result(maxabs)
    real(wp), intent(in) :: x(:)
    real(wp) :: maxabs
 
-   if (size(x) > 0) then
-      maxabs = maxval(abs(x))
-   else
-      maxabs = 0.0_wp
-   end if
+   maxabs = landscape_max_abs(x)
 
 end function vec_maxabs
 

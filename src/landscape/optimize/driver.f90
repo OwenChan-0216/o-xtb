@@ -36,9 +36,11 @@
 !>
 !> Units: coordinates in bohr, energies in hartree, gradients in hartree/bohr.
 module xtb_landscape_optimize
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
    use xtb_mctc_accuracy, only : wp
    use xtb_type_environment, only : TEnvironment
-   use xtb_landscape_settings, only : landscape_opt_settings, &
+   use xtb_landscape_settings, only : landscape_value_present, &
+      & landscape_opt_settings, &
       & p_landscape_opt_sd, p_landscape_opt_cg, p_landscape_opt_lbfgs, &
       & p_landscape_opt_bfgs, &
       & p_landscape_opt_diis, p_landscape_opt_rfo, &
@@ -543,8 +545,15 @@ contains
       result%n_eval = n_evals
       call landscape_result_trim(result)
       call landscape_convergence_measures(g, step, gmax, grms, dmax, drms)
-      result%conv%converged = [gmax <= settings%g_max, grms <= settings%g_rms, &
-         & dmax <= settings%d_max, drms <= settings%d_rms]
+      ! A non-finite measure (the caller has already classified such a gradient)
+      ! must not be compared: `<` raises the invalid exception on a NaN, so
+      ! such a run is reported as not converged instead.
+      if (all(landscape_value_present([gmax, grms, dmax, drms]))) then
+         result%conv%converged = [gmax <= settings%g_max, grms <= settings%g_rms, &
+            & dmax <= settings%d_max, drms <= settings%d_rms]
+      else
+         result%conv%converged = .false.
+      end if
       if (present(x_final)) x_final = x
       if (present(traj)) then
          allocate(trimmed(ndim, nframes), source=frames(:, :nframes))
@@ -569,7 +578,12 @@ subroutine append_frame(frames, n, x)
    if (.not. allocated(frames)) allocate(frames(size(x), 32))
    if (n > size(frames, 2)) then
       capacity = max(2*size(frames, 2), n)
-      allocate(buffer(size(frames, 1), capacity), source=frames)
+      ! `source=` requires the source shape to equal the shape of the
+      ! allocate-object; the grown buffer is larger, so the recorded frames are
+      ! copied into its front explicitly (the new columns are written before
+      ! they are ever read).
+      allocate(buffer(size(frames, 1), capacity))
+      buffer(:, 1:size(frames, 2)) = frames
       call move_alloc(buffer, frames)
    end if
    frames(:, n) = x
@@ -605,15 +619,17 @@ end subroutine reset_result
 
 !> True if the value is finite, i.e. neither NaN nor +/- Inf.
 !>
-!> `NaN <= huge` and `Inf <= huge` are both false, so a single comparison
-!> rejects all non-finite values.
+!> `ieee_is_finite` reads the representation, so, unlike `abs(x) <= huge`,
+!> it does not raise the invalid exception when `x` is a NaN - a checked
+!> build (`-ffpe-trap=invalid`) aborts on that comparison, and this predicate
+!> exists to guard exactly that case.
 elemental function real_is_finite(x) result(ok)
    !> Value to test
    real(wp), intent(in) :: x
    !> True if the value is finite
    logical :: ok
 
-   ok = abs(x) <= huge(1.0_wp)
+   ok = ieee_is_finite(x)
 
 end function real_is_finite
 

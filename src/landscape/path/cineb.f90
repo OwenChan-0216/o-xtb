@@ -146,7 +146,14 @@ pure function landscape_cineb_highest_image(energies) result(image)
 
    image = 0
    do i = 2, size(energies) - 1
-      if (image == 0 .or. energies(i) > energies(image)) image = i
+      ! A block if, not `image == 0 .or. ...`: Fortran does not require the
+      ! right operand to be short circuited, so the first iteration would read
+      ! `energies(0)`, which a bounds checked build rejects.
+      if (image == 0) then
+         image = i
+      else if (energies(i) > energies(image)) then
+         image = i
+      end if
    end do
 
 end function landscape_cineb_highest_image

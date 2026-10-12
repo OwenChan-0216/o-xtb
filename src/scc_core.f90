@@ -1038,7 +1038,6 @@ subroutine fermismear(prt,norbs,nel,t,eig,occ,fod,e_fermi,s)
          else
             change_fermi = 0.0_wp
          end if
-         change_fermi = (occt-total_number)/total_dfermi
          e_fermi = e_fermi+change_fermi
          if (abs(occt-total_number).le.thr) exit
       enddo

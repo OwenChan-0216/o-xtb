@@ -48,6 +48,7 @@
 !> Units: coordinates in bohr, energies in hartree, distances in bohr, angles
 !> in radian, gradients in hartree/bohr (or hartree/rad for an angle).
 module xtb_landscape_scan1d
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_constants, only : pi
    use xtb_mctc_convert, only : autoaa
@@ -391,6 +392,9 @@ subroutine jump_report(values, energy, npoints, hysteresis)
    hysteresis%jump_to = 0.0_wp
    do i = 2, npoints
       delta = abs(energy(i) - energy(i - 1))
+      ! A failed point carries the NaN sentinel; comparing it would raise the
+      ! invalid exception, so such a pair contributes no jump at all.
+      if (.not. ieee_is_finite(delta)) cycle
       if (delta > hysteresis%max_jump) then
          hysteresis%max_jump = delta
          hysteresis%jump_from = values(i - 1)

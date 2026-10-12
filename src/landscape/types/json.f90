@@ -80,6 +80,7 @@
 !> key names are the ones of the result types (`energy` in hartree, `gnorm` in
 !> hartree/bohr, `etemp` in kelvin, ...).
 module xtb_landscape_json
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
    use xtb_mctc_accuracy, only : wp
    use xtb_type_environment, only : TEnvironment
    use xtb_type_molecule, only : TMolecule
@@ -876,10 +877,11 @@ subroutine write_real(unit, value)
 
    character(len=32) :: buffer
 
-   if (value /= value .or. abs(value) > huge(value)) then
-      ! NaN (the only value not equal to itself) and infinity have no JSON
-      ! literal; `null` is an honest placeholder that cannot be mistaken for
-      ! a measured number.
+   if (.not. ieee_is_finite(value)) then
+      ! NaN and infinity have no JSON literal; `null` is an honest placeholder
+      ! that cannot be mistaken for a measured number.  `ieee_is_finite` is
+      ! used because the obvious `value /= value` comparison would itself raise
+      ! the invalid exception under a checked build.
       write(unit, '(a)', advance='no') 'null'
       return
    end if
