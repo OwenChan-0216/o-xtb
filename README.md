@@ -204,10 +204,11 @@ touch).
   `man/oxtb.1.adoc` and `man/xcontrol.7.adoc` as AsciiDoc sources under
   `share/man`.
 
-The documentation site under `docs/docs-site/` is being built and is **not
-published yet**: its `mkdocs.yml` still carries placeholder URLs and there is
-no online render.  When it is published it will hold the user guide, the
-generated CLI reference and a method-notes chapter.
+The documentation site is published at <https://owenchan-0216.github.io/o-xtb/>
+and is rebuilt on every push to `main`.  It holds the user guide, the generated
+command-line reference and a method-notes chapter; its sources live in
+`docs/docs-site/`, and both `mkdocs build --strict` and the dependency-free site
+gate (`docs/docs-site/tools/check_site.py`) run in CI.
 
 ## Contributing
 

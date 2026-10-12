@@ -52,9 +52,6 @@ jobs:
       # `mkdocs build --strict` only checks internal links.  This step follows
       # the external http(s) links a reader can click in the built pages; it is
       # non-blocking, so a flaky third-party host does not redden the deploy.
-      # Links under the placeholder `site_url` / `repo_url` host are skipped
-      # until the owner replaces them; delete the `example.invalid` guard when
-      # the real URL is set.
       - name: Check external links (non-blocking)
         continue-on-error: true
         run: |
@@ -64,7 +61,6 @@ jobs:
           pattern = re.compile(r'<a[^>]+href="(https?://[^"#]+)"')
           links = sorted({m.group(1) for page in site.rglob("*.html")
                           for m in pattern.finditer(page.read_text(errors="ignore"))})
-          links = [u for u in links if not u.startswith("https://example.invalid")]
           dead = []
           for url in links:
               try:

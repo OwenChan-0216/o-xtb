@@ -14,14 +14,16 @@
 # generated from `src/xhelp.f90` and is deliberately not committed (see
 # `.gitignore`); run the generator before the build.
 
-# --- PLACEHOLDERS: the remote repository and the Pages URL do not exist yet ---
-# The owner has not created the hosting remote.  Both URLs below are
-# placeholders and MUST be replaced with the real ones before the first
-# deploy; until then the canonical URL and the "edit this page" link are wrong
-# by construction.  Nothing else in the site depends on them.
+# --- The published site ------------------------------------------------------
+# The hosting remote exists and the site is live; `.github/workflows/docs.yml`
+# rebuilds and redeploys it on every push to `main`.
+#
+# `edit_uri` points the theme's "edit this page" link at the site sources,
+# which do not sit in the default `docs/` location of the repository.
 site_name: o-xtb
-site_url: https://example.invalid/o-xtb/
-repo_url: https://example.invalid/o-xtb
+site_url: https://owenchan-0216.github.io/o-xtb/
+repo_url: https://github.com/OwenChan-0216/o-xtb
+edit_uri: edit/main/docs/docs-site/docs/
 site_description: >-
   Documentation for o-xtb, a fork of xTB 6.7.1 that adds a complete potential
   energy surface task suite: geometry optimisation, surface scans, transition
