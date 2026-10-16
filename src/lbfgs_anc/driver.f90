@@ -14,6 +14,8 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with ancopt.  If not, see <https://www.gnu.org/licenses/>.
 
+! Modified by the o-xtb landscape task suite, 2026.
+
 module xtb_pbc_optimizer_driver
    use xtb_mctc_accuracy, only : wp!, error_type, fatal_error
    use xtb_type_molecule, only : TMolecule

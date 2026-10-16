@@ -122,7 +122,7 @@ In chronological order (`git log --oneline` reversed goes from `fa969ce` to `bdd
 **Acceptance evidence**
 - `ctest -R landscape` 118 → **120** → **121/121** (fix round, `28` §0).
 - `xtb/landscape-method-table`: 18 suite names + 4 `auto`, asserted effective name by name (`11` §9.2); shifting the name table ⇒ 38 lines turn red one by one.
-- BC-4: the 4 rewritten old flags (`--lopt-engine`/`--lscan-method`/`--lts-method`/`--lirc-method`) produce output files that are **bit-identical** under `cmp` (`11` §9.1).
+- BC-4: the 4 rewritten old flags (`--lopt-engine`/`--lscan-method`/`--lts-method`/`--lirc-method`) produce output files that are **bit-identical** under `cmp` (`11` §9.1) - measured against the then-current builds; cross-build byte identity became round-off-level in the 2026-10-16 performance-PR round (§8.4).
 - **A real experiment that genuinely turned red**: first-round `ctest` = 119/120, the only red item `xtb/landscape-help-coverage` (a new flag not in `--help`); after adding `xhelp.f90` 120/120 (`25` §5) — the set S gate really does stop it.
 
 ### 3.5 Stage 2b — fill in the missing task knobs + unify Hessian flag naming
@@ -138,7 +138,7 @@ In chronological order (`git log --oneline` reversed goes from `fa969ce` to `bdd
 - `ctest -R landscape` 121 → **125** → **127/127** (fix round, `35` §0; `39` §0).
 - `xtb/landscape-hess-step-alias`/`-opt-knobs`/`-scan-knobs`/`-restart-knobs`: each knob is **double-asserted** (alias equivalence + a changed value must change the result).
 - Injection: change the consumer back to the old constant ⇒ the corresponding assertion turns red (`--lopt-hess-step did not change the minimisation` etc., `32` §4 E1/E3/E4/E5).
-- BC: 11 invocation groups, old/new binary output files **bit-identical**; stdout gains only 2 lines `(not used: …)` (`39` §T1.4).
+- BC: 11 invocation groups, old/new binary output files **bit-identical** (then-current builds; round-off-level from the 2026-10-16 performance-PR round, §8.4); stdout gains only 2 lines `(not used: …)` (`39` §T1.4).
 - `--help` set S: 135/135, difference 0 (`33` §5).
 
 ### 3.6 Stage 3a — `--opt` / `--ohess` re-dispatch (the breaking core)
@@ -176,7 +176,7 @@ In chronological order (`git log --oneline` reversed goes from `fa969ce` to `bdd
 - `ctest -R landscape` 138 → **143** → **145/145** (fix round, `53` §0; `54` review conclusion = **accept, can be committed**).
 - The measured three states of the `--omd` regression: pre-3a exit 0 / `ANC micro-cycles` 1 / `xtbopt.xyz` = −5.070544363296; 3a+3b before the fix exit 0 / **0** / −4.962807380732 (= the input geometry); after the fix exit 0 / **1** / −5.070544363296 (`53` §1.2).
 - Injection: restore the `main.F90` predicate to `anyopt .and. landscape_native_engine /= 0` ⇒ `xtb/landscape-native-runtypes-unaffected` **red** (`FAIL: --omd did not run the native ANCopt`) (`53` §1.3).
-- BC-4: `--omd`/`--screen`/`--metaopt`'s `xtbopt.xyz`/`xtbopt.log` **bit-identical** to pre-3a (`53` §1.4).
+- BC-4: `--omd`/`--screen`/`--metaopt`'s `xtbopt.xyz`/`xtbopt.log` **bit-identical** to pre-3a (`53` §1.4) - then-current builds; round-off-level from the 2026-10-16 performance-PR round (§8.4).
 - 5 file-contract tests (positive + negative: single atom/`$fix atoms:` does not write `compliance.dat`).
 
 ### 3.8 Stage 3c — the level drives four axes (the only stage that moved numbers)
@@ -507,7 +507,18 @@ XTBPATH=$PWD /tmp/xtb-o2/build/xtb water.xyz --gfn2 --opt --method ancopt -I <$o
 
 ### 8.4 The correct criterion for BC-4 (backward compatibility)
 
-**Output files bit-identical** + the stdout differences are **only** the registered non-determinism (version string `(<hash>|unknown-commit)`, date, random seed, `program call`, traceback addresses, **timing lines without a percent sign** `SCC setup/iterations … 0 min, X sec`). **"stdout is line-identical" is no longer claimed** (design §19.5).
+**Output files identical to round-off** + the stdout differences are **only** the registered non-determinism (version string `(<hash>|unknown-commit)`, date, random seed, `program call`, traceback addresses, **timing lines without a percent sign** `SCC setup/iterations … 0 min, X sec`). **"stdout is line-identical" is no longer claimed** (design §19.5).
+
+The byte-level wording this section carried until 2026-10-16 is no longer true across builds, because
+the fork adopted three upstream performance PRs (#1465 integrals, #1466 SCC linear algebra, #1464
+dispersion gradient).  They remove O(N³) work from the SCC loop and are **numerically round-off only**:
+measured on this tree, the four pinned H2O single-point energies stay bit-identical, full-precision
+energies differ by 3e-15…5.6e-14 Eh, gradients by ≤1.4e-15 Eh/bohr, the `--hess` raw matrix by **0**,
+and an `--opt` geometry by ≤1.5e-12 Å - but the SCC trace `ΔE` column, signed zeros and one Wiberg
+ordering tie now differ, and `--molden` rotates degenerate orbitals.  The criterion above is therefore
+the one to use; the BC-4 records below that were measured as `cmp`-identical were measured against the
+then-current builds and remain valid as history.  See `AGENTS.md` §5 (exceptions #7-#9) and §6 for the
+measurements.
 
 ```bash
 git worktree add --detach /tmp/xtb-bc4/base 24c069f   # or any un-re-dispatched baseline

@@ -15,6 +15,8 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+! Modified by the o-xtb landscape task suite, 2026.
+
 module xtb_readin
    
    use xtb_mctc_accuracy, only : wp
