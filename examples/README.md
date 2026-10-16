@@ -15,6 +15,17 @@ The examples were produced with the installed release:
 OxTB version 0.1.0   (xTB engine 6.7.1)   Compiled on 2026/10/16 from 8a0ad67
 ```
 
+The current release is **0.2.0**, and it differs from that one **only in the version string**, so the
+recorded numbers still stand.  The claim is checkable without trusting it: the source range
+`8a0ad67..HEAD` touches nothing under `src/` at all (every change in it is an example file), so both
+releases built the same engine and the same landscape suite - the only thing a 0.2.0 run changes is
+the `OxTB version` line of the banner and the `oxtb_version` field of the `--ljson` provenance
+block.  Verified on three cases of different kinds, each run once with the 0.2.0 binary and compared
+against the shipped log next to it (banner, date and JSON version field ignored): `sp-01` reproduces
+the total energy `-52.373771244067 Eh`; `lopt-01` reproduces the final energy `-56.913729348717 Eh`
+and the gradient norm `0.000987123958`; `hess-01` reproduces the full frequency list, with
+`vibspectrum` and `hessian` byte-identical to the shipped files.
+
 ## How to run a case
 
 ```bash
