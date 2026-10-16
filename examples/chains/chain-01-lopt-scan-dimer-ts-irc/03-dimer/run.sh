@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # chain step 03: dimer saddple search from the TS guess, displaced 0.15 A along
 # the transfer coordinate (the dimer needs a non-stationary start).
-#                                                          [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+#                                                          [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export OMP_NUM_THREADS=1

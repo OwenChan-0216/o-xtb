@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:47:41.471     
+ * started run on 2026/10/16 at 15:11:16.648     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn 2 --lopt --lopt-engine lbfgs --lopt-level normal --lopt-max-steps 300 --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :            1468458624
+          random seed                :            1733328030
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -190,7 +190,7 @@ constraining FC (au)   :  0.0500
    8    -53.1235278 -0.483198E-06  0.432E-03    3.68       4.2  T
    9    -53.1235280 -0.196197E-06  0.189E-03    3.68       9.7  T
   10    -53.1235281 -0.354476E-07  0.807E-04    3.68      22.6  T
-  11    -53.1235281 -0.153724E-08  0.341E-04    3.68      53.5  T
+  11    -53.1235281 -0.153731E-08  0.341E-04    3.68      53.5  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -216,14 +216,14 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.1351135 Eh            3.6766 eV
              Fermi-level           -0.3437993 Eh           -9.3553 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.016 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.581%)
- Dispersion                     ...        0 min,  0.000 sec (  1.029%)
- classical contributions        ...        0 min,  0.000 sec (  0.136%)
- integral evaluation            ...        0 min,  0.002 sec ( 13.933%)
- iterations                     ...        0 min,  0.007 sec ( 47.364%)
- molecular gradient             ...        0 min,  0.006 sec ( 36.472%)
- printout                       ...        0 min,  0.000 sec (  0.450%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.011 sec
+ SCC setup                      ...        0 min,  0.000 sec (  1.171%)
+ Dispersion                     ...        0 min,  0.000 sec (  2.771%)
+ classical contributions        ...        0 min,  0.000 sec (  0.207%)
+ integral evaluation            ...        0 min,  0.001 sec (  9.583%)
+ iterations                     ...        0 min,  0.008 sec ( 71.484%)
+ molecular gradient             ...        0 min,  0.002 sec ( 14.030%)
+ printout                       ...        0 min,  0.000 sec (  0.701%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -239,7 +239,7 @@ constraining FC (au)   :  0.0500
          :: -> dispersion             -0.026948751373 Eh    ::
          :: repulsion energy           0.750139017860 Eh    ::
          :: add. restraining           0.000000000000 Eh    ::
-         :: total charge               0.000000000000 e     ::
+         :: total charge              -0.000000000000 e     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
 
  landscape: lbfgs minimisation
@@ -419,9 +419,9 @@ molecular dipole:
    full:        0.000       0.000       0.000       0.000
 molecular quadrupole (traceless):
                 xx          xy          yy          xz          yz          zz
- q only:       22.998       2.562      -9.940       0.000      -0.000     -13.058
-  q+dip:       26.841       2.294      -8.571      -0.000       0.000     -18.270
-   full:       23.550       2.098     -11.777      -0.000       0.000     -11.773
+ q only:       22.998       2.562      -9.940      -0.000      -0.000     -13.058
+  q+dip:       26.841       2.294      -8.571       0.000       0.000     -18.270
+   full:       23.550       2.098     -11.777       0.000       0.000     -11.773
 
 
            -------------------------------------------------
@@ -431,18 +431,18 @@ molecular quadrupole (traceless):
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:47:41.518     
+ * finished run on 2026/10/16 at 15:11:16.681     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min,  0.048 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.047 sec
+ * wall-time:     0 d,  0 h,  0 min,  0.033 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.033 sec
  * ratio c/w:     0.999 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.016 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.016 sec
+ * wall-time:     0 d,  0 h,  0 min,  0.011 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.011 sec
  * ratio c/w:     1.000 speedup
  landscape optimizer:
- * wall-time:     0 d,  0 h,  0 min,  0.024 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.024 sec
- * ratio c/w:     0.998 speedup
+ * wall-time:     0 d,  0 h,  0 min,  0.015 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.015 sec
+ * ratio c/w:     0.997 speedup
 

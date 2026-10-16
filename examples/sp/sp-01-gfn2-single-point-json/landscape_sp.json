@@ -6,7 +6,7 @@
   "converged": true,
   "message": "",
   "n_atoms": 30,
-  "energy": -5.23737712440669227E+001,
+  "energy": -5.23737712440670009E+001,
   "geometry": {
     "unit": "bohr",
     "symbols": ["C", "C", "C", "C", "C", "C", "C", "O", "O", "H", "H", "H", "H", "H", "H", "C", "C", "C", "C", "C", "C", "C", "O", "O", "H", "H", "H", "H", "H", "H"],
@@ -46,7 +46,7 @@
   "provenance": {
     "oxtb_version": "0.1.0",
     "engine_version": "6.7.1",
-    "commit": "c712f9eb49fc20c26bdd2b642f62f33087a88c1e",
+    "commit": "8a0ad672269ff067df839593c4bfe4bdf9bf848d",
     "command_line": "oxtb input.xyz --gfn 2 --sp --ljson --norestart",
     "method": "GFN2-xTB",
     "charge": 0,
@@ -56,7 +56,7 @@
   "counters": {
   },
   "values": {
-    "gnorm": 8.23123538718708572E-004
+    "gnorm": 8.23123538718317392E-004
   },
   "flags": {
   },

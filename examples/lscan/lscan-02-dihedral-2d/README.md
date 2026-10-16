@@ -33,24 +33,24 @@ same distance) versus the stepwise edge (one proton far, the other still bonded)
 | d(O9-H10) = d(O24-H25) / A | E(diagonal) / Eh | E(one proton far) / Eh |
 |---|---|---|
 | 1.0077 | -52.373771819 | -52.373771819 |
-| 1.1327 | -52.367938434 | -52.370165436 |
-| 1.2577 | **-52.364134813** | -52.363217237 |
-| 1.3827 | -52.368440969 | -52.357041127 |
-| 1.5077 | -52.372399474 | -52.352406309 |
-| 1.6327 | -52.373765319 | -52.348125945 |
-| 1.7577 | -52.373067460 | -52.343826139 |
-| 1.8827 | -52.371153540 | -52.339600775 |
-| 2.0077 | -52.368702311 | **-52.335630072** |
+| 1.1327 | -52.367951835 | -52.370165436 |
+| 1.2577 | **-52.364134951** | -52.363217237 |
+| 1.3827 | -52.368490624 | -52.357041127 |
+| 1.5077 | -52.372401431 | -52.352406328 |
+| 1.6327 | -52.373772297 | -52.348134007 |
+| 1.7577 | -52.373069065 | -52.343828595 |
+| 1.8827 | -52.371148801 | -52.339590689 |
+| 2.0077 | -52.368705744 | **-52.335629643** |
 
 | quantity | value |
 |---|---|
 | corner minimum (1.0077, 1.0077) | -52.373771819 Eh |
 | **concerted barrier** (diagonal, at 1.2577 A) | **0.009637 Eh = 6.05 kcal/mol** |
-| **stepwise corner** (2.0077, 1.0077) | **0.038143 Eh = 23.9 kcal/mol** above the minimum |
+| **stepwise corner** (2.0077, 1.0077) | **0.038142 Eh = 23.9 kcal/mol** above the minimum |
 | concerted advantage | **17.9 kcal/mol** |
-| lowest grid energy | -52.373771819 Eh at (1.0077, 1.0077) |
-| largest jump between consecutive points | 1.202e-02 Eh |
-| wall time | **69.4 s** |
+| lowest grid energy | -52.373772297 Eh at (1.6327, 1.6327) |
+| largest jump between consecutive points | 1.203e-02 Eh |
+| wall time | **39.8 s** |
 
 The diagonal has a genuine 6.0 kcal/mol barrier at `d = 1.26 A` — the same value the validated 1D
 scan reports — and the off-diagonal path that transfers the protons *one at a time* is ~18 kcal/mol
@@ -71,4 +71,4 @@ rm -f oxtb.log xtbscan.log xtbtopo.mol charges wbo xtbrestart
 grep -E '2D scan grid|lowest grid' oxtb.log
 ```
 
-A clean re-run reproduces `xtbscan.log` byte for byte (sha256 `9e77a748…`).
+A clean re-run reproduces `xtbscan.log` byte for byte (sha256 `61ca7324…`).

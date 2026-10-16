@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:53:54.792     
+ * started run on 2026/10/16 at 15:11:31.025     
    ID    Z sym.   atoms
     1    6 C      1-14, 25, 27-29
     2    1 H      15-24, 32, 33
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn 2 --lirc --lirc-method hpc --lirc-max-steps 80 --lirc-step 0.4 --lirc-grad-tol 1e-4 --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :            1340377947
+          random seed                :            1500201310
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -190,7 +190,7 @@ constraining FC (au)   :  0.0500
    8    -57.7399405 -0.215414E-05  0.656E-03    2.09       2.7  T
    9    -57.7399411 -0.575336E-06  0.206E-03    2.09       8.4  T
   10    -57.7399412 -0.626725E-07  0.824E-04    2.09      21.1  T
-  11    -57.7399412 -0.876766E-08  0.401E-04    2.09      43.4  T
+  11    -57.7399412 -0.876771E-08  0.401E-04    2.09      43.4  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -216,14 +216,14 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.0767659 Eh            2.0889 eV
              Fermi-level           -0.3543157 Eh           -9.6414 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.024 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.459%)
- Dispersion                     ...        0 min,  0.000 sec (  1.047%)
- classical contributions        ...        0 min,  0.000 sec (  0.114%)
- integral evaluation            ...        0 min,  0.004 sec ( 15.068%)
- iterations                     ...        0 min,  0.011 sec ( 44.768%)
- molecular gradient             ...        0 min,  0.009 sec ( 38.110%)
- printout                       ...        0 min,  0.000 sec (  0.409%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.014 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.854%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.619%)
+ classical contributions        ...        0 min,  0.000 sec (  0.198%)
+ integral evaluation            ...        0 min,  0.001 sec ( 10.198%)
+ iterations                     ...        0 min,  0.010 sec ( 68.721%)
+ molecular gradient             ...        0 min,  0.002 sec ( 17.736%)
+ printout                       ...        0 min,  0.000 sec (  0.634%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -232,7 +232,7 @@ constraining FC (au)   :  0.0500
          :: gradient norm              0.000016454087 Eh/a0 ::
          :: HOMO-LUMO gap              2.088905441130 eV    ::
          ::.................................................::
-         :: SCC energy               -57.739212121691 Eh    ::
+         :: SCC energy               -57.739212121692 Eh    ::
          :: -> isotropic ES            0.067862498200 Eh    ::
          :: -> anisotropic ES          0.000258435236 Eh    ::
          :: -> anisotropic XC          0.021695934273 Eh    ::
@@ -272,10 +272,10 @@ constraining FC (au)   :  0.0500
  forward points:           13
  backward points:          51
  forward arc length:               4.846404 bohr*amu^1/2
- forward endpoint energy:      -56.838940586896 Eh
- backward arc length:             17.826138 bohr*amu^1/2
- backward endpoint energy:     -56.913376077266 Eh
- backward reached minimum: T (rmsd     0.005898 bohr, minimum     -56.913763098229 Eh)
+ forward endpoint energy:      -56.838940586898 Eh
+ backward arc length:             17.826139 bohr*amu^1/2
+ backward endpoint energy:     -56.913376078296 Eh
+ backward reached minimum: T (rmsd     0.005898 bohr, minimum     -56.913763098223 Eh)
  forward reached minimum: T (rmsd     0.062058 bohr, minimum     -56.839109784760 Eh)
  sphere relaxation pinned:  0 of 64 points (GS micro cycle budget; 0 for the predictor-corrector)
  phase component:          87 (value     0.473231)
@@ -445,18 +445,18 @@ molecular quadrupole (traceless):
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:54:06.726     
+ * finished run on 2026/10/16 at 15:11:40.408     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min, 11.934 sec
- *  cpu-time:     0 d,  0 h,  0 min, 11.934 sec
+ * wall-time:     0 d,  0 h,  0 min,  9.383 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  9.383 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.024 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.024 sec
+ * wall-time:     0 d,  0 h,  0 min,  0.014 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.014 sec
  * ratio c/w:     1.000 speedup
  landscape IRC:
- * wall-time:     0 d,  0 h,  0 min, 11.901 sec
- *  cpu-time:     0 d,  0 h,  0 min, 11.900 sec
+ * wall-time:     0 d,  0 h,  0 min,  9.363 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  9.363 sec
  * ratio c/w:     1.000 speedup
 

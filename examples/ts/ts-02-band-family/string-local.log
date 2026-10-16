@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 02:05:46.435     
+ * started run on 2026/10/16 at 15:12:06.977     
    ID    Z sym.   atoms
     1    6 C      1-14, 25, 27-29
     2    1 H      15-24, 32, 33
@@ -120,7 +120,7 @@
           calculation namespace      : local-string
           coordinate file            : product.xyz
           omp threads                :                     1
-          random seed                :             975279908
+          random seed                :            1061954029
 
 
            -------------------------------------------------
@@ -184,7 +184,7 @@
    8    -57.7773050 -0.347043E-05  0.586E-03    3.20       3.0  T
    9    -57.7773053 -0.334513E-06  0.212E-03    3.20       8.2  T
   10    -57.7773054 -0.626681E-07  0.744E-04    3.20      23.4  T
-  11    -57.7773054 -0.919869E-08  0.228E-04    3.20      76.3  T
+  11    -57.7773054 -0.919870E-08  0.228E-04    3.20      76.3  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -210,14 +210,14 @@
                   HL-Gap            0.1175159 Eh            3.1978 eV
              Fermi-level           -0.3479304 Eh           -9.4677 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.024 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.482%)
- Dispersion                     ...        0 min,  0.000 sec (  0.982%)
- classical contributions        ...        0 min,  0.000 sec (  0.114%)
- integral evaluation            ...        0 min,  0.004 sec ( 15.203%)
- iterations                     ...        0 min,  0.011 sec ( 43.373%)
- molecular gradient             ...        0 min,  0.010 sec ( 39.447%)
- printout                       ...        0 min,  0.000 sec (  0.373%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.018 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.947%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.491%)
+ classical contributions        ...        0 min,  0.000 sec (  0.165%)
+ integral evaluation            ...        0 min,  0.002 sec (  8.640%)
+ iterations                     ...        0 min,  0.013 sec ( 71.471%)
+ molecular gradient             ...        0 min,  0.003 sec ( 16.478%)
+ printout                       ...        0 min,  0.000 sec (  0.756%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -233,7 +233,7 @@
          :: -> dispersion             -0.043667138571 Eh    ::
          :: repulsion energy           0.862774396008 Eh    ::
          :: add. restraining           0.000000000000 Eh    ::
-         :: total charge               0.000000000000 e     ::
+         :: total charge              -0.000000000000 e     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
 
  landscape: transition state search (string)
@@ -252,7 +252,7 @@ Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLA
 ERROR STOP 
 
 Error termination. Backtrace:
-#0  0x521981 in terminate_
+#0  0x521a21 in terminate_
 #1  0x437c58 in __xtb_prog_main_MOD_xtbmain
 #2  0x408cca in main
 abnormal termination of oxtb

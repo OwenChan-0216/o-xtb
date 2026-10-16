@@ -32,7 +32,7 @@ and `vibspectrum.model`.
 |---|---|---|
 | engine energy evaluations | **1** | **181** |
 | Hessians built | 1 (analytic) | 1 (finite difference) |
-| wall time | **0.05 s** | **2.43 s** (~46x) |
+| wall time | **0.04 s** | **1.10 s** (~28x) |
 
 **Frequencies** (`eigval :` lines, cm^-1; the numerical column repeats `hess-01`):
 
@@ -46,7 +46,7 @@ and `vibspectrum.model`.
 | thermochemistry | model | numerical |
 |---|---|---|
 | zero point energy | 0.271970985257 Eh | 0.222897688368 Eh |
-| free energy G(T) at 298.15 K | -52.143511020138 Eh | -52.194894746191 Eh |
+| free energy G(T) at 298.15 K | -52.143511020139 Eh | -52.194894746191 Eh |
 
 The model Hessian overestimates the stiff O-H stretch by ~30 % (4090 vs 3109 cm^-1) and puts the
 ZPE ~0.049 Eh (~31 kcal/mol) too high. It is fine for a **minimiser's initial Hessian** (see
@@ -71,5 +71,5 @@ grep '^eigval :' vibspectrum.model | head
 ```
 
 A clean re-run reproduces `hessian`, `vibspectrum`, `vib_normal_modes`, `g98.out`, `hessian.model`
-and `vibspectrum.model` **byte for byte** (sha256 `4965e179…`, `7717d79b…`, `c367384c…`,
-`7273c21d…`, `0dfde7ef…`, `6c9b880a…`).
+and `vibspectrum.model` **byte for byte** (sha256 `c69a1943…`, `7717d79b…`, `e9763658…`,
+`7f27918c…`, `0dfde7ef…`, `6c9b880a…`).

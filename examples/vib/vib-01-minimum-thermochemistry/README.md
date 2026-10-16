@@ -31,7 +31,7 @@ numerical (central-difference, 5e-3 bohr) Hessian, projected on the 3N-6 interna
 | total enthalpy H(T) | **-52.133632 Eh** | **-52.012432 Eh** |
 | total free energy G(T) | **-52.194895 Eh** | **-52.405684 Eh** |
 | total entropy S(T) | 539.48 J/K/mol | 1032.48 J/K/mol |
-| wall time | 2.3 s | 2.1 s |
+| wall time | 1.14 s | 1.13 s |
 
 3N-6 = 84 internal modes and 6 projected zero modes (the 3 translations + 3 rotations) sum to the
 3N = 90 rows of `vibspectrum`.  The first six rows are the projected rigid motions (0.00 cm^-1); the

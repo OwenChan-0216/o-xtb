@@ -17,7 +17,7 @@
  convergence history
  criteria (gmax,grms,dmax,drms):  T T T T
     iter        energy            gnorm          trust
-      1     -52.363974789278    6.624934E-06    6.614125E-01
+      1     -52.363974789278    6.624933E-06    6.614125E-01
       2     -52.363974789450    2.162686E-06    4.960594E-01
  confirmation imaginary modes: 1
  is a first order saddle: T

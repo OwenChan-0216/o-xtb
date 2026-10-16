@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # chain step 03: IRC from the refined saddle (step 02's xtbts.xyz).  System 1 has
 # a soft imaginary mode, so the arc-length step is raised and the gradient
-# threshold loosened.                                     [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+# threshold loosened.                                     [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export OMP_NUM_THREADS=1

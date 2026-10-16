@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 02:02:51.624     
+ * started run on 2026/10/16 at 15:11:58.886     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -120,7 +120,7 @@
           calculation namespace      : bprfo-default
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :            1677711773
+          random seed                :             680683437
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -217,14 +217,14 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.1352343 Eh            3.6799 eV
              Fermi-level           -0.3447675 Eh           -9.3816 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.017 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.586%)
- Dispersion                     ...        0 min,  0.000 sec (  0.995%)
- classical contributions        ...        0 min,  0.000 sec (  0.137%)
- integral evaluation            ...        0 min,  0.002 sec ( 13.584%)
- iterations                     ...        0 min,  0.008 sec ( 46.511%)
- molecular gradient             ...        0 min,  0.006 sec ( 37.682%)
- printout                       ...        0 min,  0.000 sec (  0.466%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.010 sec
+ SCC setup                      ...        0 min,  0.000 sec (  1.123%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.888%)
+ classical contributions        ...        0 min,  0.000 sec (  0.230%)
+ integral evaluation            ...        0 min,  0.001 sec (  8.854%)
+ iterations                     ...        0 min,  0.007 sec ( 71.439%)
+ molecular gradient             ...        0 min,  0.002 sec ( 15.598%)
+ printout                       ...        0 min,  0.000 sec (  0.814%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -240,7 +240,7 @@ constraining FC (au)   :  0.0500
          :: -> dispersion             -0.026998392442 Eh    ::
          :: repulsion energy           0.733468287618 Eh    ::
          :: add. restraining           0.000000000000 Eh    ::
-         :: total charge               0.000000000000 e     ::
+         :: total charge              -0.000000000000 e     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
 
  landscape: transition state search (bprfo)
@@ -257,7 +257,7 @@ constraining FC (au)   :  0.0500
          pass --lts-escape-step 0 to disable the escape walk
  electronic temperature:        300.000 K (frozen for the whole run)
  transition mode: index 1, eigenvalue      -0.02746857 Eh/bohr^2
- transition vector component:     0.647206 (cartesian 1 of atom 25)
+ transition vector component:     0.647206 (cartesian 1 of atom 10)
  transition vector overlap:     1.000000
  selected mode, rigid body overlap:     0.000000
     iter            energy/Eh        dE/(kcal/mol)   gmax/(Eh/bohr)  dmax/bohr     trust/bohr
@@ -324,7 +324,7 @@ constraining FC (au)   :  0.0500
    shifts: lambda_p=  1.568058E-01 lambda_n= -4.393897E-02 lifted=T followed=T
  final transition vector
  transition mode: index 1, eigenvalue      -0.00090329 Eh/bohr^2
- transition vector component:     0.277628 (cartesian 2 of atom 25)
+ transition vector component:     0.277628 (cartesian 2 of atom 10)
  transition vector overlap:     0.999988
  saddle confirmation - imaginary modes: 2
  most negative frequency:           -53.88 cm^-1
@@ -375,7 +375,7 @@ Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLA
 ERROR STOP 
 
 Error termination. Backtrace:
-#0  0x521981 in terminate_
+#0  0x521a21 in terminate_
 #1  0x437c58 in __xtb_prog_main_MOD_xtbmain
 #2  0x408cca in main
 abnormal termination of oxtb

@@ -9,8 +9,8 @@
 | forward points | 13 (termination: gradient) |
 | backward points | 51 (termination: energy_rise) |
 | forward minimum | -56.839109784760 Eh (a pre-reactive complex, rmsd 0.062 bohr) |
-| backward minimum | -56.913763098229 Eh (the product, rmsd 0.006 bohr) |
-| wall time | 11.9 s |
+| backward minimum | -56.913763098223 Eh (the product, rmsd 0.006 bohr) |
+| wall time | 9.4 s |
 
 `--lirc-step 0.4 --lirc-grad-tol 1e-4` are needed because the -309 cm^-1 mode is soft: the default
 `--lirc-step 0.1 --lirc-grad-tol 1e-3` stops the walk after one point.

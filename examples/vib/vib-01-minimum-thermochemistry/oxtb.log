@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:41:46.813     
+ * started run on 2026/10/16 at 15:12:20.283     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn 2 --lvib --lvib-temp 298.15 --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :             959318659
+          random seed                :            1103790383
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -190,7 +190,7 @@ constraining FC (au)   :  0.0500
    8    -53.1235278 -0.483198E-06  0.432E-03    3.68       4.2  T
    9    -53.1235280 -0.196197E-06  0.189E-03    3.68       9.7  T
   10    -53.1235281 -0.354476E-07  0.807E-04    3.68      22.6  T
-  11    -53.1235281 -0.153724E-08  0.341E-04    3.68      53.5  T
+  11    -53.1235281 -0.153731E-08  0.341E-04    3.68      53.5  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -216,14 +216,14 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.1351135 Eh            3.6766 eV
              Fermi-level           -0.3437993 Eh           -9.3553 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.018 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.556%)
- Dispersion                     ...        0 min,  0.000 sec (  1.603%)
- classical contributions        ...        0 min,  0.000 sec (  0.130%)
- integral evaluation            ...        0 min,  0.003 sec ( 14.145%)
- iterations                     ...        0 min,  0.009 sec ( 48.657%)
- molecular gradient             ...        0 min,  0.006 sec ( 34.400%)
- printout                       ...        0 min,  0.000 sec (  0.473%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.010 sec
+ SCC setup                      ...        0 min,  0.000 sec (  1.188%)
+ Dispersion                     ...        0 min,  0.000 sec (  2.773%)
+ classical contributions        ...        0 min,  0.000 sec (  0.222%)
+ integral evaluation            ...        0 min,  0.001 sec (  9.852%)
+ iterations                     ...        0 min,  0.007 sec ( 70.324%)
+ molecular gradient             ...        0 min,  0.002 sec ( 14.862%)
+ printout                       ...        0 min,  0.000 sec (  0.727%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -239,7 +239,7 @@ constraining FC (au)   :  0.0500
          :: -> dispersion             -0.026948751373 Eh    ::
          :: repulsion energy           0.750139017860 Eh    ::
          :: add. restraining           0.000000000000 Eh    ::
-         :: total charge               0.000000000000 e     ::
+         :: total charge              -0.000000000000 e     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
 
  landscape: harmonic frequencies
@@ -437,7 +437,7 @@ eigval :     1586.04  1586.09  1593.82  1594.21  1663.44  1709.21
 eigval :     2697.30  2803.35  3079.55  3079.55  3087.22  3087.23
 eigval :     3093.90  3093.99  3100.75  3100.76  3109.43  3109.48
  reduced masses (amu)
-    1:      7.01    2:      7.55    3:      6.56    4:      7.12    5:      7.18    6:      5.39
+    1:      5.47    2:      7.90    3:      7.14    4:      6.76    5:      7.11    6:      6.44
     7:      5.69    8:      4.08    9:      6.47   10:      5.35   11:      7.89   12:     13.57
    13:      6.92   14:      7.39   15:      4.70   16:      5.57   17:      6.78   18:      5.91
    19:      2.86   20:      2.87   21:      7.93   22:      3.79   23:      3.92   24:      7.77
@@ -553,7 +553,7 @@ c2h symmetry found (for desy threshold:  0.10E+00) used in thermo
  imaginary modes:          0
  lowest mode:        14.20 cm^-1, highest mode:      3109.48 cm^-1
  energy:                       -52.373771246239 Eh
- energy:                    -32865.037660788337 kcal/mol
+ energy:                    -32865.037660788345 kcal/mol
  gradient norm:               8.224994E-04 Eh/bohr
  zero point energy:           2.228977E-01 Eh
  total enthalpy H(T):          -52.133632181787 Eh
@@ -695,12 +695,12 @@ Writing topology from bond orders to xtbtopo.mol
 molecular dipole:
                  x           y           z       tot (Debye)
  q only:        0.000       0.000       0.000
-   full:        0.000       0.000       0.000       0.000
+   full:        0.000       0.000      -0.000       0.000
 molecular quadrupole (traceless):
                 xx          xy          yy          xz          yz          zz
  q only:       22.987       2.560      -9.934       0.000       0.000     -13.053
-  q+dip:       26.830       2.292      -8.566      -0.000       0.000     -18.264
-   full:       23.538       2.097     -11.771       0.000       0.000     -11.767
+  q+dip:       26.830       2.292      -8.566       0.000      -0.000     -18.264
+   full:       23.538       2.097     -11.771       0.000      -0.000     -11.767
 
 
            -------------------------------------------------
@@ -710,18 +710,18 @@ molecular quadrupole (traceless):
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:41:49.030     
+ * finished run on 2026/10/16 at 15:12:21.425     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min,  2.217 sec
- *  cpu-time:     0 d,  0 h,  0 min,  2.217 sec
+ * wall-time:     0 d,  0 h,  0 min,  1.142 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  1.142 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.018 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.018 sec
- * ratio c/w:     1.000 speedup
+ * wall-time:     0 d,  0 h,  0 min,  0.010 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.010 sec
+ * ratio c/w:     0.993 speedup
  landscape frequencies:
- * wall-time:     0 d,  0 h,  0 min,  2.191 sec
- *  cpu-time:     0 d,  0 h,  0 min,  2.191 sec
+ * wall-time:     0 d,  0 h,  0 min,  1.126 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  1.125 sec
  * ratio c/w:     1.000 speedup
 

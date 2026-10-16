@@ -10,9 +10,9 @@
 | final energy | **-56.834192216439 Eh** |
 | saddle confirmation | 1 imaginary mode, **-308.92 cm^-1** |
 | steps | 3 |
-| wall time | 16.4 s |
+| wall time | 8.5 s |
 
 **This step is required.**  The raw band candidate (-56.834307, imaginary mode -360.45 cm^-1) is
 **not** a usable transition state: an IRC started from it returns to the product in *both*
-directions.  P-RFO moves it 1.1e-4 Eh onto the true saddle, whose imaginary mode is the reaction
+directions.  P-RFO moves it 1.15e-4 Eh onto the true saddle, whose imaginary mode is the reaction
 coordinate (-308.92 cm^-1, matching the delivered `ts_guess.xyz` at -308.68 cm^-1).

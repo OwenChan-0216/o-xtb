@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # vib-01: harmonic frequencies and thermochemistry of a relaxed minimum, and the
-# effect of the temperature on H(T) and G(T).             [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+# effect of the temperature on H(T) and G(T).             [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 set -euo pipefail
 export OMP_NUM_THREADS=1
 export XTBPATH="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")/../../..")"

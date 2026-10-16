@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:12:33.607     
+ * started run on 2026/10/16 at 15:11:49.161     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn 0 --sp --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :            1704339850
+          random seed                :            1825709755
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -193,15 +193,15 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.1105525 Eh            3.0083 eV
              Fermi-level            0.0000000 Eh            0.0000 eV
 
- EHT (total)                   0 d,  0 h,  0 min,  0.005 sec
- EHT setup                      ...        0 min,  0.000 sec (  3.260%)
- Coordination number            ...        0 min,  0.000 sec (  0.720%)
- EEQ model density              ...        0 min,  0.000 sec (  1.599%)
- D4 Dispersion                  ...        0 min,  0.000 sec (  3.897%)
- Integral evaluation            ...        0 min,  0.001 sec ( 27.177%)
- Cholesky factorization         ...        0 min,  0.000 sec (  0.664%)
- Zeroth order Hamiltonian       ...        0 min,  0.001 sec ( 13.879%)
- Gradient calculation           ...        0 min,  0.002 sec ( 47.076%)
+ EHT (total)                   0 d,  0 h,  0 min,  0.006 sec
+ EHT setup                      ...        0 min,  0.000 sec (  2.807%)
+ Coordination number            ...        0 min,  0.000 sec (  0.724%)
+ EEQ model density              ...        0 min,  0.000 sec (  1.598%)
+ D4 Dispersion                  ...        0 min,  0.000 sec (  5.301%)
+ Integral evaluation            ...        0 min,  0.002 sec ( 27.520%)
+ Cholesky factorization         ...        0 min,  0.000 sec (  0.711%)
+ Zeroth order Hamiltonian       ...        0 min,  0.001 sec ( 13.818%)
+ Gradient calculation           ...        0 min,  0.003 sec ( 45.222%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -366,14 +366,14 @@ Writing topology from bond orders to xtbtopo.mol
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:12:33.620     
+ * finished run on 2026/10/16 at 15:11:49.173     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min,  0.013 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.013 sec
- * ratio c/w:     1.000 speedup
+ * wall-time:     0 d,  0 h,  0 min,  0.012 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.012 sec
+ * ratio c/w:     0.998 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.005 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.005 sec
- * ratio c/w:     1.000 speedup
+ * wall-time:     0 d,  0 h,  0 min,  0.006 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.006 sec
+ * ratio c/w:     0.996 speedup
 

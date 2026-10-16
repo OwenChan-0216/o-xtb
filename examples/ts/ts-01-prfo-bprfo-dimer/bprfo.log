@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 02:04:21.529     
+ * started run on 2026/10/16 at 15:12:54.114     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -120,7 +120,7 @@
           calculation namespace      : bprfo
           coordinate file            : input-displaced.xyz
           omp threads                :                     1
-          random seed                :             609642079
+          random seed                :             700885308
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -190,8 +190,8 @@ constraining FC (au)   :  0.0500
    7    -53.0764355 -0.547365E-05  0.112E-02    3.65       1.6  T
    8    -53.0764356 -0.128361E-06  0.448E-03    3.65       4.1  T
    9    -53.0764359 -0.235252E-06  0.157E-03    3.65      11.6  T
-  10    -53.0764359 -0.243592E-07  0.621E-04    3.65      29.4  T
-  11    -53.0764359 -0.959005E-09  0.285E-04    3.65      64.0  T
+  10    -53.0764359 -0.243591E-07  0.621E-04    3.65      29.4  T
+  11    -53.0764359 -0.958984E-09  0.285E-04    3.65      64.0  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -217,14 +217,14 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.1341279 Eh            3.6498 eV
              Fermi-level           -0.3444600 Eh           -9.3732 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.017 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.554%)
- Dispersion                     ...        0 min,  0.000 sec (  1.241%)
- classical contributions        ...        0 min,  0.000 sec (  0.133%)
- integral evaluation            ...        0 min,  0.002 sec ( 13.674%)
- iterations                     ...        0 min,  0.008 sec ( 48.558%)
- molecular gradient             ...        0 min,  0.006 sec ( 35.371%)
- printout                       ...        0 min,  0.000 sec (  0.437%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.012 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.792%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.574%)
+ classical contributions        ...        0 min,  0.000 sec (  0.186%)
+ integral evaluation            ...        0 min,  0.001 sec (  8.158%)
+ iterations                     ...        0 min,  0.009 sec ( 69.397%)
+ molecular gradient             ...        0 min,  0.002 sec ( 19.152%)
+ printout                       ...        0 min,  0.000 sec (  0.690%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -464,14 +464,14 @@ molecular quadrupole (traceless):
 ########################################################################
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 02:04:37.705     
+ * finished run on 2026/10/16 at 15:13:03.364     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min, 16.175 sec
- *  cpu-time:     0 d,  0 h,  0 min, 16.175 sec
+ * wall-time:     0 d,  0 h,  0 min,  9.250 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  9.250 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.017 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.017 sec
- * ratio c/w:     1.000 speedup
+ * wall-time:     0 d,  0 h,  0 min,  0.013 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.012 sec
+ * ratio c/w:     0.997 speedup
 

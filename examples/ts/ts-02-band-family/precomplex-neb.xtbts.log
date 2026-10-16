@@ -9,9 +9,9 @@
  steps:          152
  energy calls:   1683
  cache misses:   1882
- final energy:       -56.806546544400 Eh
- final gradient:    9.453210E-03 Eh/bohr
- max gradient:      3.228198E-03 Eh/bohr
+ final energy:       -56.806546566700 Eh
+ final gradient:    9.453235E-03 Eh/bohr
+ max gradient:      3.228181E-03 Eh/bohr
  etemp:               300.000 K
  --------------------------------------------------------------
  convergence history

@@ -35,8 +35,8 @@ oxtb product.xyz --gfn 2 --lts --lts-method cineb --lts-product ts_guess.xyz --l
 
 | run | method | images | converged | barrier / kcal/mol | saddle confirmation | wall time |
 |---|---|---|---|---|---|---|
-| 1 | NEB | 9 | **T** | **31.92** (highest internal image 8, -56.862908) | 1 imaginary, **-345.38 cm^-1** | 8.6 s |
-| 2 | CI-NEB | 9 | **T** | **49.87** (climbing image 8, -56.834307) | 1 imaginary, **-360.45 cm^-1** | 10.0 s |
+| 1 | NEB | 9 | **T** | **31.92** (highest internal image 8, -56.862908) | 1 imaginary, **-345.38 cm^-1** | 5.3 s |
+| 2 | CI-NEB | 9 | **T** | **49.87** (climbing image 8, -56.834307) | 1 imaginary, **-360.45 cm^-1** | 5.9 s |
 
 The reference barrier is **TS - product = -56.834192 - (-56.913775) = +49.94 kcal/mol**, and it is
 also the energy of the `ts_guess.xyz` endpoint (image 9, 49.94 kcal/mol above the product).  Plain
@@ -69,14 +69,16 @@ oxtb reactant.xyz --gfn 2 --lts --lts-method neb --lts-product product.xyz --lts
 Cartesian/IDPP interpolation between those two endpoints has no way of representing the
 out-of-plane rotation, so it walks the images straight **through** the anthracene; the SCC then
 fails on the overlapping frames.  The symptom is a nonsense "highest image" that is far above both
-endpoints: **260.04 kcal/mol** (image 3, -56.407402) for the 9-image NEB in `neb-full.log`;
-**484.59 kcal/mol** for the 15-image NEB and CI-NEB in `neb-full15.log` / `cineb-full15.log`; and
-**833.54 kcal/mol** for the 15-image NEB with `--lts-no-align` in `neb-full15-noalign.log`.  The
+endpoints: **817.61 kcal/mol** (image 3, -55.518872) for the 9-image NEB in `neb-full.log`;
+**501.50 kcal/mol** for the 15-image NEB and CI-NEB in `neb-full15.log` / `cineb-full15.log`; and
+**917.94 kcal/mol** for the 15-image NEB with `--lts-no-align` in `neb-full15-noalign.log`.  The
 string variant (run 3) confirms a minimum rather than a saddle; `gsm` aborts immediately
-("no progress", `gsm-full.log`, 0.7 s); AutoNEB aborts (a band image cannot be evaluated,
-`autoneb-full.log`, 2.8 s).  This is a limitation of the interpolation for a large-amplitude
+("no progress", `gsm-full.log`, 0.4 s); AutoNEB aborts (a band image cannot be evaluated,
+`autoneb-full.log`, 1.8 s).  This is a limitation of the interpolation for a large-amplitude
 association, not a budget issue: more images, more steps, `--lts-no-idpp` and `--lts-no-align` were
-all tried.
+all tried.  The exploded barrier is **not a converged quantity** - the interpolation drives the
+images through the ring, so a round-off-level change in the potential moves it by hundreds of
+kcal/mol (the pre-refresh release of this same source measured 260 / 485 / 834 kcal/mol here).
 
 **Why the separated pair is the wrong endpoint anyway.**  The GFN2 saddle is *below* the separated
 reactant, so there is no barrier to find on that leg; a band run there is looking for something that
@@ -99,7 +101,7 @@ other words: the association and the bond formation are barrierless in GFN2; onl
 retro barrier (49.94 kcal/mol to `ts_guess.xyz`) is real.
 
 **Is `precomplex.xyz` a minimum?**  No - it is only a starting point.  A plain minimisation (run 6,
-`precomplex-opt.log`) drops it to **-56.823545 Eh** in 1.2 s, i.e. back into the separated-reactant
+`precomplex-opt.log`) drops it to **-56.823545 Eh** in 0.6 s, i.e. back into the separated-reactant
 well (compare `reactant.xyz` at -56.821809).  It is a hand-built geometry, shipped as the endpoint
 that removes the 12.6 A gap and the out-of-plane rotation.
 

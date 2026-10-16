@@ -35,11 +35,11 @@ and `dimer.xtbts.xyz` are the three optimised saddles; `*.xtbts.log` is the per-
 
 | run | start | method | converged | final E / Eh | confirmation | steps | wall time |
 |---|---|---|---|---|---|---|---|
-| 1 | `input.xyz` | PRFO | **T** | **-52.363974790630** | 1 imaginary, **-1202.82 cm^-1** | 5 | 16.2 s |
-| 2 | `input-displaced.xyz` | B-PRFO | **T** | **-52.363974790676** | 1 imaginary, **-1202.65 cm^-1** | 5 | 16.3 s |
-| 3 | `input-displaced.xyz` | dimer | **T** | **-52.363967980984** | 1 imaginary, **-1208.09 cm^-1** | 58 | 8.6 s |
-| 4 | `input.xyz` | B-PRFO (shipped defaults) | F | -52.353023 | 2 imaginary, -53.9 cm^-1 -> **higher-order saddle** | 30 | 88 s* |
-| 5 | `input.xyz` | dimer (shipped defaults) | F | -52.041005 | 6 imaginary -> **higher-order saddle** | 120 | 24 s* |
+| 1 | `input.xyz` | PRFO | **T** | **-52.363974790630** | 1 imaginary, **-1202.82 cm^-1** | 5 | 9.6 s |
+| 2 | `input-displaced.xyz` | B-PRFO | **T** | **-52.363974790676** | 1 imaginary, **-1202.65 cm^-1** | 5 | 9.3 s |
+| 3 | `input-displaced.xyz` | dimer | **T** | **-52.363967980984** | 1 imaginary, **-1208.09 cm^-1** | 58 | 4.9 s |
+| 4 | `input.xyz` | B-PRFO (shipped defaults) | F | -52.353023 | 2 imaginary, -53.88 cm^-1 -> **higher-order saddle** | 30 | 48.5 s* |
+| 5 | `input.xyz` | dimer (shipped defaults) | F | -52.047845 | 6 imaginary, -2077.92 cm^-1 -> **higher-order saddle** | 120 | 15.7 s* |
 
 \* The two aborted runs exit before the wall-time line is printed, so their times were measured
 with `time` around the same command; every other number in this table is a line in the logs.

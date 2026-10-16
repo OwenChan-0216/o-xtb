@@ -14,13 +14,13 @@ also shows which file flows into which task - every step consumes the previous s
 | step | folder | consumes | command (see the step README for the full line) | produces | headline number | wall time |
 |---|---|---|---|---|---|---|
 | 00 | `00-structure/` | - | - | `reactant.xyz`, `ts_guess.xyz` | start -52.373771244067 Eh | - |
-| 01 | `01-lopt/` | `../00-structure/reactant.xyz` | `--lopt --lopt-engine lbfgs --lopt-level normal` | `xtbopt.xyz` | **-52.373771818978 Eh** (1 step) | 0.05 s |
-| 02 | `02-lscan/` | `../01-lopt/xtbopt.xyz` | `--lscan --lscan-coord distance --lscan-atoms 9,10` | `xtbscan.log` | **barrier 6.18 kcal/mol** at O9-H10 = 1.25 A | 22.5 s |
-| 03 | `03-dimer/` | `../00-structure/ts_guess.xyz` (displaced 0.15 A) | `--lts --lts-method dimer --lts-delta 0.1 --lts-ninit force` | `xtbts.xyz` | **-52.363967980984 Eh**, 1 imaginary (-1208.09 cm^-1) | 8.8 s |
-| 04 | `04-ts/` | `../03-dimer/xtbts.xyz` | `--lts --lts-method prfo --lts-level normal` | `xtbts.xyz` | **-52.363974789450 Eh**, 1 imaginary (-1199.70 cm^-1) | 6.9 s |
-| 05 | `05-irc/` | `../04-ts/xtbts.xyz` | `--lirc --lirc-method hpc --lirc-grad-tol 1e-5` | `irc_forward/backward/path.xyz`, `irc.log` | 44 / 50 points, both endpoints are the degenerate minima | 11.3 s |
+| 01 | `01-lopt/` | `../00-structure/reactant.xyz` | `--lopt --lopt-engine lbfgs --lopt-level normal` | `xtbopt.xyz` | **-52.373771818978 Eh** (1 step) | 0.03 s |
+| 02 | `02-lscan/` | `../01-lopt/xtbopt.xyz` | `--lscan --lscan-coord distance --lscan-atoms 9,10` | `xtbscan.log` | **barrier 6.18 kcal/mol** at O9-H10 = 1.25 A | 13.5 s |
+| 03 | `03-dimer/` | `../00-structure/ts_guess.xyz` (displaced 0.15 A) | `--lts --lts-method dimer --lts-delta 0.1 --lts-ninit force` | `xtbts.xyz` | **-52.363967980984 Eh**, 1 imaginary (-1208.09 cm^-1) | 5.1 s |
+| 04 | `04-ts/` | `../03-dimer/xtbts.xyz` | `--lts --lts-method prfo --lts-level normal` | `xtbts.xyz` | **-52.363974789450 Eh**, 1 imaginary (-1199.70 cm^-1) | 3.5 s |
+| 05 | `05-irc/` | `../04-ts/xtbts.xyz` | `--lirc --lirc-method hpc --lirc-grad-tol 1e-5` | `irc_forward/backward/path.xyz`, `irc.log` | 52 / 44 points, both endpoints are the degenerate minima | 10.3 s |
 
-Total wall time ~50 s at `OMP_NUM_THREADS=1`.
+Total wall time ~32 s at `OMP_NUM_THREADS=1`.
 
 ## What flows into what
 
@@ -43,8 +43,13 @@ Total wall time ~50 s at `OMP_NUM_THREADS=1`.
 04-ts/xtbts.xyz      -52.363974789450 Eh  (refined first-order saddle)
         |
         v   (05-irc, hpc)
-05-irc/irc_forward.xyz  -> minimum -52.373778976 Eh
-05-irc/irc_backward.xyz -> minimum -52.373782340 Eh
+05-irc/irc_forward.xyz  -> minimum -52.373782362 Eh
+05-irc/irc_backward.xyz -> minimum -52.373778975 Eh
+
+Which half is labelled *forward* follows the phase of the transition vector, and this release fixes it
+on atom 10 where a build from before the 2026-10-16 performance PRs named atom 25 - so those two
+numbers carry the opposite label in an older log.  The two protons are equivalent, the reaction is
+degenerate, and both halves end in the same well either way; only the name of the half changes.
 ```
 
 Each step's `run.sh` copies the file it consumes into its own `input.xyz` first (so every folder is
@@ -55,13 +60,13 @@ self-contained and re-runnable), then runs the task on it.
 | point | energy / Eh | note |
 |---|---|---|
 | step 00 / 01 minimum | -52.373771818978 | the relaxed starting structure |
-| step 02 scan maximum | **-52.363916131491** | the barrier peak, +6.18 kcal/mol |
-| step 03 dimer saddle | -52.363967980984 | 4.9e-5 Eh above the scan maximum |
+| step 02 scan maximum | **-52.363916131572** | the barrier peak, +6.18 kcal/mol |
+| step 03 dimer saddle | -52.363967980984 | 5.2e-5 Eh above the scan maximum |
 | step 04 P-RFO saddle | **-52.363974789450** | the two saddle searches agree to 6.8e-6 Eh |
-| step 05 IRC minima | -52.373778976 / -52.373782340 | both back in the step-01 well (degenerate reaction) |
+| step 05 IRC minima | -52.373782362 / -52.373778975 | both back in the step-01 well (degenerate reaction) |
 
 The dimer and P-RFO saddles agree to 6.8e-6 Eh and both confirm a single imaginary mode; the scan
-maximum is 4.9e-5 Eh above them because it is a constrained point, not a relaxed saddle.
+maximum is 5.2e-5 Eh above them because it is a constrained point, not a relaxed saddle.
 
 ## Honesty notes (bounds and tuning actually used)
 

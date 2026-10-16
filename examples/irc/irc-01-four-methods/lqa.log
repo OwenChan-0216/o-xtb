@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:44:50.794     
+ * started run on 2026/10/16 at 15:11:21.260     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -120,7 +120,7 @@
           calculation namespace      : lqa
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :             613922705
+          random seed                :            1128889539
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -217,14 +217,14 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.1352343 Eh            3.6799 eV
              Fermi-level           -0.3447675 Eh           -9.3816 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.017 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.538%)
- Dispersion                     ...        0 min,  0.000 sec (  1.043%)
- classical contributions        ...        0 min,  0.000 sec (  0.134%)
- integral evaluation            ...        0 min,  0.002 sec ( 14.230%)
- iterations                     ...        0 min,  0.008 sec ( 48.347%)
- molecular gradient             ...        0 min,  0.006 sec ( 35.263%)
- printout                       ...        0 min,  0.000 sec (  0.410%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.011 sec
+ SCC setup                      ...        0 min,  0.000 sec (  1.143%)
+ Dispersion                     ...        0 min,  0.000 sec (  2.466%)
+ classical contributions        ...        0 min,  0.000 sec (  0.230%)
+ integral evaluation            ...        0 min,  0.001 sec (  8.611%)
+ iterations                     ...        0 min,  0.008 sec ( 71.825%)
+ molecular gradient             ...        0 min,  0.002 sec ( 14.800%)
+ printout                       ...        0 min,  0.000 sec (  0.871%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -240,7 +240,7 @@ constraining FC (au)   :  0.0500
          :: -> dispersion             -0.026998392442 Eh    ::
          :: repulsion energy           0.733468287618 Eh    ::
          :: add. restraining           0.000000000000 Eh    ::
-         :: total charge               0.000000000000 e     ::
+         :: total charge              -0.000000000000 e     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
 
  landscape: intrinsic reaction coordinate (lqa)
@@ -257,9 +257,9 @@ constraining FC (au)   :  0.0500
  confirmation: first order saddle point
  transition mode index:     1 (eigenvalue -1.939604E-02
  forward is defined by the largest absolute component of the mass weighted transition vector
- phase component:              0.612997 (cartesian 1 of atom 25)
- wrote lqa.irc_forward.xyz with 6 frames
- wrote lqa.irc_backward.xyz with 7 frames
+ phase component:              0.612997 (cartesian 1 of atom 10)
+ wrote lqa.irc_forward.xyz with 7 frames
+ wrote lqa.irc_backward.xyz with 6 frames
  wrote lqa.irc_path.xyz with 12 frames
  wrote lqa.irc.log
  --------------------------------------------------------------
@@ -270,16 +270,16 @@ constraining FC (au)   :  0.0500
  step length:               1.000000E-01 bohr*amu^1/2
  termination forward:      gradient
  termination backward:     gradient
- forward points:           5
- backward points:          6
- forward arc length:               0.450000 bohr*amu^1/2
- forward endpoint energy:      -52.373661709275 Eh
- backward arc length:              0.550000 bohr*amu^1/2
- backward endpoint energy:     -52.373667065919 Eh
- backward reached minimum: T (rmsd     0.005681 bohr, minimum     -52.373772091328 Eh)
- forward reached minimum: T (rmsd     0.005606 bohr, minimum     -52.373773525158 Eh)
+ forward points:           6
+ backward points:          5
+ forward arc length:               0.550000 bohr*amu^1/2
+ forward endpoint energy:      -52.373667065919 Eh
+ backward arc length:              0.450000 bohr*amu^1/2
+ backward endpoint energy:     -52.373661709275 Eh
+ backward reached minimum: T (rmsd     0.005606 bohr, minimum     -52.373773525158 Eh)
+ forward reached minimum: T (rmsd     0.005681 bohr, minimum     -52.373772091328 Eh)
  sphere relaxation pinned:  0 of 11 points (GS micro cycle budget; 0 for the predictor-corrector)
- phase component:          73 (value     0.612997)
+ phase component:          28 (value     0.612997)
  directions swapped:       F
  etemp:                         300.000 K
  --------------------------------------------------------------
@@ -427,13 +427,13 @@ Writing topology from bond orders to xtbtopo.mol
 
 molecular dipole:
                  x           y           z       tot (Debye)
- q only:       -0.000      -0.000       0.000
-   full:       -0.000      -0.000      -0.000       0.000
+ q only:       -0.000       0.000       0.000
+   full:       -0.000       0.000      -0.000       0.000
 molecular quadrupole (traceless):
                 xx          xy          yy          xz          yz          zz
  q only:       23.380       1.454     -10.519       0.000       0.000     -12.861
-  q+dip:       28.071       1.399      -9.599       0.000      -0.000     -18.472
-   full:       24.656       1.178     -12.757       0.000      -0.000     -11.899
+  q+dip:       28.071       1.399      -9.599       0.000       0.000     -18.472
+   full:       24.656       1.178     -12.757       0.000       0.000     -11.899
 
 
            -------------------------------------------------
@@ -443,18 +443,18 @@ molecular quadrupole (traceless):
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:44:53.954     
+ * finished run on 2026/10/16 at 15:11:23.095     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min,  3.160 sec
- *  cpu-time:     0 d,  0 h,  0 min,  3.160 sec
+ * wall-time:     0 d,  0 h,  0 min,  1.835 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  1.835 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.017 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.017 sec
- * ratio c/w:     0.999 speedup
+ * wall-time:     0 d,  0 h,  0 min,  0.011 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.011 sec
+ * ratio c/w:     1.000 speedup
  landscape IRC:
- * wall-time:     0 d,  0 h,  0 min,  3.135 sec
- *  cpu-time:     0 d,  0 h,  0 min,  3.135 sec
+ * wall-time:     0 d,  0 h,  0 min,  1.819 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  1.819 sec
  * ratio c/w:     1.000 speedup
 

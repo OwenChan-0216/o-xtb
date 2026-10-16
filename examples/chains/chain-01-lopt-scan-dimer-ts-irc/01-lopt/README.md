@@ -9,4 +9,4 @@
 | converged | T |
 | final energy | **-52.373771818978 Eh** |
 | steps | 1 (the delivered structure is already a minimum) |
-| wall time | 0.05 s |
+| wall time | 0.03 s |

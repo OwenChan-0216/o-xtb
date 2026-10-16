@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 02:08:31.405     
+ * started run on 2026/10/16 at 15:13:58.839     
    ID    Z sym.   atoms
     1    6 C      1-14, 25, 27-29
     2    1 H      15-24, 32, 33
@@ -120,7 +120,7 @@
           calculation namespace      : full-autoneb
           coordinate file            : reactant.xyz
           omp threads                :                     1
-          random seed                :            1194365281
+          random seed                :             957119968
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -199,7 +199,7 @@ constraining FC (au)   :  0.0500
   16    -57.7452941 -0.128087E-05  0.534E-03    0.20       3.3  T
   17    -57.7452954 -0.129145E-05  0.330E-03    0.20       5.3  T
   18    -57.7452962 -0.777378E-06  0.503E-04    0.20      34.6  T
-  19    -57.7452962 -0.826332E-08  0.373E-04    0.20      46.7  T
+  19    -57.7452962 -0.826336E-08  0.373E-04    0.20      46.7  T
 
    *** convergence criteria satisfied after 19 iterations ***
 
@@ -225,21 +225,21 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.0073734 Eh            0.2006 eV
              Fermi-level           -0.3593094 Eh           -9.7773 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.027 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.420%)
- Dispersion                     ...        0 min,  0.000 sec (  0.795%)
- classical contributions        ...        0 min,  0.000 sec (  0.098%)
- integral evaluation            ...        0 min,  0.003 sec (  9.970%)
- iterations                     ...        0 min,  0.016 sec ( 60.096%)
- molecular gradient             ...        0 min,  0.007 sec ( 28.206%)
- printout                       ...        0 min,  0.000 sec (  0.392%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.018 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.659%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.363%)
+ classical contributions        ...        0 min,  0.000 sec (  0.159%)
+ integral evaluation            ...        0 min,  0.001 sec (  5.979%)
+ iterations                     ...        0 min,  0.014 sec ( 81.445%)
+ molecular gradient             ...        0 min,  0.002 sec (  9.724%)
+ printout                       ...        0 min,  0.000 sec (  0.635%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          :: total energy             -56.821808533251 Eh    ::
          :: gradient norm              0.000780387566 Eh/a0 ::
-         :: HOMO-LUMO gap              0.200640725709 eV    ::
+         :: HOMO-LUMO gap              0.200640725708 eV    ::
          ::.................................................::
          :: SCC energy               -57.745438221280 Eh    ::
          :: -> isotropic ES            0.059960694669 Eh    ::
@@ -251,7 +251,7 @@ Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLA
 ERROR STOP 
 
 Error termination. Backtrace:
-#0  0x521981 in terminate_
+#0  0x521a21 in terminate_
 #1  0x437c58 in __xtb_prog_main_MOD_xtbmain
 #2  0x408cca in main
 abnormal termination of oxtb
@@ -295,11 +295,11 @@ abnormal termination of oxtb
      16  2.83226E-02  5.07961E-02       271.6646
      17  2.64883E-02  4.61504E-02       271.6243
      18  2.35890E-02  4.26800E-02       275.1071
-     19  2.24246E-02  3.96951E-02       279.6305
- band: iterations 19, f_rms_avg  2.24246E-02, f_rms_max  3.96951E-02
+     19  2.24246E-02  3.96950E-02       279.6305
+ band: iterations 19, f_rms_avg  2.24246E-02, f_rms_max  3.96950E-02
  band: 5 images, max_displ   3.7795E-01 bohr, max_steps 300, diverged F
- band: highest image 2, energy     -56.376189044150 Eh, barrier     279.6305 kcal/mol
- autoneb stage 1: images 5, iterations 19, E(saddle)     -56.376189044150, barrier     279.6305 kcal/mol
+ band: highest image 2, energy     -56.376189024980 Eh, barrier     279.6305 kcal/mol
+ autoneb stage 1: images 5, iterations 19, E(saddle)     -56.376189024980, barrier     279.6305 kcal/mol
  autoneb: inserted an image at 2 of  4.456E-01 Eh (worst energy resolution)
  landscape engine: energy evaluations 103
  landscape engine: cache hits         1

@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 02:05:27.546     
+ * started run on 2026/10/16 at 15:11:55.739     
    ID    Z sym.   atoms
     1    6 C      1-14, 25, 27-29
     2    1 H      15-24, 32, 33
@@ -120,7 +120,7 @@
           calculation namespace      : local-neb
           coordinate file            : product.xyz
           omp threads                :                     1
-          random seed                :            1722160419
+          random seed                :            1431128447
 
 
            -------------------------------------------------
@@ -184,7 +184,7 @@
    8    -57.7773050 -0.347043E-05  0.586E-03    3.20       3.0  T
    9    -57.7773053 -0.334513E-06  0.212E-03    3.20       8.2  T
   10    -57.7773054 -0.626681E-07  0.744E-04    3.20      23.4  T
-  11    -57.7773054 -0.919869E-08  0.228E-04    3.20      76.3  T
+  11    -57.7773054 -0.919870E-08  0.228E-04    3.20      76.3  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -210,14 +210,14 @@
                   HL-Gap            0.1175159 Eh            3.1978 eV
              Fermi-level           -0.3479304 Eh           -9.4677 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.024 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.421%)
- Dispersion                     ...        0 min,  0.000 sec (  0.870%)
- classical contributions        ...        0 min,  0.000 sec (  0.104%)
- integral evaluation            ...        0 min,  0.004 sec ( 14.347%)
- iterations                     ...        0 min,  0.011 sec ( 46.828%)
- molecular gradient             ...        0 min,  0.009 sec ( 36.979%)
- printout                       ...        0 min,  0.000 sec (  0.420%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.015 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.860%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.613%)
+ classical contributions        ...        0 min,  0.000 sec (  0.173%)
+ integral evaluation            ...        0 min,  0.001 sec (  9.656%)
+ iterations                     ...        0 min,  0.010 sec ( 69.137%)
+ molecular gradient             ...        0 min,  0.003 sec ( 17.437%)
+ printout                       ...        0 min,  0.000 sec (  0.667%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -233,7 +233,7 @@
          :: -> dispersion             -0.043667138571 Eh    ::
          :: repulsion energy           0.862774396008 Eh    ::
          :: add. restraining           0.000000000000 Eh    ::
-         :: total charge               0.000000000000 e     ::
+         :: total charge              -0.000000000000 e     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
 
  landscape: transition state search (neb)
@@ -478,14 +478,14 @@ molecular quadrupole (traceless):
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 02:05:36.314     
+ * finished run on 2026/10/16 at 15:12:01.044     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min,  8.768 sec
- *  cpu-time:     0 d,  0 h,  0 min,  8.767 sec
+ * wall-time:     0 d,  0 h,  0 min,  5.305 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  5.305 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.025 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.025 sec
- * ratio c/w:     0.998 speedup
+ * wall-time:     0 d,  0 h,  0 min,  0.015 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.015 sec
+ * ratio c/w:     0.996 speedup
 

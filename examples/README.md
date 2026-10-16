@@ -12,7 +12,7 @@ the logs are the record, and they ship with the case.
 The examples were produced with the installed release:
 
 ```
-OxTB version 0.1.0   (xTB engine 6.7.1)   Compiled on 2026/10/12 from c712f9e
+OxTB version 0.1.0   (xTB engine 6.7.1)   Compiled on 2026/10/16 from 8a0ad67
 ```
 
 ## How to run a case
@@ -25,8 +25,11 @@ bash run.sh                                    # the exact command the README do
 ```
 
 `run.sh` prints the command it runs and writes the same output file names you find in the folder, so
-you can diff your run against the shipped one.  The cases are deterministic: the two saddle and band
-cases were re-run from clean directories and every number reproduced byte for byte.
+you can diff your run against the shipped one.  The cases are deterministic: every case was re-run
+twice from clean directories and every data file (`xtbopt.xyz`, `xtbscan.log`, `hessian`,
+`vibspectrum`, `path.xyz`, `irc_*.xyz`, `landscape_<task>.json`, ...) came out byte for byte
+identical.  Only the captured `*.log` transcripts (run date, random seed, wall-time table) and the
+`xtbtopo.mol` header line (its date stamp) differ between two runs.
 
 ## Layout
 
@@ -59,7 +62,7 @@ The category `.gitignore` files re-include those output names, which the reposit
 | `sp` | `sp-02-method-comparison` | benzoic acid dimer (30) | the same geometry at `--gfn 0/1/2/ff` - and why the four numbers are not comparable |
 | `lopt` | `lopt-01-lbfgs-from-distorted` | anthracene + maleic anhydride (33) | L-BFGS from a deliberately distorted geometry: 41 steps, -0.956420 Eh |
 | `lopt` | `lopt-02-rfo-from-distorted` | anthracene + maleic anhydride (33) | RFO with the model Hessian on the same start: 24 steps, 5 Hessian builds |
-| `lscan` | `lscan-01-distance-relaxed` | anthracene + maleic anhydride (33) | bidirectional relaxed scan of the forming C9-C28 bond: 35 frames, hysteresis 1.7e-04 Eh |
+| `lscan` | `lscan-01-distance-relaxed` | anthracene + maleic anhydride (33) | bidirectional relaxed scan of the forming C9-C28 bond: 35 frames, hysteresis 9.7e-05 Eh |
 | `lscan` | `lscan-02-dihedral-2d` | benzoic acid dimer (30) | relaxed 2D scan of the two proton transfers: concerted (6.05 kcal/mol) versus stepwise (23.9) |
 | `hess` | `hess-01-numerical` | benzoic acid dimer (30) | numerical Hessian of a minimum: 84 modes, 6 projected zero modes, ZPE and G(T) |
 | `hess` | `hess-02-model-vs-numerical` | benzoic acid dimer (30) | Lindh-D2 model Hessian against the numerical one: 1 versus 181 energy evaluations |
@@ -102,8 +105,9 @@ new case - the atom numbering there is the numbering every case README uses.
 * **A band needs endpoints that differ by a smooth motion.**  `ts-02` documents what happens when
   they do not: the separated fragments sit 12.6 A apart and coplanar while the product needs an
   out-of-plane rotation, so the Cartesian/IDPP interpolation walks the images through the ring and
-  the SCC blows up (the pathological "highest image" barriers are 260 / 484 / 834 kcal/mol in the
-  shipped logs).  The same case shows the fix: start from a pre-reactive complex.
+  the SCC blows up (the pathological "highest image" barriers are 818 / 501 / 918 kcal/mol in the
+  shipped logs - a non-converged, chaotic number that moves by hundreds of kcal/mol between builds).
+  The same case shows the fix: start from a pre-reactive complex.
 * **Some saddle searches need tuning on these systems.**  `ts-01` reports, with logs, that B-PRFO
   and the dimer method reach a higher-order saddle from the shipped `ts_guess.xyz` with the shipped
   defaults, and what it took to reach the first-order saddle instead.

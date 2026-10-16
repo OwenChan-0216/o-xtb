@@ -27,7 +27,7 @@ oxtb input.xyz --gfn 2 --lvib --norestart
 | total enthalpy H(T) at 298.15 K | -52.133632181787 Eh |
 | total free energy G(T) at 298.15 K | **-52.194894746191 Eh** |
 | energy evaluations (engine) | 181 |
-| wall time | **2.41 s** |
+| wall time | **1.08 s** |
 
 **Frequency list** (`eigval :` lines, cm^-1, first row is the six zero modes):
 
@@ -72,4 +72,4 @@ grep -E 'imaginary modes|lowest mode|total free energy' oxtb.log
 ```
 
 A clean re-run reproduces `hessian`, `vibspectrum`, `vib_normal_modes` and `g98.out` **byte for
-byte** (sha256 `4965e179…`, `7717d79b…`, `c367384c…`, `7273c21d…`).
+byte** (sha256 `c69a1943…`, `7717d79b…`, `e9763658…`, `7f27918c…`).

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # chain step 01: CI-NEB band from the product to the saddle; the confirmed
-# saddle candidate is written to xtbts.xyz.               [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+# saddle candidate is written to xtbts.xyz.               [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export OMP_NUM_THREADS=1

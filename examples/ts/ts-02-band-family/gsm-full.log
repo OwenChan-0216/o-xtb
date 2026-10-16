@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 02:08:30.727     
+ * started run on 2026/10/16 at 15:13:58.442     
    ID    Z sym.   atoms
     1    6 C      1-14, 25, 27-29
     2    1 H      15-24, 32, 33
@@ -120,7 +120,7 @@
           calculation namespace      : full-gsm
           coordinate file            : reactant.xyz
           omp threads                :                     1
-          random seed                :             640175401
+          random seed                :              25416796
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -199,7 +199,7 @@ constraining FC (au)   :  0.0500
   16    -57.7452941 -0.128087E-05  0.534E-03    0.20       3.3  T
   17    -57.7452954 -0.129145E-05  0.330E-03    0.20       5.3  T
   18    -57.7452962 -0.777378E-06  0.503E-04    0.20      34.6  T
-  19    -57.7452962 -0.826332E-08  0.373E-04    0.20      46.7  T
+  19    -57.7452962 -0.826336E-08  0.373E-04    0.20      46.7  T
 
    *** convergence criteria satisfied after 19 iterations ***
 
@@ -225,21 +225,21 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.0073734 Eh            0.2006 eV
              Fermi-level           -0.3593094 Eh           -9.7773 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.027 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.433%)
- Dispersion                     ...        0 min,  0.000 sec (  0.904%)
- classical contributions        ...        0 min,  0.000 sec (  0.103%)
- integral evaluation            ...        0 min,  0.003 sec ( 10.270%)
- iterations                     ...        0 min,  0.016 sec ( 60.564%)
- molecular gradient             ...        0 min,  0.007 sec ( 27.355%)
- printout                       ...        0 min,  0.000 sec (  0.345%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.018 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.675%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.342%)
+ classical contributions        ...        0 min,  0.000 sec (  0.155%)
+ integral evaluation            ...        0 min,  0.001 sec (  5.592%)
+ iterations                     ...        0 min,  0.015 sec ( 81.848%)
+ molecular gradient             ...        0 min,  0.002 sec (  9.839%)
+ printout                       ...        0 min,  0.000 sec (  0.519%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          :: total energy             -56.821808533251 Eh    ::
          :: gradient norm              0.000780387566 Eh/a0 ::
-         :: HOMO-LUMO gap              0.200640725709 eV    ::
+         :: HOMO-LUMO gap              0.200640725708 eV    ::
          ::.................................................::
          :: SCC energy               -57.745438221280 Eh    ::
          :: -> isotropic ES            0.059960694669 Eh    ::
@@ -252,7 +252,7 @@ Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLA
 ERROR STOP 
 
 Error termination. Backtrace:
-#0  0x521981 in terminate_
+#0  0x521a21 in terminate_
 #1  0x437c58 in __xtb_prog_main_MOD_xtbmain
 #2  0x408cca in main
 abnormal termination of oxtb

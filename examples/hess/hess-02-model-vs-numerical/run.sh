@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The same geometry with the model (Lindh-D2) Hessian and with the numerical
-# Hessian: a cheap approximation versus the real frequencies.  [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+# Hessian: a cheap approximation versus the real frequencies.  [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 #
 # The model run goes first; its two comparison files are renamed so that the
 # natural output names (hessian, vibspectrum, ...) belong to the numerical run.

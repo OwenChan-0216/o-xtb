@@ -22,7 +22,7 @@ oxtb input.xyz --gfn 2 --lopt --lopt-engine rfo --lopt-hessian model \
 
 | quantity | value | vs case 01 (L-BFGS) |
 |---|---|---|
-| start energy (step 1) | -55.957309694174 Eh | same input |
+| start energy (input geometry) | -55.957309694174 Eh | same input |
 | final energy | **-56.913801582848 Eh** | 7.2e-05 Eh lower |
 | energy drop | -0.956491888674 Eh = -600.2 kcal/mol | |
 | steps | **24** | 41 (1.7x more) |
@@ -30,7 +30,7 @@ oxtb input.xyz --gfn 2 --lopt --lopt-engine rfo --lopt-hessian model \
 | model Hessians built | 5 | 0 |
 | final gradient norm | 1.075539e-04 Eh/bohr | 9.871240e-04 |
 | max gradient component | 3.493370e-05 Eh/bohr | 2.691619e-04 |
-| wall time | **0.72 s** | 1.11 s |
+| wall time | **0.45 s** | 0.61 s |
 
 RFO reaches a slightly lower minimum because it converges the gradient further inside the same
 `normal` budget; both runs end in the same basin (the cycloadduct). RFO requests a Hessian at the
@@ -52,4 +52,4 @@ grep -E 'steps:|final energy|final gradient|Hessians' oxtb.log
 ```
 
 A clean re-run reproduces `xtbopt.xyz` and `xtbopt.log` byte for byte
-(sha256 `c2055492…` / `7689d4d0…`).
+(sha256 `4d18209d…` / `adde052d…`).

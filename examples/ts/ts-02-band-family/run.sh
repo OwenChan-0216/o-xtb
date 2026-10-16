@@ -3,7 +3,7 @@
 # The full reactant -> product band cannot converge (the two fragments start
 # 12.6 A apart and coplanar, so the interpolation walks the images through the
 # anthracene); the working band runs on the compact product -> TS leg and on a
-# constructed pre-reactive complex.                        [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+# constructed pre-reactive complex.                        [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 set -uo pipefail
 export OMP_NUM_THREADS=1
 export XTBPATH="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")/../../..")"

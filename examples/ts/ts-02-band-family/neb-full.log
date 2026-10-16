@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 02:06:00.085     
+ * started run on 2026/10/16 at 15:12:14.460     
    ID    Z sym.   atoms
     1    6 C      1-14, 25, 27-29
     2    1 H      15-24, 32, 33
@@ -120,7 +120,7 @@
           calculation namespace      : full-neb
           coordinate file            : reactant.xyz
           omp threads                :                     1
-          random seed                :             756908733
+          random seed                :            1982634379
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -199,7 +199,7 @@ constraining FC (au)   :  0.0500
   16    -57.7452941 -0.128087E-05  0.534E-03    0.20       3.3  T
   17    -57.7452954 -0.129145E-05  0.330E-03    0.20       5.3  T
   18    -57.7452962 -0.777378E-06  0.503E-04    0.20      34.6  T
-  19    -57.7452962 -0.826332E-08  0.373E-04    0.20      46.7  T
+  19    -57.7452962 -0.826336E-08  0.373E-04    0.20      46.7  T
 
    *** convergence criteria satisfied after 19 iterations ***
 
@@ -225,21 +225,21 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.0073734 Eh            0.2006 eV
              Fermi-level           -0.3593094 Eh           -9.7773 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.027 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.449%)
- Dispersion                     ...        0 min,  0.000 sec (  0.849%)
- classical contributions        ...        0 min,  0.000 sec (  0.100%)
- integral evaluation            ...        0 min,  0.003 sec (  9.973%)
- iterations                     ...        0 min,  0.017 sec ( 61.903%)
- molecular gradient             ...        0 min,  0.007 sec ( 26.386%)
- printout                       ...        0 min,  0.000 sec (  0.318%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.019 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.627%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.465%)
+ classical contributions        ...        0 min,  0.000 sec (  0.152%)
+ integral evaluation            ...        0 min,  0.001 sec (  5.894%)
+ iterations                     ...        0 min,  0.015 sec ( 81.527%)
+ molecular gradient             ...        0 min,  0.002 sec (  9.763%)
+ printout                       ...        0 min,  0.000 sec (  0.544%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          :: total energy             -56.821808533251 Eh    ::
          :: gradient norm              0.000780387566 Eh/a0 ::
-         :: HOMO-LUMO gap              0.200640725709 eV    ::
+         :: HOMO-LUMO gap              0.200640725708 eV    ::
          ::.................................................::
          :: SCC energy               -57.745438221280 Eh    ::
          :: -> isotropic ES            0.059960694669 Eh    ::
@@ -286,78 +286,140 @@ constraining FC (au)   :  0.0500
      17  1.93174E-02  3.99056E-02        60.0665
      18  2.03484E-02  4.09519E-02        69.4147
      19  2.63812E-02  4.15317E-02        83.2333
-     20  2.55849E-02  4.18661E-02        90.8579
+     20  2.55849E-02  4.18661E-02        90.8580
      21  2.51376E-02  3.94048E-02        98.2211
      22  2.31240E-02  3.51644E-02        99.0087
      23  1.89145E-02  3.18212E-02        95.7359
      24  1.54686E-02  2.51321E-02        75.8344
      25  2.00871E-02  2.87876E-02        63.8947
-     26  1.88541E-02  2.81275E-02        71.0913
-     27  1.82323E-02  4.91655E-02        96.4672
-     28  1.83396E-02  4.11907E-02        71.9508
-     29  2.15112E-02  3.44461E-02        50.5011
-     30  2.17665E-02  3.20022E-02        56.9632
-     31  1.83571E-02  3.22531E-02        76.2312
-     32  1.51555E-02  2.66600E-02        85.7007
+     26  1.88541E-02  2.81276E-02        71.0913
+     27  1.82323E-02  4.91654E-02        96.4672
+     28  1.83396E-02  4.11906E-02        71.9508
+     29  2.15112E-02  3.44461E-02        50.5012
+     30  2.17665E-02  3.20022E-02        56.9633
+     31  1.83571E-02  3.22531E-02        76.2313
+     32  1.51555E-02  2.66600E-02        85.7008
      33  1.36602E-02  2.54141E-02       113.3171
-     34  1.34968E-02  2.90234E-02       134.2410
-     35  1.21537E-02  2.42197E-02       147.9016
-     36  1.13469E-02  2.60426E-02       151.7148
-     37  1.17579E-02  2.50240E-02       143.1463
-     38  1.13847E-02  2.47102E-02       125.4922
-     39  1.35204E-02  2.54891E-02       120.7562
-     40  1.74767E-02  3.27653E-02       136.9683
-     41  1.91600E-02  4.36955E-02       186.7876
-     42  2.14771E-02  4.96080E-02       213.0381
-     43  2.24884E-02  4.84105E-02       229.0155
-     44  2.17933E-02  4.48297E-02       239.9780
-     45  2.22790E-02  4.74855E-02       254.5394
-     46  2.40745E-02  5.91893E-02       265.3206
-     47  2.47634E-02  6.24349E-02       260.0442
- band: iterations 47, f_rms_avg  2.47634E-02, f_rms_max  6.24349E-02
+     34  1.34968E-02  2.90233E-02       134.2410
+     35  1.21537E-02  2.42198E-02       147.9016
+     36  1.13469E-02  2.60426E-02       151.7146
+     37  1.17579E-02  2.50240E-02       143.1460
+     38  1.13847E-02  2.47102E-02       125.4921
+     39  1.35204E-02  2.54891E-02       120.7561
+     40  1.74766E-02  3.27653E-02       136.9685
+     41  1.91599E-02  4.36955E-02       186.7880
+     42  2.14771E-02  4.96079E-02       213.0386
+     43  2.24885E-02  4.84105E-02       229.0159
+     44  2.17934E-02  4.48297E-02       239.9785
+     45  2.22790E-02  4.74856E-02       254.5400
+     46  2.40745E-02  5.91897E-02       265.3216
+     47  2.47636E-02  6.24355E-02       260.0456
+     48  2.34388E-02  5.22963E-02       242.7402
+     49  2.07177E-02  4.15245E-02       226.0753
+     50  1.89677E-02  3.44813E-02       213.2748
+     51  1.64229E-02  3.02622E-02       210.8465
+     52  1.52810E-02  3.00663E-02       213.1673
+     53  1.43706E-02  3.10180E-02       219.5734
+     54  1.43254E-02  3.14393E-02       222.6611
+     55  1.32316E-02  3.05068E-02       225.5966
+     56  1.25768E-02  2.87897E-02       228.5378
+     57  1.26909E-02  2.81804E-02       230.3022
+     58  1.16271E-02  2.53857E-02       229.9111
+     59  1.18050E-02  2.65652E-02       228.6624
+     60  1.06603E-02  2.14226E-02       221.9564
+     61  1.10355E-02  2.63222E-02       216.5927
+     62  1.02725E-02  2.23440E-02       207.9436
+     63  1.14003E-02  3.38874E-02       196.9142
+     64  1.15599E-02  3.32246E-02       180.5532
+     65  1.12953E-02  3.42330E-02       164.3842
+     66  1.02676E-02  2.31051E-02       148.6469
+     67  9.37392E-03  2.11933E-02       137.6232
+     68  9.60266E-03  1.83330E-02       129.8057
+     69  8.49927E-03  1.58521E-02       123.0796
+     70  8.50713E-03  1.55660E-02       117.4628
+     71  8.32298E-03  1.29718E-02       112.2523
+     72  7.84603E-03  1.14488E-02       107.4782
+     73  7.96084E-03  1.26431E-02       103.5997
+     74  7.62350E-03  1.16863E-02       100.1457
+     75  7.52872E-03  1.19321E-02        97.4631
+     76  7.69365E-03  1.18603E-02        95.7623
+     77  7.56349E-03  1.20498E-02        94.8878
+     78  7.96072E-03  1.24169E-02        94.7798
+     79  7.87832E-03  1.28025E-02        95.6362
+     80  8.15714E-03  1.37853E-02        97.6407
+     81  8.52517E-03  1.52356E-02       100.8970
+     82  8.76982E-03  1.66397E-02       105.5377
+     83  9.11802E-03  1.83835E-02       111.9337
+     84  9.64246E-03  2.04770E-02       119.8811
+     85  1.03277E-02  2.29479E-02       129.8787
+     86  1.12629E-02  2.61593E-02       142.6797
+     87  1.24715E-02  3.02249E-02       158.9780
+     88  1.39361E-02  3.50606E-02       179.5166
+     89  1.56052E-02  4.04203E-02       204.9887
+     90  1.74089E-02  4.59910E-02       235.9519
+     91  1.92771E-02  5.14616E-02       272.7690
+     92  2.11108E-02  5.63258E-02       315.5025
+     93  2.28731E-02  6.05002E-02       363.8561
+     94  2.45535E-02  6.40498E-02       417.4716
+     95  2.61261E-02  6.69497E-02       475.8763
+     96  2.75632E-02  6.92104E-02       538.5006
+     97  2.88651E-02  7.08667E-02       604.7250
+     98  3.00430E-02  7.19614E-02       673.8652
+     99  3.10893E-02  7.25183E-02       745.0193
+    100  3.20339E-02  7.27027E-02       817.6051
+ band: iterations 100, f_rms_avg  3.20339E-02, f_rms_max  7.27027E-02
  band: 9 images, max_displ   3.7795E-01 bohr, max_steps 100, diverged F
- band: highest image 3, energy     -56.407401748765 Eh, barrier     260.0442 kcal/mol
+ band: highest image 3, energy     -55.518871808525 Eh, barrier     817.6051 kcal/mol
  wrote full-neb.path.xyz with 9 frames
     image        energy/Eh       dE/kcal/mol   distance/bohr
       1     -56.821808543383         0.0000 reactant
-      2     -56.586828566577       147.4522      24.047915
-      3     -56.407401748765       260.0442      18.326262
-      4     -56.660813891093       101.0257      13.246704
-      5     -56.780479983157        25.9341      11.685980
-      6     -56.749592890289        45.3160       9.967369
-      7     -56.692766125777        80.9753       8.758043
-      8     -56.726251111877        59.9632       8.952916
+      2     -56.469170436193       221.2838      45.326784
+      3     -55.518871808525       817.6051      40.926304
+      4     -56.161743901852       414.1968      33.787755
+      5     -56.748353535335        46.0937      14.891042
+      6     -56.752702835209        43.3645      16.625487
+      7     -56.732554456345        56.0078      11.760844
+      8     -56.777972928458        27.5073      11.950181
       9     -56.913774524585       -57.7095 product
  band: highest energy image (TS candidate): 3
-Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
-ERROR STOP 
-
-Error termination. Backtrace:
-#0  0x521981 in terminate_
-#1  0x437c58 in __xtb_prog_main_MOD_xtbmain
-#2  0x408cca in main
-abnormal termination of oxtb
- landscape engine: energy evaluations 435
+ --------------------------------------------------------------
+ landscape: band reached the iteration limit without converging
+ converged:      F
+ steps:          100
+ energy calls:   909
+ cache misses:   910
+ final energy:       -55.518871808525 Eh
+ final gradient:    6.522073E-01 Eh/bohr
+ max gradient:      2.034970E-01 Eh/bohr
+ etemp:               300.000 K
+ --------------------------------------------------------------
+ convergence history
+ criteria (gmax,grms,dmax,drms):  F F F F
+ wrote full-neb.xtbts.xyz
+ wrote full-neb.xtbts.log
+ landscape engine: energy evaluations 910
  landscape engine: cache hits         0
  landscape engine: Hessians           0
  landscape engine: Hessian-vector     0
- landscape engine: unconverged SCC    2
+ landscape engine: unconverged SCC    0
  landscape engine: restart policy     off
  landscape engine: SCC accuracy              1.000000
  landscape engine: etemp                   300.000 K
  landscape engine: hessian source     numerical
- landscape task terminated: the transition state candidate could not be evaluated
+ landscape task terminated: band reached the iteration limit without converging
 ########################################################################
 [ERROR] Program stopped due to fatal error
--11- Landscape task terminated
--10- landscape_ts_band: the transition state candidate could not be evaluated
--9- landscape_engine_energy_gradient: SCC did not converge at the current geometry; the energy and gradient are discarded
--8- xtb_calculator_singlepoint: Electronic structure method terminated
--7- scf: Setup of Coulomb evaluator failed
--6- type_latticepoint_update: Could not generate lattice points
--5- landscape_band_optimize: a band image could not be evaluated
--4- landscape_band_energies: a band image could not be evaluated
--3- landscape_engine_energy_gradient: SCC did not converge at the current geometry; the energy and gradient are discarded
+-5- Landscape task terminated
+-4- landscape_ts_band: transition state search did not converge: band reached the iteration limit without converging
+-3- landscape_ts: the Hessian of the saddle confirmation could not be built; the imaginary mode count is unknown
 -2- xtb_calculator_singlepoint: Electronic structure method terminated
 -1- scf: Self consistent charge iterator did not converge
+Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
+ERROR STOP 
+
+Error termination. Backtrace:
+#0  0x521a21 in terminate_
+#1  0x437c58 in __xtb_prog_main_MOD_xtbmain
+#2  0x408cca in main
+abnormal termination of oxtb
 ########################################################################

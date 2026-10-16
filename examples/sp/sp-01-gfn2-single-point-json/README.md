@@ -18,7 +18,7 @@ oxtb input.xyz --gfn 2 --sp --ljson --norestart
 ```
 
 `--norestart` keeps the run independent of a stale `xtbrestart` from an earlier run (see
-"Reproduce" below). The binary is the installed OxTB 0.1.0 / xTB 6.7.1 release, commit `c712f9e`.
+"Reproduce" below). The binary is the installed OxTB 0.1.0 / xTB 6.7.1 release, commit `8a0ad67`.
 
 **Observed result** (`oxtb.log`):
 
@@ -28,7 +28,7 @@ oxtb input.xyz --gfn 2 --sp --ljson --norestart
 | HOMO-LUMO gap | **0.1351135 Eh = 3.676625649790 eV** |
 | gradient norm | 8.231235387188e-04 Eh/bohr |
 | SCC iterations | 11 |
-| wall time | **0.03 s** |
+| wall time | **0.02 s** |
 
 **Reading `landscape_sp.json` (format 2).** Every document starts with the same core block:
 
@@ -41,7 +41,7 @@ oxtb input.xyz --gfn 2 --sp --ljson --norestart
 | `n_atoms` | `30` |
 | `energy` | `-5.23737712440669227E+001` (hartree, same number as the log) |
 | `geometry` | `unit: "bohr"`, `symbols`, `coordinates` |
-| `provenance` | `oxtb_version 0.1.0`, `engine_version 6.7.1`, `commit c712f9e...`, `command_line`, `method "GFN2-xTB"`, `charge 0`, `spin 0`, `input_file` |
+| `provenance` | `oxtb_version 0.1.0`, `engine_version 6.7.1`, `commit 8a0ad67...`, `command_line`, `method "GFN2-xTB"`, `charge 0`, `spin 0`, `input_file` |
 | `counters` / `values` / `flags` / `history` | task-specific; here `values.gnorm = 8.23123538718708572E-004` |
 
 The block order is fixed, so one parser reads every task's document (sp, opt, scan, ts, irc, vib).
@@ -62,4 +62,4 @@ grep 'TOTAL ENERGY' oxtb.log
 ```
 
 Deleting the outputs and re-running reproduces `landscape_sp.json` **byte for byte**
-(sha256 `af01c3e8…`); the log differs only in timestamps and the random seed.
+(sha256 `97dfcf29…`); the log differs only in timestamps, the random seed and the timing table.

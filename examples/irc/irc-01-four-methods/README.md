@@ -28,20 +28,27 @@ oxtb input.xyz --gfn 2 --lirc --lirc-method gs      --lirc-max-steps 40 --namesp
 
 | method | forward steps | backward steps | forward endpoint / Eh | backward endpoint / Eh | fwd rmsd to min / bohr | bwd rmsd to min / bohr | wall time |
 |---|---|---|---|---|---|---|---|
-| **hpc** (default) | 5 | 6 | -52.373673 | -52.373672 | 0.0055 | 0.0056 | 3.6 s |
-| lqa | 5 | 6 | -52.373662 | -52.373667 | 0.0056 | 0.0057 | 3.2 s |
-| eulerpc | 8 | 15 | -52.373331 | -52.373370 | 0.0070 | 0.0068 | 6.1 s |
-| gs | 5 | 6 | -52.373732 | -52.373721 | 0.0042 | 0.0046 | 2.9 s |
+| **hpc** (default) | 6 | 5 | -52.373672 | -52.373673 | 0.0056 | 0.0055 | 2.3 s |
+| lqa | 6 | 5 | -52.373667 | -52.373662 | 0.0057 | 0.0056 | 1.8 s |
+| eulerpc | 15 | 8 | -52.373370 | -52.373331 | 0.0068 | 0.0070 | 5.2 s |
+| gs | 6 | 5 | -52.373721 | -52.373732 | 0.0046 | 0.0042 | 1.5 s |
 
 Every method reports `forward reached minimum: T` and `backward reached minimum: T`.  The two
 minima it points to are degenerate:
 
-* forward minimum **-52.373773548 Eh** (rmsd to the forward endpoint 0.0055 bohr)
-* backward minimum **-52.373772129 Eh** (rmsd to the backward endpoint 0.0056 bohr)
+* forward minimum **-52.373772129 Eh** (rmsd to the forward endpoint 0.0056 bohr)
+* backward minimum **-52.373773548 Eh** (rmsd to the backward endpoint 0.0055 bohr)
 
-hpc, lqa and gs agree closely (5/6 steps, endpoints within 1e-4 Eh of each other); eulerpc takes a
-different route (8/15 steps) and stops earlier because it uses a different corrector and triggers on
+hpc, lqa and gs agree closely (6/5 steps, endpoints within 1e-4 Eh of each other); eulerpc takes a
+different route (15/8 steps) and stops earlier because it uses a different corrector and triggers on
 `energy_rise`, so its endpoints are 3e-4 Eh higher - still the same two minima.
+
+The transition vector of this symmetric double proton transfer has equal-sized dominant components
+on the two symmetry-related protons, so which of the two atoms the `phase component` line names (and
+hence which half is called *forward*) is decided by round-off. This release names atom **10**, where
+the pre-refresh release named atom **25**, so the *forward* and *backward* columns of the table
+above carry the opposite labels to the earlier edition even though the two physical halves are the
+same. `irc-02` shows the convention directly.
 
 **How to read the output files.**
 

@@ -11,7 +11,7 @@
 | highest image | 8, -56.834307439160 Eh |
 | barrier (TS - product) | **49.87 kcal/mol** |
 | saddle confirmation | 1 imaginary mode, -360.45 cm^-1 |
-| wall time | 10.2 s |
+| wall time | 5.8 s |
 
 Note: plain NEB/CI-NEB write the saddle candidate to `xtbts.xyz`; `path_ts_list.xyz` is written by
 AutoNEB and the string method, not here.

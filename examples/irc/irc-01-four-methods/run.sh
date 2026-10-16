@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # irc-01: one transition state integrated by all four IRC methods (hpc, lqa,
 # eulerpc, gs); the default method keeps its natural irc_forward/backward/log.
-#                                                          [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+#                                                          [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 set -uo pipefail
 export OMP_NUM_THREADS=1
 export XTBPATH="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")/../../..")"

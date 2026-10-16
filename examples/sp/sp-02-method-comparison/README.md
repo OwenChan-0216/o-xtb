@@ -47,4 +47,5 @@ rm -f oxtb-gfn*.log
 grep -h 'total energy' oxtb-gfn*.log
 ```
 
-Wall time of all four runs together: **0.08 s**. A clean re-run reproduces the four energies.
+Wall time of all four runs together: **0.05 s**. A clean re-run reproduces the four energies
+bit for bit.

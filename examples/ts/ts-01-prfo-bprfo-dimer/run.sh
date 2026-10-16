@@ -2,7 +2,7 @@
 # ts-01: one 30-atom system, three saddle searches, and the shipped-default
 # behaviour of each.  PRFO converges straight from the delivered TS guess;
 # B-PRFO and the dimer need the guess displaced 0.15 A along the transfer
-# coordinate.                                             [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+# coordinate.                                             [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 set -uo pipefail
 export OMP_NUM_THREADS=1
 export XTBPATH="$(readlink -f "$(dirname "${BASH_SOURCE[0]}")/../../..")"

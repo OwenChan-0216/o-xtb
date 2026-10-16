@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # chain step 02: refine the saddle candidate the band reported with P-RFO.
 # The raw band candidate is not a usable transition state (see the README), so
-# this step is required before the IRC.                   [OxTB 0.1.0 / xTB 6.7.1, c712f9e]
+# this step is required before the IRC.                   [OxTB 0.1.0 / xTB 6.7.1, 8a0ad67]
 set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export OMP_NUM_THREADS=1

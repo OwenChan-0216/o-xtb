@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:53:38.428     
+ * started run on 2026/10/16 at 15:11:22.466     
    ID    Z sym.   atoms
     1    6 C      1-14, 25, 27-29
     2    1 H      15-24, 32, 33
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn 2 --lts --lts-method prfo --lts-level normal --lts-max-steps 80 --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :             393368661
+          random seed                :             378097798
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -190,7 +190,7 @@ constraining FC (au)   :  0.0500
    8    -57.7363950 -0.213374E-05  0.673E-03    2.17       2.6  T
    9    -57.7363956 -0.618938E-06  0.208E-03    2.17       8.4  T
   10    -57.7363957 -0.647744E-07  0.848E-04    2.17      20.5  T
-  11    -57.7363957 -0.947509E-08  0.403E-04    2.17      43.2  T
+  11    -57.7363957 -0.947514E-08  0.403E-04    2.17      43.2  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -216,21 +216,21 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.0796395 Eh            2.1671 eV
              Fermi-level           -0.3541770 Eh           -9.6376 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.024 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.415%)
- Dispersion                     ...        0 min,  0.000 sec (  1.071%)
- classical contributions        ...        0 min,  0.000 sec (  0.110%)
- integral evaluation            ...        0 min,  0.004 sec ( 17.178%)
- iterations                     ...        0 min,  0.010 sec ( 41.611%)
- molecular gradient             ...        0 min,  0.010 sec ( 39.125%)
- printout                       ...        0 min,  0.000 sec (  0.461%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.015 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.933%)
+ Dispersion                     ...        0 min,  0.000 sec (  2.027%)
+ classical contributions        ...        0 min,  0.000 sec (  0.206%)
+ integral evaluation            ...        0 min,  0.002 sec ( 10.112%)
+ iterations                     ...        0 min,  0.010 sec ( 67.939%)
+ molecular gradient             ...        0 min,  0.003 sec ( 17.509%)
+ printout                       ...        0 min,  0.000 sec (  0.893%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          :: total energy             -56.834307440049 Eh    ::
          :: gradient norm              0.005315494464 Eh/a0 ::
-         :: HOMO-LUMO gap              2.167099923148 eV    ::
+         :: HOMO-LUMO gap              2.167099923150 eV    ::
          ::.................................................::
          :: SCC energy               -57.735671680262 Eh    ::
          :: -> isotropic ES            0.068235736842 Eh    ::
@@ -451,18 +451,18 @@ molecular quadrupole (traceless):
            -------------------------------------------------
           | TOTAL ENERGY              -56.834192216439 Eh   |
           | GRADIENT NORM               0.000008911784 Eh/α |
-          | HOMO-LUMO GAP               2.167099923148 eV   |
+          | HOMO-LUMO GAP               2.167099923150 eV   |
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:53:54.784     
+ * finished run on 2026/10/16 at 15:11:31.008     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min, 16.356 sec
- *  cpu-time:     0 d,  0 h,  0 min, 16.356 sec
+ * wall-time:     0 d,  0 h,  0 min,  8.542 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  8.542 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.025 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.025 sec
+ * wall-time:     0 d,  0 h,  0 min,  0.015 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.015 sec
  * ratio c/w:     0.997 speedup
 

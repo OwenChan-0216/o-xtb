@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:49:17.923     
+ * started run on 2026/10/16 at 15:11:38.821     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn 2 --lirc --lirc-method hpc --lirc-max-steps 60 --lirc-grad-tol 1e-5 --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :             242946303
+          random seed                :             858169309
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -189,8 +189,8 @@ constraining FC (au)   :  0.0500
    7    -53.0949076 -0.462958E-05  0.978E-03    3.50       1.9  T
    8    -53.0949078 -0.193542E-06  0.375E-03    3.50       4.9  T
    9    -53.0949080 -0.216371E-06  0.154E-03    3.50      11.9  T
-  10    -53.0949080 -0.211997E-07  0.674E-04    3.50      27.1  T
-  11    -53.0949080 -0.589863E-08  0.259E-04    3.50      70.5  T
+  10    -53.0949080 -0.211996E-07  0.674E-04    3.50      27.1  T
+  11    -53.0949080 -0.589875E-08  0.259E-04    3.50      70.5  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -216,21 +216,21 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.1285679 Eh            3.4985 eV
              Fermi-level           -0.3419241 Eh           -9.3042 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.016 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.620%)
- Dispersion                     ...        0 min,  0.000 sec (  0.999%)
- classical contributions        ...        0 min,  0.000 sec (  0.138%)
- integral evaluation            ...        0 min,  0.002 sec ( 13.602%)
- iterations                     ...        0 min,  0.008 sec ( 47.111%)
- molecular gradient             ...        0 min,  0.006 sec ( 37.044%)
- printout                       ...        0 min,  0.000 sec (  0.454%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.011 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.943%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.577%)
+ classical contributions        ...        0 min,  0.000 sec (  0.218%)
+ integral evaluation            ...        0 min,  0.001 sec ( 11.203%)
+ iterations                     ...        0 min,  0.008 sec ( 71.241%)
+ molecular gradient             ...        0 min,  0.002 sec ( 14.112%)
+ printout                       ...        0 min,  0.000 sec (  0.657%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          :: total energy             -52.363974789493 Eh    ::
          :: gradient norm              0.000005667256 Eh/a0 ::
-         :: HOMO-LUMO gap              3.498510707368 eV    ::
+         :: HOMO-LUMO gap              3.498510707366 eV    ::
          ::.................................................::
          :: SCC energy               -53.095304269429 Eh    ::
          :: -> isotropic ES            0.097533522633 Eh    ::
@@ -256,10 +256,10 @@ constraining FC (au)   :  0.0500
  confirmation: first order saddle point
  transition mode index:     1 (eigenvalue -5.446336E-02
  forward is defined by the largest absolute component of the mass weighted transition vector
- phase component:              0.662113 (cartesian 1 of atom 25)
- wrote irc_forward.xyz with 45 frames
- wrote irc_backward.xyz with 51 frames
- wrote irc_path.xyz with 95 frames
+ phase component:              0.662113 (cartesian 1 of atom 10)
+ wrote irc_forward.xyz with 53 frames
+ wrote irc_backward.xyz with 45 frames
+ wrote irc_path.xyz with 97 frames
  wrote irc.log
  --------------------------------------------------------------
  transition state energy:      -52.363974790784 Eh
@@ -267,22 +267,22 @@ constraining FC (au)   :  0.0500
  imaginary modes:          1
  first order saddle point: T
  step length:               1.000000E-01 bohr*amu^1/2
- termination forward:      energy_rise
- termination backward:     gradient
- forward points:           44
- backward points:          50
- forward arc length:               4.279761 bohr*amu^1/2
- forward endpoint energy:      -52.373761029830 Eh
- backward arc length:              4.675687 bohr*amu^1/2
- backward endpoint energy:     -52.373782333968 Eh
- backward reached minimum: T (rmsd     0.000009 bohr, minimum     -52.373782339853 Eh)
- forward reached minimum: T (rmsd     0.000881 bohr, minimum     -52.373778976413 Eh)
- sphere relaxation pinned:  0 of 94 points (GS micro cycle budget; 0 for the predictor-corrector)
- phase component:          73 (value     0.662113)
+ termination forward:      gradient
+ termination backward:     energy_rise
+ forward points:           52
+ backward points:          44
+ forward arc length:               4.799897 bohr*amu^1/2
+ forward endpoint energy:      -52.373782358503 Eh
+ backward arc length:              4.279755 bohr*amu^1/2
+ backward endpoint energy:     -52.373760998049 Eh
+ backward reached minimum: T (rmsd     0.000882 bohr, minimum     -52.373778974769 Eh)
+ forward reached minimum: T (rmsd     0.000008 bohr, minimum     -52.373782362427 Eh)
+ sphere relaxation pinned:  0 of 96 points (GS micro cycle budget; 0 for the predictor-corrector)
+ phase component:          28 (value     0.662113)
  directions swapped:       F
  etemp:                         300.000 K
  --------------------------------------------------------------
- landscape engine: energy evaluations 375
+ landscape engine: energy evaluations 379
  landscape engine: cache hits         0
  landscape engine: Hessians           1
  landscape engine: Hessian-vector     0
@@ -387,7 +387,7 @@ largest (>0.10) Wiberg bond orders for each atom
                              2 C    0.108
      6   6 C    3.988 --     5 C    1.455     1 C    1.387    15 H    0.966
                              3 C    0.108
-     7   6 C    3.916 --     9 O    1.424     8 O    1.424     1 C    1.008
+     7   6 C    3.916 --     8 O    1.424     9 O    1.424     1 C    1.008
      8   8 O    2.173 --     7 C    1.424    25 H    0.407     9 O    0.184
      9   8 O    2.173 --     7 C    1.424    10 H    0.407     8 O    0.184
     10   1 H    0.849 --     9 O    0.407    23 O    0.407
@@ -410,7 +410,7 @@ normal termination of oxtb
                             17 C    0.108
     21   6 C    3.988 --    20 C    1.455    16 C    1.387    30 H    0.966
                             18 C    0.108
-    22   6 C    3.916 --    23 O    1.424    24 O    1.424    16 C    1.008
+    22   6 C    3.916 --    24 O    1.424    23 O    1.424    16 C    1.008
     23   8 O    2.173 --    22 C    1.424    10 H    0.407    24 O    0.184
     24   8 O    2.173 --    22 C    1.424    25 H    0.407    23 O    0.184
     25   1 H    0.849 --    24 O    0.407     8 O    0.407
@@ -426,8 +426,8 @@ Writing topology from bond orders to xtbtopo.mol
 
 molecular dipole:
                  x           y           z       tot (Debye)
- q only:       -0.000      -0.000       0.000
-   full:       -0.000      -0.000       0.000       0.000
+ q only:        0.000       0.000       0.000
+   full:        0.000       0.000       0.000       0.000
 molecular quadrupole (traceless):
                 xx          xy          yy          xz          yz          zz
  q only:       22.857       1.321     -10.370       0.000       0.000     -12.486
@@ -438,22 +438,22 @@ molecular quadrupole (traceless):
            -------------------------------------------------
           | TOTAL ENERGY              -52.363974790784 Eh   |
           | GRADIENT NORM               0.000003946471 Eh/α |
-          | HOMO-LUMO GAP               3.498558226106 eV   |
+          | HOMO-LUMO GAP               3.498558226104 eV   |
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:49:29.215     
+ * finished run on 2026/10/16 at 15:11:49.114     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min, 11.292 sec
- *  cpu-time:     0 d,  0 h,  0 min, 11.292 sec
+ * wall-time:     0 d,  0 h,  0 min, 10.293 sec
+ *  cpu-time:     0 d,  0 h,  0 min, 10.292 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.016 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.016 sec
+ * wall-time:     0 d,  0 h,  0 min,  0.011 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.011 sec
  * ratio c/w:     0.998 speedup
  landscape IRC:
- * wall-time:     0 d,  0 h,  0 min, 11.268 sec
- *  cpu-time:     0 d,  0 h,  0 min, 11.268 sec
+ * wall-time:     0 d,  0 h,  0 min, 10.276 sec
+ *  cpu-time:     0 d,  0 h,  0 min, 10.276 sec
  * ratio c/w:     1.000 speedup
 

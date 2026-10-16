@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:48:12.893     
+ * started run on 2026/10/16 at 15:11:35.301     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn 2 --lts --lts-method prfo --lts-level normal --lts-max-steps 60 --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :            1590929405
+          random seed                :            1617139630
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -189,8 +189,8 @@ constraining FC (au)   :  0.0500
    7    -53.0939464 -0.463722E-05  0.980E-03    3.50       1.9  T
    8    -53.0939466 -0.193162E-06  0.378E-03    3.50       4.8  T
    9    -53.0939468 -0.218419E-06  0.155E-03    3.50      11.8  T
-  10    -53.0939468 -0.220060E-07  0.671E-04    3.50      27.2  T
-  11    -53.0939468 -0.563708E-08  0.266E-04    3.50      68.7  T
+  10    -53.0939468 -0.220061E-07  0.671E-04    3.50      27.2  T
+  11    -53.0939468 -0.563722E-08  0.266E-04    3.50      68.7  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -216,28 +216,28 @@ constraining FC (au)   :  0.0500
                   HL-Gap            0.1287269 Eh            3.5028 eV
              Fermi-level           -0.3419890 Eh           -9.3060 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.018 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.572%)
- Dispersion                     ...        0 min,  0.000 sec (  1.002%)
- classical contributions        ...        0 min,  0.000 sec (  0.156%)
- integral evaluation            ...        0 min,  0.003 sec ( 14.388%)
- iterations                     ...        0 min,  0.008 sec ( 45.042%)
- molecular gradient             ...        0 min,  0.007 sec ( 38.081%)
- printout                       ...        0 min,  0.000 sec (  0.717%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.013 sec
+ SCC setup                      ...        0 min,  0.000 sec (  1.007%)
+ Dispersion                     ...        0 min,  0.000 sec (  1.860%)
+ classical contributions        ...        0 min,  0.000 sec (  0.256%)
+ integral evaluation            ...        0 min,  0.001 sec ( 11.165%)
+ iterations                     ...        0 min,  0.010 sec ( 73.281%)
+ molecular gradient             ...        0 min,  0.002 sec ( 11.833%)
+ printout                       ...        0 min,  0.000 sec (  0.557%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
-         :: total energy             -52.363967979762 Eh    ::
-         :: gradient norm              0.000862193882 Eh/a0 ::
-         :: HOMO-LUMO gap              3.502836429592 eV    ::
+         :: total energy             -52.363967979763 Eh    ::
+         :: gradient norm              0.000862193676 Eh/a0 ::
+         :: HOMO-LUMO gap              3.502836429439 eV    ::
          ::.................................................::
-         :: SCC energy               -53.094342778296 Eh    ::
-         :: -> isotropic ES            0.097555536546 Eh    ::
-         :: -> anisotropic ES         -0.004596065079 Eh    ::
-         :: -> anisotropic XC          0.015588776886 Eh    ::
-         :: -> dispersion             -0.027275217329 Eh    ::
-         :: repulsion energy           0.730374798534 Eh    ::
+         :: SCC energy               -53.094342778414 Eh    ::
+         :: -> isotropic ES            0.097555536550 Eh    ::
+         :: -> anisotropic ES         -0.004596065083 Eh    ::
+         :: -> anisotropic XC          0.015588776883 Eh    ::
+         :: -> dispersion             -0.027275217330 Eh    ::
+         :: repulsion energy           0.730374798651 Eh    ::
          :: add. restraining           0.000000000000 Eh    ::
          :: total charge               0.000000000000 e     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -256,17 +256,17 @@ constraining FC (au)   :  0.0500
          pass --lts-escape-step 0 to disable the escape walk
  electronic temperature:        300.000 K (frozen for the whole run)
  transition mode: index 1, eigenvalue      -0.06867774 Eh/bohr^2
- transition vector component:     0.687449 (cartesian 1 of atom 25)
+ transition vector component:     0.687449 (cartesian 1 of atom 10)
  transition vector overlap:     1.000000
  selected mode, rigid body overlap:     0.000000
     iter            energy/Eh        dE/(kcal/mol)   gmax/(Eh/bohr)  dmax/bohr     trust/bohr
-      1     -52.363974789278      -0.0043  2.702069E-06  1.094325E-02  6.614125E-01
+      1     -52.363974789278      -0.0043  2.702068E-06  1.094325E-02  6.614125E-01
    shifts: lambda_p=  1.144904E-07 lambda_n= -1.371413E-05 lifted=F followed=F
-      2     -52.363974789450      -0.0000  8.803282E-07  8.013536E-05  4.960594E-01
-   shifts: lambda_p=  5.123818E-12 lambda_n= -2.090558E-08 lifted=F followed=T
+      2     -52.363974789450      -0.0000  8.803282E-07  8.013535E-05  4.960594E-01
+   shifts: lambda_p=  5.123811E-12 lambda_n= -2.090559E-08 lifted=F followed=T
  final transition vector
  transition mode: index 1, eigenvalue      -0.06803915 Eh/bohr^2
- transition vector component:     0.687637 (cartesian 1 of atom 25)
+ transition vector component:     0.687637 (cartesian 1 of atom 10)
  transition vector overlap:     0.999992
  saddle confirmation - imaginary modes: 1
  most negative frequency:         -1199.70 cm^-1
@@ -285,7 +285,7 @@ constraining FC (au)   :  0.0500
  convergence history
  criteria (gmax,grms,dmax,drms):  T T T T
     iter        energy            gnorm          trust
-      1     -52.363974789278    6.624934E-06    6.614125E-01
+      1     -52.363974789278    6.624933E-06    6.614125E-01
       2     -52.363974789450    2.162686E-06    4.960594E-01
  wrote xtbts.xyz
  wrote xtbts.log
@@ -341,38 +341,38 @@ constraining FC (au)   :  0.0500
 
      #   Z          covCN         q      C6AA      α(0)
      1   6 C        2.974    -0.017    28.428     8.746
-     2   6 C        2.922    -0.020    28.502     8.755
+     2   6 C        2.922    -0.020    28.503     8.755
      3   6 C        2.919    -0.026    28.653     8.778
      4   6 C        2.920    -0.020    28.516     8.757
      5   6 C        2.919    -0.026    28.653     8.778
      6   6 C        2.922    -0.020    28.502     8.755
      7   6 C        2.697     0.365    20.810     7.466
-     8   8 O        1.343    -0.435    21.947     6.303
-     9   8 O        1.343    -0.435    21.949     6.303
+     8   8 O        1.343    -0.435    21.948     6.303
+     9   8 O        1.343    -0.435    21.948     6.303
     10   1 H        0.972     0.387     0.498     1.103
     11   1 H        0.926     0.061     2.190     2.314
-    12   1 H        0.926     0.042     2.424     2.434
+    12   1 H        0.926     0.042     2.424     2.435
     13   1 H        0.926     0.041     2.432     2.439
     14   1 H        0.926     0.042     2.423     2.434
     15   1 H        0.926     0.061     2.189     2.314
     16   6 C        2.974    -0.017    28.428     8.746
-    17   6 C        2.922    -0.020    28.503     8.755
+    17   6 C        2.922    -0.020    28.502     8.755
     18   6 C        2.919    -0.026    28.653     8.778
     19   6 C        2.920    -0.020    28.516     8.757
     20   6 C        2.919    -0.026    28.653     8.778
     21   6 C        2.922    -0.020    28.502     8.755
     22   6 C        2.697     0.365    20.810     7.466
-    23   8 O        1.343    -0.435    21.948     6.303
-    24   8 O        1.343    -0.435    21.948     6.303
+    23   8 O        1.343    -0.435    21.947     6.303
+    24   8 O        1.343    -0.435    21.949     6.303
     25   1 H        0.972     0.387     0.498     1.103
     26   1 H        0.926     0.061     2.190     2.314
-    27   1 H        0.926     0.042     2.424     2.435
+    27   1 H        0.926     0.042     2.424     2.434
     28   1 H        0.926     0.041     2.432     2.439
     29   1 H        0.926     0.042     2.423     2.434
     30   1 H        0.926     0.061     2.189     2.314
 
  Mol. C6AA /au·bohr⁶  :      11748.542804
- Mol. C8AA /au·bohr⁸  :     286063.714173
+ Mol. C8AA /au·bohr⁸  :     286063.714174
  Mol. α(0) /au        :        171.358229
 
 
@@ -395,9 +395,9 @@ largest (>0.10) Wiberg bond orders for each atom
      6   6 C    3.988 --     5 C    1.455     1 C    1.387    15 H    0.966
                              3 C    0.108
      7   6 C    3.916 --     8 O    1.424     9 O    1.424     1 C    1.007
-     8   8 O    2.174 --     7 C    1.424    25 H    0.407     9 O    0.184
+     8   8 O    2.174 --     7 C    1.424    25 H    0.406     9 O    0.184
      9   8 O    2.173 --     7 C    1.424    10 H    0.406     8 O    0.184
-    10   1 H    0.849 --    23 O    0.406     9 O    0.406
+    10   1 H    0.849 --    23 O    0.407     9 O    0.406
     11   1 H    0.996 --     2 C    0.966
     12   1 H    0.998 --     3 C    0.970
     13   1 H    0.998 --     4 C    0.971
@@ -418,9 +418,9 @@ normal termination of oxtb
     21   6 C    3.988 --    20 C    1.455    16 C    1.387    30 H    0.966
                             18 C    0.108
     22   6 C    3.916 --    23 O    1.424    24 O    1.424    16 C    1.007
-    23   8 O    2.174 --    22 C    1.424    10 H    0.406    24 O    0.184
+    23   8 O    2.174 --    22 C    1.424    10 H    0.407    24 O    0.184
     24   8 O    2.173 --    22 C    1.424    25 H    0.406    23 O    0.184
-    25   1 H    0.849 --     8 O    0.407    24 O    0.406
+    25   1 H    0.849 --     8 O    0.406    24 O    0.406
     26   1 H    0.996 --    17 C    0.966
     27   1 H    0.998 --    18 C    0.970
     28   1 H    0.998 --    19 C    0.971
@@ -433,8 +433,8 @@ Writing topology from bond orders to xtbtopo.mol
 
 molecular dipole:
                  x           y           z       tot (Debye)
- q only:       -0.000      -0.000       0.000
-   full:       -0.000      -0.000       0.000       0.001
+ q only:        0.000       0.000       0.000
+   full:        0.000       0.000       0.000       0.001
 molecular quadrupole (traceless):
                 xx          xy          yy          xz          yz          zz
  q only:       22.837       1.326     -10.362      -0.000       0.000     -12.475
@@ -445,18 +445,18 @@ molecular quadrupole (traceless):
            -------------------------------------------------
           | TOTAL ENERGY              -52.363974789450 Eh   |
           | GRADIENT NORM               0.000002162686 Eh/α |
-          | HOMO-LUMO GAP               3.502836429592 eV   |
+          | HOMO-LUMO GAP               3.502836429439 eV   |
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:48:19.841     
+ * finished run on 2026/10/16 at 15:11:38.804     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min,  6.948 sec
- *  cpu-time:     0 d,  0 h,  0 min,  6.948 sec
+ * wall-time:     0 d,  0 h,  0 min,  3.503 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  3.503 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.018 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.018 sec
+ * wall-time:     0 d,  0 h,  0 min,  0.013 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.013 sec
  * ratio c/w:     1.000 speedup
 

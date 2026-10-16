@@ -28,7 +28,7 @@ oxtb input.xyz --gfn 2 --lvib --lvib-temp 298.15 --norestart
 | total enthalpy H(T) | -52.130666 Eh |
 | total free energy G(T) | -52.189615 Eh |
 | exit status | **0** (the run completes; the flags are warnings, not an abort) |
-| wall time | 2.2 s |
+| wall time | 1.17 s |
 
 **The non-minimum flags the task prints** (all in `oxtb.log`):
 

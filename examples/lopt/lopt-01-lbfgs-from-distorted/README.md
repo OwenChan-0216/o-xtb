@@ -35,7 +35,7 @@ oxtb input.xyz --gfn 2 --lopt --lopt-engine lbfgs --lopt-level normal \
 | energy calls | 43 |
 | final gradient norm | 9.871240e-04 Eh/bohr |
 | max gradient component | 2.691619e-04 Eh/bohr (threshold 3.0e-04) |
-| wall time | **1.11 s** |
+| wall time | **0.61 s** |
 
 The run stops on the `normal`-level thresholds (`gmax 3.0e-04`, `etol 5e-06`); the geometry is a
 true minimum, but not converged to machine precision — that is what the `vtight` level is for.
@@ -61,4 +61,4 @@ grep -E 'steps:|final energy|final gradient' oxtb.log
 ```
 
 A clean re-run reproduces `xtbopt.xyz` and `xtbopt.log` **byte for byte**
-(sha256 `b0d670fa…` / `68197e04…`).
+(sha256 `13f62732…` / `28bffa1e…`).

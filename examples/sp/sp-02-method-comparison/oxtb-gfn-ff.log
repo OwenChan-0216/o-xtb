@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:12:33.685     
+ * started run on 2026/10/16 at 15:11:49.213     
    ID    Z sym.   atoms
     1    6 C      1-7, 16-22
     2    8 O      8, 9, 23, 24
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn ff --sp --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :             967902442
+          random seed                :            1140442164
 
 
 molecular fragmentation (1/2 indicates fragments):
@@ -212,16 +212,16 @@ constraining FC (au)   :  0.0500
           Number of XB bonds                      0
 
  E+G (total)                   0 d,  0 h,  0 min,  0.000 sec
- distance/D3 list               ...        0 min,  0.000 sec (  0.486%)
- non bonded repulsion           ...        0 min,  0.000 sec (  7.005%)
- dCN                            ...        0 min,  0.000 sec (  3.839%)
- EEQ energy and q               ...        0 min,  0.000 sec (  7.838%)
- D3                             ...        0 min,  0.000 sec ( 10.019%)
- EEQ gradient                   ...        0 min,  0.000 sec (  1.871%)
- bonds                          ...        0 min,  0.000 sec (  4.570%)
- bend and torsion               ...        0 min,  0.000 sec (  6.902%)
- bonded ATM                     ...        0 min,  0.000 sec (  2.917%)
- HB/XB (incl list setup)        ...        0 min,  0.000 sec ( 53.193%)
+ distance/D3 list               ...        0 min,  0.000 sec (  0.423%)
+ non bonded repulsion           ...        0 min,  0.000 sec (  9.580%)
+ dCN                            ...        0 min,  0.000 sec (  3.347%)
+ EEQ energy and q               ...        0 min,  0.000 sec (  5.136%)
+ D3                             ...        0 min,  0.000 sec (  9.701%)
+ EEQ gradient                   ...        0 min,  0.000 sec (  1.543%)
+ bonds                          ...        0 min,  0.000 sec (  6.401%)
+ bend and torsion               ...        0 min,  0.000 sec (  7.387%)
+ bonded ATM                     ...        0 min,  0.000 sec (  2.782%)
+ HB/XB (incl list setup)        ...        0 min,  0.000 sec ( 52.299%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -260,14 +260,14 @@ molecular dipole:
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:12:33.688     
+ * finished run on 2026/10/16 at 15:11:49.216     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min,  0.004 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.004 sec
+ * wall-time:     0 d,  0 h,  0 min,  0.003 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.003 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.000 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.000 sec
- * ratio c/w:     0.998 speedup
+ * wall-time:     0 d,  0 h,  0 min,  0.001 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.001 sec
+ * ratio c/w:     1.000 speedup
 

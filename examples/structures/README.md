@@ -3,15 +3,15 @@
 These are the validated starting materials for the worked examples of the landscape suite
 (`--lopt`, `--lscan`, `--lts`, `--lirc`, `--lvib`).  Every system is a **GFN2-xTB** job of
 **30-50 atoms** whose single point finishes in well under 10 s at `OMP_NUM_THREADS=1`
-(measured 0.03 s each), and every system has a **well-defined reaction coordinate with a genuine
+(measured 0.02 s each), and every system has a **well-defined reaction coordinate with a genuine
 transition state** that shows **exactly one significant imaginary frequency**.
 
 All commands below were run with `OMP_NUM_THREADS=1` against the **installed static release**
 `/home/owenchan/programs/o-xtb/bin/oxtb` (`oxtb --version` -> `OxTB version 0.1.0`,
-`xTB version 6.7.1`, `Compiled on 2026/10/12 from c712f9e`; a self-contained copy is kept at
-`/tmp/lane-structures/oxtb`).  The numbers were first produced with a build of the same source at
-HEAD `4576b9a` and were re-checked bitwise against this release; they are reproduced verbatim in
-`docs/_simplify-recon/141-example-structures.md`.
+`xTB version 6.7.1`, `Compiled on 2026/10/16 from 8a0ad67`).  The numbers were first produced with a
+build of the same source at HEAD `4576b9a` (recorded in
+`docs/_simplify-recon/141-example-structures.md`); they were re-derived from this release for the
+examples refresh (`docs/_simplify-recon/148-examples-refresh.md`).
 
 Conventions used in the tables: energies in hartree, frequencies in cm^-1, wall times as measured.
 
@@ -39,9 +39,9 @@ maleic anhydride are 28 and 29).  They are symmetry-equivalent, so the reaction 
 
 ```bash
 oxtb reactant.xyz --gfn 2 --sp
-#   TOTAL ENERGY -56.821808533251 Eh      wall time 0.036 s
+#   TOTAL ENERGY -56.821808533251 Eh      wall time 0.027 s
 oxtb reactant.xyz --gfn 2 --lopt --lopt-engine lbfgs --lopt-level normal
-#   converged: T   final energy -56.821808944025 Eh   (11 steps, 0.07 s)
+#   converged: T   final energy -56.821808944025 Eh   (1 step, 0.04 s)
 oxtb ts_guess.xyz --gfn 2 --lvib
 #   eigval: -308.68  43.31  79.73 ...      # imaginary freq. 1
 #   found 1 significant imaginary frequency
@@ -55,6 +55,10 @@ oxtb ts_guess.xyz --gfn 2 --lirc --lirc-method hpc --lirc-max-steps 40 \
      --lirc-step 0.4 --lirc-grad-tol 1e-4
 #   forward 40 points -> -56.9126 Eh (the product)
 #   backward 13 points -> minimum -56.8391 Eh (a pre-reactive complex)
+#   (which half is called forward follows the phase of the transition vector, which this release
+#    fixes on atom 10; a build from before the 2026-10-16 performance PRs named atom 25 and therefore
+#    swaps the two labels.  The same two minima are reached either way - the two protons of this
+#    symmetric transfer are equivalent, so the choice is decided by round-off.)
 #   (with the default --lirc-step 0.1 / --lirc-grad-tol 1e-3 the walk stops after 1 point;
 #    the -308 cm-1 mode is soft, see "IRC note" below)
 oxtb product.xyz --gfn 2 --lscan --lscan-coord distance --lscan-atoms 7,28 \
@@ -91,7 +95,7 @@ in the dimer.
 
 ```bash
 oxtb reactant.xyz --gfn 2 --sp
-#   TOTAL ENERGY -52.373771244067 Eh      wall time 0.026 s
+#   TOTAL ENERGY -52.373771244067 Eh      wall time 0.016 s
 oxtb reactant.xyz --gfn 2 --lopt --lopt-engine lbfgs --lopt-level normal
 #   converged: T   final energy -52.373771818978 Eh
 oxtb ts_guess.xyz --gfn 2 --lvib
@@ -108,7 +112,7 @@ oxtb ts_guess.xyz --gfn 2 --lirc --lirc-method hpc --lirc-max-steps 40
 oxtb reactant.xyz --gfn 2 --lscan --lscan-coord distance --lscan-atoms 9,10 \
      --lscan-step 0.05 --lscan-nstep 25 --lscan-level normal --lscan-max-steps 150
 #   51 frames of d(O9-H10) 1.008 -> 2.254 A; the profile has a maximum of -52.3639 Eh at
-#   d(O9-H10) = 1.25 A (barrier 6.2 kcal/mol) and returns to -52.3737 Eh when the proton has
+#   d(O9-H10) = 1.25 A (barrier 6.2 kcal/mol) and returns to -52.3738 Eh when the proton has
 #   hopped to O23 -- a genuine transfer barrier, not a monotone ramp
 ```
 
@@ -136,7 +140,7 @@ whose rotations add soft modes.
 
 ```bash
 oxtb reactant.xyz --gfn 2 --sp
-#   TOTAL ENERGY -58.717329795725 Eh      wall time 0.032 s
+#   TOTAL ENERGY -58.717329795725 Eh      wall time 0.019 s
 oxtb reactant.xyz --gfn 2 --lopt --lopt-engine lbfgs --lopt-level normal
 #   converged: T   final energy -58.717330162090 Eh
 oxtb ts_guess.xyz --gfn 2 --lvib
@@ -156,7 +160,7 @@ several soft modes) — use system 2 or 1 when the example needs `--lts --lts-me
 ## Notes for the example lanes
 
 **Atom counts.**  33 / 30 / 36; all within the requested 30-50 range and all GFN2 single points
-run in ~0.03 s at `OMP_NUM_THREADS=1`.
+run in ~0.02 s at `OMP_NUM_THREADS=1`.
 
 **Dimer note.**  The `--lts --lts-method dimer` search converges reliably only when it is **not**
 started exactly at a stationary point.  Starting from `ts_guess.xyz` (gradient ~0) the finite

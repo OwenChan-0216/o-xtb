@@ -11,7 +11,7 @@
 
                              * OxTB version 0.1.0 *
                              * xTB version 6.7.1 *
-                      Compiled on 2026/10/12 from c712f9e
+                      Compiled on 2026/10/16 from 8a0ad67
 
                      Copyright (C) 2017-2020 Stefan Grimme,
                   2019-2020 Sebastian Ehlert and contributors
@@ -106,7 +106,7 @@
    C. Plett, P. Pracht, F. Pultar, J. Seibert, L. M. Seidler, P. Shushkov, S. Spicher,
    M. Stahn, M. Steiner, T. Strunk, J. Stückrath, T. Rose, and J. Unsleber
    
- * started run on 2026/10/13 at 01:50:48.839     
+ * started run on 2026/10/16 at 15:11:16.648     
    ID    Z sym.   atoms
     1    6 C      1-14, 25, 27-29
     2    1 H      15-24, 32, 33
@@ -119,7 +119,7 @@
           program call               : oxtb input.xyz --gfn 2 --lts --lts-method cineb --lts-product ../00-endpoints/ts_guess.xyz --lts-images 9 --lts-level normal --lts-max-steps 200 --norestart
           coordinate file            : input.xyz
           omp threads                :                     1
-          random seed                :            2111769057
+          random seed                :             135075795
 
 
            -------------------------------------------------
@@ -183,7 +183,7 @@
    8    -57.7773050 -0.347043E-05  0.586E-03    3.20       3.0  T
    9    -57.7773053 -0.334513E-06  0.212E-03    3.20       8.2  T
   10    -57.7773054 -0.626681E-07  0.744E-04    3.20      23.4  T
-  11    -57.7773054 -0.919869E-08  0.228E-04    3.20      76.3  T
+  11    -57.7773054 -0.919870E-08  0.228E-04    3.20      76.3  T
 
    *** convergence criteria satisfied after 11 iterations ***
 
@@ -209,14 +209,14 @@
                   HL-Gap            0.1175159 Eh            3.1978 eV
              Fermi-level           -0.3479304 Eh           -9.4677 eV
 
- SCC (total)                   0 d,  0 h,  0 min,  0.026 sec
- SCC setup                      ...        0 min,  0.000 sec (  0.431%)
- Dispersion                     ...        0 min,  0.000 sec (  1.028%)
- classical contributions        ...        0 min,  0.000 sec (  0.115%)
- integral evaluation            ...        0 min,  0.004 sec ( 14.910%)
- iterations                     ...        0 min,  0.011 sec ( 44.703%)
- molecular gradient             ...        0 min,  0.010 sec ( 38.357%)
- printout                       ...        0 min,  0.000 sec (  0.430%)
+ SCC (total)                   0 d,  0 h,  0 min,  0.015 sec
+ SCC setup                      ...        0 min,  0.000 sec (  0.986%)
+ Dispersion                     ...        0 min,  0.000 sec (  2.504%)
+ classical contributions        ...        0 min,  0.000 sec (  0.182%)
+ integral evaluation            ...        0 min,  0.002 sec ( 11.009%)
+ iterations                     ...        0 min,  0.010 sec ( 66.536%)
+ molecular gradient             ...        0 min,  0.003 sec ( 18.012%)
+ printout                       ...        0 min,  0.000 sec (  0.720%)
 
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
          ::                     SUMMARY                     ::
@@ -232,7 +232,7 @@
          :: -> dispersion             -0.043667138571 Eh    ::
          :: repulsion energy           0.862774396008 Eh    ::
          :: add. restraining           0.000000000000 Eh    ::
-         :: total charge               0.000000000000 e     ::
+         :: total charge              -0.000000000000 e     ::
          :::::::::::::::::::::::::::::::::::::::::::::::::::::
 
  landscape: transition state search (cineb)
@@ -483,16 +483,16 @@ molecular quadrupole (traceless):
            -------------------------------------------------
 
 ------------------------------------------------------------------------
- * finished run on 2026/10/13 at 01:50:59.029     
+ * finished run on 2026/10/16 at 15:11:22.447     
 ------------------------------------------------------------------------
  total:
- * wall-time:     0 d,  0 h,  0 min, 10.189 sec
+ * wall-time:     0 d,  0 h,  0 min,  5.799 sec
 Note: The following floating-point exceptions are signalling: IEEE_UNDERFLOW_FLAG IEEE_DENORMAL
 normal termination of oxtb
- *  cpu-time:     0 d,  0 h,  0 min, 10.189 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  5.799 sec
  * ratio c/w:     1.000 speedup
  SCF:
- * wall-time:     0 d,  0 h,  0 min,  0.026 sec
- *  cpu-time:     0 d,  0 h,  0 min,  0.026 sec
+ * wall-time:     0 d,  0 h,  0 min,  0.015 sec
+ *  cpu-time:     0 d,  0 h,  0 min,  0.015 sec
  * ratio c/w:     0.999 speedup
 

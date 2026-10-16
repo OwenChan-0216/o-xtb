@@ -11,7 +11,7 @@
 | profile maximum | **-52.363916 Eh at O9-H10 = 1.25 A** |
 | barrier | **6.18 kcal/mol** |
 | largest hysteresis jump | 3.56e-3 Eh |
-| wall time | 22.5 s |
+| wall time | 13.5 s |
 
 The maximum frame is the transfer saddle; step 03 uses the delivered `ts_guess.xyz` instead, but the
 scan is the honest way to *see* the barrier before searching for the saddle.
