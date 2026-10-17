@@ -62,13 +62,20 @@ jobs:
          # excluded too: it asserts a 3x wall clock speedup on a shared runner
          # and is load sensitive (observed flaky under load), while the
          # assertion itself is unchanged and the check still runs in the local
-         # `ctest -R landscape` suite.
+         # `ctest -R landscape` suite.  `s-dftd3/` and `tblite/` are the fetched
+         # dependencies' own test suites: in Debug their code trips this build's
+         # `-ffpe-trap` (SIGFPE, not a numerical mismatch - report 155), and
+         # their tests cannot be switched off selectively because `WITH_TESTS`
+         # is shared with this project's own tests.
          - name: Run unit tests
            # The failing-test list goes to the job summary as well as to the log:
            # reading the log needs an authenticated API call, the summary does not.
+           # Each failing test is also emitted as a workflow command, which GitHub
+           # turns into a check-run annotation: that is readable through the public
+           # API without a token.
            run: |
              set +e
-             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
+             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing|s-dftd3/|tblite/' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
              status=${PIPESTATUS[0]}
              {
                echo "### Unit tests: exit ${status}"
@@ -78,6 +85,12 @@ jobs:
                  echo '```'
                fi
              } >> "$GITHUB_STEP_SUMMARY"
+             if [ "${status}" -ne 0 ]; then
+               sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40 | \
+                 while IFS= read -r line; do
+                   printf '::error::%s\n' "$line"
+                 done
+             fi
              exit "${status}"
            working-directory: ${{ env.BUILD_DIR }}
            env:
@@ -123,9 +136,14 @@ jobs:
          - name: Run unit tests
            # The failing-test list goes to the job summary as well as to the log:
            # reading the log needs an authenticated API call, the summary does not.
+           # Each failing test is also emitted as a workflow command, which GitHub
+           # turns into a check-run annotation: that is readable through the public
+           # API without a token.  The `s-dftd3/` and `tblite/` entries of the
+           # filter are the fetched dependencies' own test suites, which this
+           # job does not build (see the filter note in `gcc-cmake-build`).
            run: |
              set +e
-             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
+             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing|s-dftd3/|tblite/' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
              status=${PIPESTATUS[0]}
              {
                echo "### Unit tests: exit ${status}"
@@ -135,6 +153,12 @@ jobs:
                  echo '```'
                fi
              } >> "$GITHUB_STEP_SUMMARY"
+             if [ "${status}" -ne 0 ]; then
+               sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40 | \
+                 while IFS= read -r line; do
+                   printf '::error::%s\n' "$line"
+                 done
+             fi
              exit "${status}"
            working-directory: ${{ env.BUILD_DIR }}
            env:
@@ -202,9 +226,14 @@ jobs:
          - name: Run unit tests
            # The failing-test list goes to the job summary as well as to the log:
            # reading the log needs an authenticated API call, the summary does not.
+           # Each failing test is also emitted as a workflow command, which GitHub
+           # turns into a check-run annotation: that is readable through the public
+           # API without a token.  `s-dftd3/` and `tblite/` are the fetched
+           # dependencies' own test suites (this job builds them); see the filter
+           # note in `gcc-cmake-build` for why they are excluded.
            run: |
              set +e
-             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
+             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing|s-dftd3/|tblite/' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
              status=${PIPESTATUS[0]}
              {
                echo "### Unit tests: exit ${status}"
@@ -214,6 +243,12 @@ jobs:
                  echo '```'
                fi
              } >> "$GITHUB_STEP_SUMMARY"
+             if [ "${status}" -ne 0 ]; then
+               sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40 | \
+                 while IFS= read -r line; do
+                   printf '::error::%s\n' "$line"
+                 done
+             fi
              exit "${status}"
            working-directory: ${{ env.BUILD_DIR }}
            env:
