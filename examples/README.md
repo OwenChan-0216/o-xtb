@@ -15,16 +15,16 @@ The examples were produced with the installed release:
 OxTB version 0.1.0   (xTB engine 6.7.1)   Compiled on 2026/10/16 from 8a0ad67
 ```
 
-The current release is **0.2.0**, and it differs from that one **only in the version string**, so the
-recorded numbers still stand.  The claim is checkable without trusting it: the source range
-`8a0ad67..HEAD` touches nothing under `src/` at all (every change in it is an example file), so both
-releases built the same engine and the same landscape suite - the only thing a 0.2.0 run changes is
-the `OxTB version` line of the banner and the `oxtb_version` field of the `--ljson` provenance
-block.  Verified on three cases of different kinds, each run once with the 0.2.0 binary and compared
-against the shipped log next to it (banner, date and JSON version field ignored): `sp-01` reproduces
-the total energy `-52.373771244067 Eh`; `lopt-01` reproduces the final energy `-56.913729348717 Eh`
-and the gradient norm `0.000987123958`; `hess-01` reproduces the full frequency list, with
-`vibspectrum` and `hessian` byte-identical to the shipped files.
+The current release is **0.2.1**.  Since the examples were produced the version string has moved
+twice (`0.1.0` -> `0.2.0` -> `0.2.1`), which changes only the `OxTB version` line of the banner and
+the `oxtb_version` field of the `--ljson` provenance block.  The only change under `src/` in the
+range `8a0ad67..HEAD` is one guard in `src/disp/dftd4.F90` (`zeta`/`dzeta`: `qmod.lt.0` ->
+`qmod.le.0`), which fires only when a Mulliken charge is **exactly** zero.  That guard was measured
+not to move the record: the relaxed distance scan `lscan-01` - the case that reaches that boundary
+geometry - reproduces its shipped `xtbscan.log` (1225 lines, 35 per-point energies, `diff`-clean
+after normalising the build hash in the header), the `sp-01` total energy is `-52.373771244067 Eh`
+as shipped, and the four pinned water single points are unchanged.  So the recorded numbers still
+stand.
 
 ## How to run a case
 
