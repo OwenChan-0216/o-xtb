@@ -355,7 +355,7 @@ pure elemental function zeta(a,c,qref,qmod)
 
    intrinsic :: exp
 
-   if (qmod.lt.0._wp) then
+   if (qmod.le.0._wp) then
       zeta = exp( a )
    else
       zeta = exp( a * ( 1._wp - exp( c * ( 1._wp - qref/qmod ) ) ) )
@@ -371,7 +371,7 @@ pure elemental function dzeta(a,c,qref,qmod)
 
    intrinsic :: exp
 
-   if (qmod.lt.0._wp) then
+   if (qmod.le.0._wp) then
       dzeta = 0._wp
    else
       dzeta = - a * c * exp( c * ( 1._wp - qref/qmod ) ) &

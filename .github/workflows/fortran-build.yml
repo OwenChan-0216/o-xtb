@@ -42,6 +42,7 @@ jobs:
             cmake -B ${{ env.BUILD_DIR }} -G Ninja
             -DCMAKE_BUILD_TYPE=${{ matrix.build }}
             -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG"
+            -DTEST_DRIVE_BUILD_TESTING=OFF
            env:
             FC: ${{ matrix.fc }}
             CC: ${{ matrix.cc }}
@@ -107,7 +108,7 @@ jobs:
          # fast compile smoke test of the tblite/cpcmx-disabled configuration
          # and stays unoptimised on purpose.
          - name: Configure build
-           run: cmake -B ${{ env.BUILD_DIR }} -DWITH_CPCMX=false -DWITH_TBLITE=false -G Ninja
+           run: cmake -B ${{ env.BUILD_DIR }} -DWITH_CPCMX=false -DWITH_TBLITE=false -DTEST_DRIVE_BUILD_TESTING=OFF -G Ninja
            env:
             FC: ${{ matrix.fc }}
             CC: ${{ matrix.cc }}
@@ -189,6 +190,7 @@ jobs:
             -DBLA_VENDOR=Intel10_64lp
             -DWITH_TBLITE=ON
             -DWITH_CPCMX=ON
+            -DTEST_DRIVE_BUILD_TESTING=OFF
          - name: Build project
            run: |
             set -eo pipefail
