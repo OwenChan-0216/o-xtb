@@ -346,14 +346,18 @@ install(
 )
 
 # Manual pages.
-# The manual pages are shipped as AsciiDoc sources. Rendering them into real
-# `man` pages needs an external AsciiDoc tool chain that this build does not
-# require, so the sources are installed as they are; see
-# `test/unit/landscape_man_check.py`, which validates the sources structurally
-# in place of the missing renderer.
+# The manual pages are shipped as AsciiDoc sources and as the rendered roff
+# pages.  `man/oxtb.1` and `man/xcontrol.7` are generated from the sources by
+# `man/tools/adoc2man.py` (stdlib only) and committed, and
+# `test/unit/landscape-man-render` fails when a source was edited without
+# re-rendering.  Both forms are installed: the AsciiDoc source for readers and
+# re-rendering, the roff page because `man` cannot read `.adoc`.  The rendered
+# page is installed only under its real name (`oxtb.1`); there is no `xtb.1`
+# alias.
 install(
    FILES
    "${PROJECT_SOURCE_DIR}/man/oxtb.1.adoc"
+   "${PROJECT_SOURCE_DIR}/man/oxtb.1"
    DESTINATION
    "${CMAKE_INSTALL_MANDIR}/man1"
 )
@@ -361,6 +365,7 @@ install(
 install(
    FILES
    "${PROJECT_SOURCE_DIR}/man/xcontrol.7.adoc"
+   "${PROJECT_SOURCE_DIR}/man/xcontrol.7"
    DESTINATION
    "${CMAKE_INSTALL_MANDIR}/man7"
 )

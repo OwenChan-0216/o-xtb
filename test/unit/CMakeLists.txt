@@ -3970,6 +3970,39 @@ add_test("xtb/landscape-man-coverage"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-man-coverage
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The rendered `man` pages must not drift away from their AsciiDoc sources.
+# `man/oxtb.1` and `man/xcontrol.7` are generated from the `.adoc` sources by
+# `man/tools/adoc2man.py` (stdlib only) and are committed, so `man` can read a
+# real page; the sources are validated (not rendered) by
+# `xtb/landscape-man-coverage` above.  This gate re-renders in memory and
+# compares against the committed artifact, so a source that was edited without
+# re-rendering turns the test red.  `--check` writes nothing and the gate runs
+# it against a build-dir copy of `man/`, so a read-only checkout passes and the
+# source tree is never touched.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/man_render.cmake" [=[
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}")
+file(COPY "${SRC}/man" DESTINATION "${RUNDIR}")
+foreach(_page oxtb.1 xcontrol.7)
+  execute_process(
+    COMMAND "${PYTHON}" "${RUNDIR}/man/tools/adoc2man.py" --check
+            "${RUNDIR}/man/${_page}.adoc" "${RUNDIR}/man/${_page}"
+    RESULT_VARIABLE _status
+    OUTPUT_VARIABLE _out
+    ERROR_VARIABLE _out
+  )
+  if(NOT _status EQUAL 0)
+    message(FATAL_ERROR "adoc2man.py --check ${_page} failed with status ${_status}\n${_out}")
+  endif()
+endforeach()
+]=])
+add_test("xtb/landscape-man-render"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSRC=${PROJECT_SOURCE_DIR}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-man-render
+  -P "${CMAKE_CURRENT_BINARY_DIR}/man_render.cmake")
+
 # The documentation site gate.  `docs/docs-site/tools/check_site.py` is the
 # dependency-free local equivalent of `mkdocs build --strict`: it needs neither
 # MkDocs nor a network, so it runs here.  It regenerates the command-line

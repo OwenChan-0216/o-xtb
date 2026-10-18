@@ -32,6 +32,11 @@
 #   XTB_BIN_DIR    registration directory    default: $HOME/.local/bin
 #   XTB_CMAKE      cmake executable         default: the one in PATH
 #   XTB_JOBS       parallel build jobs      default: 8
+#   XTB_MAN_DIR    man registration dir     default: $HOME/.local/share/man
+#   XTB_REGISTER_MAN  ON installs the rendered man pages into $XTB_MAN_DIR
+#                     (default: OFF, like XTB_REGISTER_COMMAND; `man` reads
+#                     $XTB_MAN_DIR/man1/oxtb.1 and $XTB_MAN_DIR/man7/xcontrol.7
+#                     only when that directory is in MANPATH)
 #
 # The executable this script produces is fully static on glibc systems:
 # CMAKE_EXE_LINKER_FLAGS=-static, BLA_STATIC=ON and the static libgomp.  That
@@ -68,6 +73,8 @@ BUILD_DIR="${XTB_BUILD_DIR:-${SOURCE_DIR}/build}"
 LOG_DIR="${BUILD_DIR}/logs"
 PREFIX="${XTB_PREFIX:-${HOME}/programs/o-xtb}"
 BIN_DIR="${XTB_BIN_DIR:-${HOME}/.local/bin}"
+MAN_DIR="${XTB_MAN_DIR:-${HOME}/.local/share/man}"
+REGISTER_MAN="${XTB_REGISTER_MAN:-OFF}"
 CMAKE="${XTB_CMAKE:-$(command -v cmake)}"
 JOBS="${XTB_JOBS:-8}"
 
@@ -137,6 +144,22 @@ step "register ${BIN_DIR}/${COMMAND_NAME}"
 mkdir -p "${BIN_DIR}"
 ln -sfn "${PREFIX}/bin/${COMMAND_NAME}" "${BIN_DIR}/${COMMAND_NAME}"
 ok "$(readlink "${BIN_DIR}/${COMMAND_NAME}")"
+
+# Off by default, like XTB_REGISTER_COMMAND: the build must not silently write
+# into the user's own trees.  The rendered pages are installed by CMake into
+# ${PREFIX}/share/man; this step links them into the per-user man directory.
+# That directory is in man's default search path on most systems, but an
+# explicit MANPATH hides it, so the user has to add it to their own MANPATH.
+if [ "${REGISTER_MAN}" = "ON" ]; then
+   step "register man pages into ${MAN_DIR}"
+   mkdir -p "${MAN_DIR}/man1" "${MAN_DIR}/man7"
+   ln -sfn "${PREFIX}/share/man/man1/oxtb.1" "${MAN_DIR}/man1/oxtb.1"
+   ln -sfn "${PREFIX}/share/man/man7/xcontrol.7" "${MAN_DIR}/man7/xcontrol.7"
+   ok "$(readlink "${MAN_DIR}/man1/oxtb.1")"
+   ok "$(readlink "${MAN_DIR}/man7/xcontrol.7")"
+else
+   printf '    note: man pages not registered (XTB_REGISTER_MAN=OFF); set it to ON\n'
+fi
 
 step "self check"
 version_out="$("${PREFIX}/bin/${COMMAND_NAME}" --version)"

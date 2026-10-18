@@ -1,0 +1,1736 @@
+'\" t
+.\"     Title: oxtb
+.\"    Manual: oxtb manual
+.\" Generator: man/tools/adoc2man.py
+.\"  Language: English
+.\"
+.TH "OXTB" "1" "" "" ""
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.nh
+.ad l
+.SH "NAME"
+.sp
+oxtb \- performs semiempirical quantummechanical calculations,
+for version 6.0 and newer
+.SH "SYNOPSIS"
+.sp
+\fBoxtb\fP [\fIOPTIONS\fP] \fIFILE\fP [\fIOPTIONS\fP]
+.SH "DESCRIPTION"
+.sp
+The \f(CRoxtb(1)\fP program performs semiempirical quantummechanical calculations.
+The underlying effective Hamiltonian is derived from density functional
+tight binding (DFTB). This implementation of the xTB Hamiltonian is currently
+compatible with the zeroth, first and second level parametrisation for
+geometries, frequencies and non\-covalent interactions (GFN)
+as well as with the ionisation potential and
+electron affinity (IPEA) parametrisation of the GFN1 Hamiltonian.
+The generalized born (GB) model with solvent accessable surface area (SASA)
+is also available in this version.
+Ground state calculations for the simplified Tamm\-Dancoff approximation (sTDA)
+with the vTB model are currently not implemented.
+.SS "GEOMETRY INPUT"
+.sp
+The wide variety of input formats for the geometry are supported by using
+the mctc\-lib. Supported formats are:
+.IP \(bu 2
+Xmol/xyz files (xyz, log)
+.IP \(bu 2
+Turbomole's coord, riper's periodic coord (tmol, coord)
+.IP \(bu 2
+DFTB+ genFormat geometry inputs as cluster, supercell or fractional (gen)
+.IP \(bu 2
+VASP's POSCAR/CONTCAR input files (vasp, poscar, contcar)
+.IP \(bu 2
+Protein Database files, only single files (pdb)
+.IP \(bu 2
+Connection table files, molfile (mol) and structure data format (sdf)
+.IP \(bu 2
+Gaussian's external program input (ein)
+.IP \(bu 2
+JSON input with \f(CRqcschema_molecule\fP or \f(CRqcschema_input\fP structure (json)
+.IP \(bu 2
+FHI\-AIMS' input files (geometry.in)
+.IP \(bu 2
+Q\-Chem molecule block inputs (qchem)
+.sp
+For a full list visit: https://grimme\-lab.github.io/mctc\-lib/page/index.html
+.sp
+\f(CRoxtb(1)\fP reads additionally \f(CR.CHRG\fP and \f(CR.UHF\fP files if present.
+.SH "INPUT SOURCES"
+.sp
+\f(CRoxtb(1)\fP gets its information from different sources. The one with highest
+priority is the commandline with all allowed flags and arguments described below.
+The secondary source is the \f(CRxcontrol(7)\fP system, which can in principle
+use as many input files as wished. The \f(CRxcontrol(7)\fP system is the successor
+of the set\-block as present in version 5.8.2 and earlier. This implementation
+of \f(CRoxtb(1)\fP reads the \f(CRxcontrol(7)\fP from two of three possible sources,
+the local xcontrol file or the \fIFILE\fP used to specify the geometry
+and the global configuration file found in the \f(CRXTBPATH\fP.
+.SH "OPTIONS"
+.sp
+\fB\-c, \-\-chrg\fP \fIINT\fP
+.RS 4
+specify molecular charge as \fIINT\fP, overrides \f(CR.CHRG\fP file and \f(CRxcontrol\fP option
+.RE
+.sp
+\fB\-c, \-\-chrg\fP \fIINT:INT\fP
+.RS 4
+specify charges for \fIinner region:outer region\fP for \f(CRoniom\fP calculation, overrides \f(CR.CHRG\fP file and \f(CRxcontrol\fP option
+.RE
+.sp
+\fB\-u, \-\-uhf\fP \fIINT\fP
+.RS 4
+specify number of unpaired electrons as \fIINT\fP, overrides \f(CR.UHF\fP file and \f(CRxcontrol\fP option
+(default: 0 (singlet) for even electron number, 1 (doublet) for odd electron number)
+.RE
+.sp
+\fB\-\-gfn\fP \fIINT\fP
+.RS 4
+specify parametrisation of GFN\-xTB: 0 (GFN0\-xTB), 1 (GFN1\-xTB),
+2 (GFN2\-xTB, the default) or ff (GFN\-FF, the same as \f(CR\-\-gfnff\fP); any
+other value is refused with an error
+.RE
+.sp
+\fB\-\-gfnff, \-\-gff\fP
+.RS 4
+specify parametrisation of GFN\-FF
+.RE
+.sp
+\fB\-\-tblite\fP
+.RS 4
+use tblite library as implementation for xTB
+.RE
+.sp
+\fB\-\-ceh <GRAD> [REAL]\fP
+.RS 4
+calculate CEH (Charge\-Extended H\[u00FC]ckel model) charges and write them to the ceh.charges file,
+optionally, calculate numerical gradients and write them to the ceh.charges.numgrad file
+with an adjustable step size for the numerical gradients.
+.RE
+.sp
+\fB\-\-ptb\fP
+.RS 4
+performs single\-point calculation with the density tight\-binding method PTB.
+Provides electronic structure and properties, such as, e.g., atomic charges, bond orders, and dipole moments,
+but does not provide any energy\-related properties, such as, e.g., total energy, nuclear gradients, or vibrational frequencies.
+.RE
+.sp
+\fB\-\-spinpol\fP
+.RS 4
+enables spin\-polarization for xTB methods (tblite required)
+.RE
+.sp
+\fB\-\-oniom\fP \fIMETHOD\fP \fILIST\fP
+.RS 4
+use subtractive embedding via ONIOM method. \fIMETHOD\fP is given as \f(CRhigh:low\fP
+where \f(CRhigh\fP can be \fIorca\fP, \fIturbomole\fP, \fIgfn2\fP, \fIgfn1\fP, or \fIgfnff\fP and
+\f(CRlow\fP can be \fIgfn2\fP, \fIgfn1\fP, or \fIgfnff\fP.
+The inner region is given as comma\-separated indices directly in the commandline
+or in a file with each index on a separate line.
+.RE
+.sp
+\fB\-\-efield\fP \fIREAL,REAL,REAL\fP
+.RS 4
+static electric field in Cartesian coordinates, overrides \f(CR.EFIELD\fP file,
+works only via tblite for the xTB Hamiltonians, or with GFN\-FF and PTB.
+.RE
+.sp
+\fB\-\-etemp, \-\-temp\fP \fIREAL\fP
+.RS 4
+electronic temperature for SCC (default = 300K)
+.RE
+.sp
+\fB\-\-esp\fP
+.RS 4
+calculate electrostatic potential on VdW\-grid
+.RE
+.sp
+\fB\-\-stm\fP
+.RS 4
+calculate STM image
+.RE
+.sp
+\fB\-a, \-\-acc\fP \fIREAL\fP
+.RS 4
+accuracy for SCC calculation, lower is better (default = 1.0)
+.RE
+.sp
+\fB\-\-iterations, \-\-maxiterations\fP \fIINT\fP
+.RS 4
+maximum number of SCC iterations per single point calculation (default = 250)
+.RE
+.sp
+\fB\-\-vparam\fP \fIFILE\fP
+.RS 4
+Parameter file for xTB calculation
+.RE
+.sp
+\fB\-\-alpb\fP \fISOLVENT\fP [\fISTATE\fP]
+.RS 4
+analytical linearized Poisson\-Boltzmann (ALPB) model,
+available solvents are \fIacetone\fP, \fIacetonitrile\fP, \fIaniline\fP, \fIbenzaldehyde\fP,
+\fIbenzene\fP, \fIch2cl2\fP, \fIchcl3\fP, \fIcs2\fP, \fIdioxane\fP, \fIdmf\fP, \fIdmso\fP, \fIether\fP,
+\fIethylacetate\fP, \fIfurane\fP, \fIhexandecane\fP, \fIhexane\fP, \fImethanol\fP, \fInitromethane\fP,
+\fIoctanol\fP, \fIwoctanol\fP, \fIphenol\fP, \fItoluene\fP, \fIthf\fP, \fIwater\fP.
+The solvent input is not case\-sensitive.
+The Gsolv reference state can be chosen as \fIreference\fP, \fIbar1M\fP, or \fIgsolv\fP (default).
+.RE
+.sp
+\fB\-g, \-\-gbsa\fP \fISOLVENT\fP [\fISTATE\fP]
+.RS 4
+generalized born (GB) model with solvent accessable surface (SASA) model,
+available solvents are \fIacetone\fP, \fIacetonitrile\fP, \fIbenzene\fP (only GFN1\-xTB),
+\fICH2Cl2\fP, \fICHCl3\fP, \fICS2\fP, \fIDMF\fP (only GFN2\-xTB), \fIDMSO\fP, \fIether\fP, \fIH2O\fP,
+\fImethanol\fP, \fIn\-hexane\fP (only GFN2\-xTB), \fITHF\fP and \fItoluene\fP.
+The solvent input is not case\-sensitive.
+The Gsolv reference state can be chosen as \fIreference\fP, \fIbar1M\fP, or \fIgsolv\fP (default).
+.RE
+.sp
+\fB\-\-gbe\fP \fISOLVENT/EPSILON\fP
+.RS 4
+generalized Born for finite epsilon (GBe) solvation model (tblite required),
+includes only the electrostatic solvation contribution (no SASA model),
+available solvents are all solvents that are available for alpb.
+Additionally, the dielectric constant can be set manually.
+.RE
+.sp
+\fB\-\-gb\fP \fISOLVENT/EPSILON\fP
+.RS 4
+generalized Born (GB) solvation model (tblite required),
+includes only the electrostatic solvation contribution (no SASA model),
+available solvents are all solvents that are available for alpb.
+Additionally, the dielectric constant can be set manually.
+.RE
+.sp
+\fB\-\-cosmo\fP \fISOLVENT/EPSILON\fP
+.RS 4
+domain decomposition conductor\-like screening model (ddCOSMO)
+available solvents are all solvents that are available for alpb.
+Additionally, the dielectric constant can be set manually or an ideal conductor
+can be chosen by setting epsilon to infinity.
+.RE
+.sp
+\fB\-\-tmcosmo\fP \fISOLVENT/EPSILON\fP
+.RS 4
+same as \-\-cosmo, but uses TM convention for writing the .cosmo files.
+.RE
+.sp
+\fB\-\-cpcmx\fP \fISOLVENT\fP
+.RS 4
+extended conduction\-like polarizable continuum solvation model (CPCM\-X),
+available solvents are all solvents included in the Minnesota Solvation Database.
+.RE
+.sp
+\fB\-\-cma\fP
+.RS 4
+shifts molecule to center of mass and transforms cartesian coordinates
+into the coordinate system of the principle axis (not affected by
+\f(CRisotopes\fP\-file).
+.RE
+.sp
+\fB\-\-pop\fP
+.RS 4
+requests printout of Mulliken population analysis
+.RE
+.sp
+\fB\-\-molden\fP
+.RS 4
+requests printout of molden file
+.RE
+.sp
+\fB\-\-alpha\fP
+.RS 4
+requests the extension of electrical properties to static molecular dipole polarizabilities
+.RE
+.sp
+\fB\-\-raman\fP
+.RS 4
+requests Raman spectrum calculation via combination of GFN2\-xTB and PTB
+using the temperature \fIREAL\fP (default 298.15 K) and the wavelength of
+the incident laser which must be given in nm \fIREAL\fP (default 514 nm)
+.RE
+.sp
+\fB\-\-dipole\fP
+.RS 4
+requests dipole printout
+.RE
+.sp
+\fB\-\-wbo\fP
+.RS 4
+requests Wiberg bond order printout
+.RE
+.sp
+\fB\-\-lmo\fP
+.RS 4
+requests localization of orbitals
+.RE
+.sp
+\fB\-\-fod\fP
+.RS 4
+requests FOD calculation
+.RE
+.sp
+\fB\-\-cycles\fP \fIINT\fP
+.RS 4
+maximum number of optimization cycles
+.RE
+.sp
+\fB\-\-method\fP \fINAME\fP
+.RS 4
+select the method of the current landscape run type; the value domain is
+filtered by the run type and an unknown or mismatched name aborts the run.
+\f(CR\-\-lopt\fP and \f(CR\-\-lscan\fP accept the minimisers sd, cg, lbfgs, bfgs, diis, rfo;
+\f(CR\-\-lts\fP accepts the saddle searches prfo, bprfo, dimer, neb, cineb, autoneb,
+string, gsm; \f(CR\-\-lirc\fP accepts the integrators gs, hpc, lqa, eulerpc; \f(CRauto\fP
+keeps the default of the task.  With \f(CR\-o, \-\-opt\fP and \f(CR\-\-ohess\fP the native
+engines ancopt (alias rf), lancopt (alias l\-ancopt), fire (alias inertial)
+and pbc_lbfgs are accepted, and a landscape minimiser selects the suite
+that the redeployed \f(CR\-\-opt\fP runs.  \f(CR\-\-method\fP is the canonical name of
+\f(CR\-\-lopt\-engine\fP, \f(CR\-\-lscan\-method\fP, \f(CR\-\-lts\-method\fP and \f(CR\-\-lirc\-method\fP.
+The name is not case\-sensitive.
+.RE
+.SS "RUNTYPS"
+.RS 4
+\fBNOTE:\fP You can only select \fBone\fP runtyp, only the first runtyp will be used
+from the program, use implemented composite runtyps to perform several
+operations at once.
+.RE
+.sp
+\fB\-\-scc, \-\-sp\fP
+.RS 4
+performs a single point calculation
+.RE
+.sp
+\fB\-\-vip\fP
+.RS 4
+performs calculation of ionisation potential.
+This needs the .param_ipea.xtb parameters
+and a GFN1 Hamiltonian.
+.RE
+.sp
+\fB\-\-vea\fP
+.RS 4
+performs calculation of electron affinity.
+This needs the .param_ipea.xtb parameters
+and a GFN1 Hamiltonian.
+.RE
+.sp
+\fB\-\-vipea\fP
+.RS 4
+performs calculation of electron affinity and ionisation potential.
+This needs the .param_ipea.xtb parameters
+and a GFN1 Hamiltonian.
+.RE
+.sp
+\fB\-\-vfukui\fP
+.RS 4
+performs calculation of Fukui indices.
+.RE
+.sp
+\fB\-\-vomega\fP
+.RS 4
+performs calculation of electrophilicity index.
+This needs the .param_ipea.xtb parameters
+and a GFN1 Hamiltonian.
+.RE
+.sp
+\fB\-\-grad\fP
+.RS 4
+performs a gradient calculation
+.RE
+.sp
+\fB\-o, \-\-opt\fP [\fILEVEL\fP]
+.RS 4
+run the landscape suite geometry optimization (pass \f(CR\-\-method ancopt\fP
+for the native \f(CRancopt(3)\fP),
+levels from crude, sloppy, loose, normal (default), tight, verytight
+to extreme can be chosen
+.RE
+.sp
+\fB\-\-lopt\fP
+.RS 4
+minimise the geometry with the landscape task suite (\f(CRsrc/landscape\fP); the
+algorithm is selected with \f(CR\-\-method\fP (alias \f(CR\-\-lopt\-engine\fP) and the
+thresholds with \f(CR\-\-lopt\-level\fP.  The sub\-options are in SUITE OPTIONS
+.RE
+.sp
+\fB\-\-lscan\fP
+.RS 4
+scan an internal coordinate (distance, angle or dihedral) with the
+landscape task suite; the result is written to \f(CRxtbscan.log\fP with the
+de\-biased energy of every frame.  The sub\-options are in SUITE OPTIONS
+.RE
+.sp
+\fB\-\-lts\fP
+.RS 4
+transition state search with the landscape task suite; the method is
+selected with \f(CR\-\-method\fP (alias \f(CR\-\-lts\-method\fP), one of prfo (default),
+bprfo, dimer, neb, cineb, autoneb or string (alias gsm).  Writes \f(CRxtbts.xyz\fP
+and \f(CRxtbts.log\fP and confirms the imaginary mode count.  The sub\-options are
+in SUITE OPTIONS
+.RE
+.sp
+\fB\-\-lirc\fP
+.RS 4
+intrinsic reaction coordinate with the landscape task suite; the input
+geometry is the transition state and must have exactly one imaginary mode.
+The integrator is selected with \f(CR\-\-method\fP (alias \f(CR\-\-lirc\-method\fP), one of
+hpc (default), lqa, eulerpc or gs.  Writes \f(CRirc_forward.xyz\fP,
+\f(CRirc_backward.xyz\fP, \f(CRirc_path.xyz\fP and \f(CRirc.log\fP.  The sub\-options are in
+SUITE OPTIONS
+.RE
+.sp
+\fB\-\-lvib\fP
+.RS 4
+harmonic frequencies, normal modes and thermochemistry with the landscape
+task suite; writes \f(CRvibspectrum\fP, \f(CRvib_normal_modes\fP, \f(CRg98.out\fP and
+\f(CRhessian\fP with the names and formats of \f(CR\-\-hess\fP.  The sub\-options are in
+SUITE OPTIONS
+.RE
+.sp
+\fB\-\-ljson\fP
+.RS 4
+write the structured result \f(CRlandscape_<TASK>.json\fP for every task \- native
+(\f(CR\-\-sp\fP, \f(CR\-\-grad\fP, \f(CR\-\-opt\fP, \f(CR\-\-hess\fP, ...) and landscape (\f(CR\-\-lopt\fP,
+\f(CR\-\-lscan\fP, \f(CR\-\-lts\fP, \f(CR\-\-lirc\fP, \f(CR\-\-lvib\fP).  The document has a uniform core
+block (task, status, energy, geometry, provenance) plus the task specific
+counters and convergence history
+.RE
+.sp
+\fB\-\-hess\fP
+.RS 4
+perform a numerical hessian calculation on input geometry
+.RE
+.sp
+\fB\-\-ohess\fP [\fILEVEL\fP]
+.RS 4
+perform a numerical hessian calculation on a geometry optimized by the
+landscape suite (pass \f(CR\-\-method ancopt\fP for the native \f(CRancopt(3)\fP
+optimizer)
+.RE
+.sp
+\fB\-\-bhess\fP [\fILEVEL\fP]
+.RS 4
+perform a biased numerical hessian calculation on an \f(CRancopt(3)\fP optimized
+geometry
+.RE
+.sp
+Hessian runs automatically perform a compliance analysis for nonperiodic
+systems with more than one atom and no frozen atoms.
+.sp
+\fB\-\-o1nh\fP
+.RS 4
+perform the numerical hessian calculation using the ODLR approximation (O1NumHess)
+.RE
+.sp
+\fB\-\-imagmin\fP \fIREAL\fP
+.RS 4
+magnitudes below this value (cm\[u207B]\[u00B9]) are ignored in the O1NumHess
+imaginary frequency repair (default 5).
+.RE
+.sp
+\fB\-\-imagmax\fP \fIREAL\fP
+.RS 4
+deepest imaginary frequency (cm\[u207B]\[u00B9]) considered in the O1NumHess
+imaginary frequency repair (default 200).
+.RE
+.sp
+\fB\-\-md\fP
+.RS 4
+molecular dynamics simulation on start geometry
+.RE
+.sp
+\fB\-\-metadyn\fP [\fIINT\fP]
+.RS 4
+meta dynamics simulation on start geometry, saving \fIint\fP snapshots
+of the trajectory to bias the simulation
+.RE
+.sp
+\fB\-\-omd\fP
+.RS 4
+molecular dynamics simulation on \f(CRancopt(3)\fP optimized geometry,
+a loose optimization level will be chosen
+.RE
+.sp
+\fB\-\-metaopt\fP [\fILEVEL\fP]
+.RS 4
+call \f(CRancopt(3)\fP to perform a geometry optimization,
+then try to find other minimas by meta dynamics
+.RE
+.sp
+\fB\-\-path\fP [\fIFILE\fP]
+.RS 4
+use meta dynamics to calculate a path from the input geometry
+to the given product structure
+.RE
+.sp
+\fB\-\-reactor\fP
+.RS 4
+experimental
+.RE
+.sp
+\fB\-\-modef\fP \fIINT\fP
+.RS 4
+modefollowing algorithm. \fIINT\fP specifies the mode that should be
+used for the modefollowing.
+.RE
+.sp
+\fB\-\-dipro\fP [\fIREAL\fP]
+.RS 4
+the dimer projection method for the calculation of electronic coupling integrals between two fragments.
+\fIREAL\fP sets the threshold for nearly degenerate orbitals to still be considered (default = 0.1 eV).
+.RE
+.SH "SUITE OPTIONS"
+.sp
+The landscape task suite (\f(CRsrc/landscape\fP) is selected by one of the run
+types \f(CR\-\-lopt\fP, \f(CR\-\-lscan\fP, \f(CR\-\-lts\fP, \f(CR\-\-lirc\fP or \f(CR\-\-lvib\fP (see RUNTYPS
+above), and by the redeployed \f(CR\-\-opt\fP and \f(CR\-\-ohess\fP; the sub\-options below
+configure the selected task and the common \f(CR\-\-ljson\fP switch is listed with
+the run types. Every sub\-option selects a landscape run type itself, so
+combining one with a native run type is a \fBrun type conflict\fP and aborts
+during argument parsing (\f(CRoxtb mol.xyz \-\-sp \-\-lscan\-fc 0.05\fP fails with a run type
+conflict naming \f(CR\-\-scc\fP and \f(CR\-\-lscan\-fc\fP); the native run types do not ignore
+these options, they never get that far. \f(CR\-\-opt\fP and \f(CR\-\-ohess\fP take the suite's
+\f(CR\-\-method\fP, \f(CR\-\-cycles\fP, \f(CR\-\-acc\fP and \f(CR\-\-ljson\fP but not the per\-task sub\-options.
+.sp
+The suite keeps every quantity in atomic units internally and converts at
+the input boundary. Unless an option says otherwise a length is in bohr, an
+energy in hartree, a gradient or force in hartree/bohr, a Hessian element in
+hartree/bohr\u2 and a stiffness in hartree/bohr\d2. The exceptions are
+spelled out at their options: a scanned coordinate uses angstrom (distance)
+or degree (angle and dihedral), the two dimer lengths and every trust radius
+are Cartesian bohr, the IRC arc lengths are in \f(CRbohr*amu^1/2\fP (mass weighted
+arc length, one atomic unit) and the frequency cutoffs are in \f(CRcm^\-1\fP.
+.sp
+\f(CR\-\-method\fP (see OPTIONS) is the canonical spelling of \f(CR\-\-lopt\-engine\fP,
+\f(CR\-\-lscan\-method\fP, \f(CR\-\-lts\-method\fP and \f(CR\-\-lirc\-method\fP: the same value through
+two of the flags is idempotent, a different value aborts the run, and an
+unknown name or a name of another task is an error. Every name is matched
+case insensitively.
+.SS "MINIMISATION OPTIONS (\-\-lopt)"
+.sp
+\fB\-\-lopt\-engine\fP \fINAME\fP
+.RS 4
+minimisation algorithm of the suite, one of \f(CRsd\fP, \f(CRcg\fP, \f(CRlbfgs\fP (default),
+\f(CRbfgs\fP, \f(CRdiis\fP or \f(CRrfo\fP. Alias of \f(CR\-\-method\fP; the name is not case\-sensitive.
+Because the native \f(CR\-\-opt\fP runs \f(CRancopt(3)\fP, the active default engine is
+echoed as a notice unless the flag is given.
+.RE
+.sp
+\fB\-\-lopt\-level\fP \fILEVEL\fP
+.RS 4
+convergence level, one of \f(CRsuperloose\fP, \f(CRloose\fP, \f(CRnormal\fP (default), \f(CRtight\fP
+or \f(CRvtight\fP; not case\-sensitive. One level drives four axes at once: the four
+thresholds (maximum and RMS gradient in hartree/bohr, maximum and RMS
+displacement in bohr), the energy tolerance \f(CRe_tol\fP (hartree), the SCC
+accuracy of the engine and the multiplier of the step budget (3 steps per
+atom at \f(CRnormal\fP, clamped to 200..10000).
+.RE
+.sp
+\fB\-\-lopt\-hessian\fP \fISOURCE\fP
+.RS 4
+Hessian backend, one of \f(CRnumerical\fP (default; the suite's own central
+differences of the electronic gradient), \f(CRmodel\fP (Lindh\-D2 model Hessian from
+\f(CRsrc/model_hessian\fP) or \f(CRfile\fP (read the TURBOMOLE layout written by an
+earlier run, see \f(CR\-\-lopt\-hessian\-file\fP).
+.RE
+.sp
+\fB\-\-lopt\-max\-steps\fP \fIN\fP
+.RS 4
+step budget of the minimisation. The default is derived from the convergence
+level (3 steps per atom, clamped to 200..10000); \f(CR\-\-cycles\fP and the level
+change it. A budget given here wins over the level\-derived value.
+.RE
+.sp
+\fB\-\-lopt\-hess\-step\fP \fIVALUE\fP
+.RS 4
+finite difference step of the numerical Hessian in bohr (default 0.005). Only
+\f(CR\-\-lopt\-engine rfo\fP builds a numerical Hessian; the other five engines
+(including the default \f(CRlbfgs\fP) never do, and the value is ignored for
+\f(CR\-\-lopt\-hessian model\fP or \f(CRfile\fP. The run then echoes the effective value and
+marks it as not used.
+.RE
+.sp
+\fB\-\-lopt\-sccacc\fP \fIVALUE\fP
+.RS 4
+SCC accuracy of the displaced single points of the numerical Hessian
+(default 0.3). Consumed by the same engine and Hessian source as
+\f(CR\-\-lopt\-hess\-step\fP.
+.RE
+.sp
+\fB\-\-lopt\-restart\fP \fIMODE\fP
+.RS 4
+wavefunction restart policy of the engine, \f(CRoff\fP (default), \f(CRpin\fP or \f(CRwarm\fP.
+.RE
+.sp
+\fB\-\-lopt\-hessian\-file\fP \fINAME\fP
+.RS 4
+file read by \f(CR\-\-lopt\-hessian file\fP (TURBOMOLE \f(CR$hessian\fP layout, the
+\f(CRhessian\fP file written by \f(CR\-\-hess\fP and by \f(CR\-\-lvib\fP). The name is used only by
+the \f(CRfile\fP source: with \f(CRnumerical\fP or \f(CRmodel\fP it is silently discarded and
+never echoed (a registered, deliberately unfixed honesty gap).
+.RE
+.SS "SCAN OPTIONS (\-\-lscan)"
+.sp
+\fB\-\-lscan\-coord\fP \fITYPE\fP
+.RS 4
+type of the first scanned coordinate, one of \f(CRdistance\fP (default), \f(CRangle\fP or
+\f(CRdihedral\fP; not case\-sensitive.
+.RE
+.sp
+\fB\-\-lscan\-atoms\fP \fILIST\fP
+.RS 4
+1\-based atom indices of the first coordinate, comma or blank separated (two
+for a distance, three for an angle, four for a dihedral).
+.RE
+.sp
+\fB\-\-lscan\-step\fP \fIVALUE\fP
+.RS 4
+step size of the first coordinate in angstrom (distance) or degree (angle and
+dihedral).
+.RE
+.sp
+\fB\-\-lscan\-nstep\fP \fIN\fP
+.RS 4
+number of steps of the first coordinate; a sweep visits the coordinate
+values \f(CRq0 + k step\fP for \f(CRk = 0..nstep\fP, in both directions unless
+\f(CR\-\-lscan\-oneway\fP is given.
+.RE
+.sp
+\fB\-\-lscan\-coord2, \-\-lscan\-atoms2, \-\-lscan\-step2, \-\-lscan\-nstep2\fP
+.RS 4
+the same four options for a second scanned coordinate; any of them switches
+the scan to a two\-dimensional Cartesian product grid (as \f(CR\-\-lscan\-ndim 2\fP).
+.RE
+.sp
+\fB\-\-lscan\-mode\fP \fIMODE\fP
+.RS 4
+scan mode, \f(CRrelaxed\fP (default; every point is minimised under a constraint
+potential) or \f(CRrigid\fP (the geometry is constructed and a single point is
+evaluated); not case\-sensitive.
+.RE
+.sp
+\fB\-\-lscan\-method\fP \fINAME\fP
+.RS 4
+inner minimiser of a relaxed scan, one of \f(CRsd\fP, \f(CRcg\fP, \f(CRlbfgs\fP (default),
+\f(CRbfgs\fP, \f(CRdiis\fP or \f(CRrfo\fP. Alias of \f(CR\-\-method\fP; not case\-sensitive.
+.RE
+.sp
+\fB\-\-lscan\-level\fP \fILEVEL\fP
+.RS 4
+convergence level of the inner minimisation, one of \f(CRsuperloose\fP, \f(CRloose\fP,
+\f(CRnormal\fP (default), \f(CRtight\fP or \f(CRvtight\fP.
+.RE
+.sp
+\fB\-\-lscan\-ndim\fP \fIN\fP
+.RS 4
+number of scanned coordinates, 1 (default) or 2.
+.RE
+.sp
+\fB\-\-lscan\-restart\fP \fIMODE\fP
+.RS 4
+wavefunction policy of the engine at every scan point, \f(CRoff\fP (default), \f(CRpin\fP
+or \f(CRwarm\fP. \f(CRoff\fP and \f(CRpin\fP reset the incoming wavefunction from the stored
+reference, \f(CRwarm\fP \fBkeeps\fP it, so \f(CRwarm\fP carries the SCF history of the
+previous point into the next one (measured: reusing the wavefunction moves
+the gradient by about 4e\-7 hartree/bohr, which is why the suite keeps the
+policy uniform inside one evaluation sequence). The geometry warm start is a
+separate mechanism, \f(CRwarm_start\fP, which is on by default and reuses the
+previous point's geometry.
+.RE
+.sp
+\fB\-\-lscan\-oneway\fP
+.RS 4
+scan the forward branch only; no reverse branch and no hysteresis report.
+.RE
+.sp
+\fB\-\-lscan\-cold\-start\fP
+.RS 4
+start every scan point from the input geometry instead of the geometry of the
+previous point.
+.RE
+.sp
+\fB\-\-lscan\-fc\fP \fIVALUE\fP
+.RS 4
+force constant of the constraint bias potential (the coordinate deviation
+raised to the power \f(CR\-\-lscan\-expo\fP and scaled by this value) in
+hartree/bohr^2 (default 0.5). This is ten times the xtb scan force constant
+\f(CRfcconstr = 0.05\fP of the \f(CR$scan\fP block, so the active default is echoed as a
+notice unless the flag is given; use \f(CR\-\-lscan\-fc 0.05\fP when compatibility with
+existing \f(CRxtbscan.log\fP tool chains matters.
+.RE
+.sp
+\fB\-\-lscan\-expo\fP \fIVALUE\fP
+.RS 4
+exponent of the constraint potential (default 2.0). Only distance constraints
+use it: an angle is biased by the squared angular deviation and a dihedral
+by \f(CR(1 \- cos dphi)\fP, both scaled by the same force constant and bounded by
+twice it, with a zero torque at 180 degree.
+.RE
+.sp
+\fB\-\-lscan\-max\-steps\fP \fIN\fP
+.RS 4
+step budget of the inner relaxation of every scan point; derived from the
+convergence level like \f(CR\-\-lopt\-max\-steps\fP.
+.RE
+.sp
+\fB\-\-lscan\-hess\-step\fP \fIVALUE\fP
+.RS 4
+finite difference step of the numerical Hessian of the scan points in bohr
+(default 0.005). Only \f(CR\-\-lscan\-method rfo\fP builds one (the default \f(CRlbfgs\fP
+never does), a rigid scan has no inner minimisation at all, and the value is
+ignored for \f(CR\-\-lscan\-hessian model\fP or \f(CRfile\fP.
+.RE
+.sp
+\fB\-\-lscan\-sccacc\fP \fIVALUE\fP
+.RS 4
+SCC accuracy of the displaced single points of the numerical Hessian
+(default 0.3); consumed by the same inner minimiser and Hessian source as
+\f(CR\-\-lscan\-hess\-step\fP.
+.RE
+.sp
+\fB\-\-lscan\-hessian\fP \fISOURCE\fP
+.RS 4
+Hessian backend of the scan points, one of \f(CRnumerical\fP (default), \f(CRmodel\fP or
+\f(CRfile\fP.
+.RE
+.sp
+\fB\-\-lscan\-hessian\-file\fP \fINAME\fP
+.RS 4
+file read by \f(CR\-\-lscan\-hessian file\fP (TURBOMOLE layout); silently discarded
+when the source is not \f(CRfile\fP.
+.RE
+.SS "TRANSITION STATE OPTIONS (\-\-lts)"
+.sp
+\fB\-\-lts\-method\fP \fINAME\fP
+.RS 4
+search method, one of \f(CRprfo\fP (default), \f(CRbprfo\fP (restricted step), \f(CRdimer\fP
+(first derivatives only, no Hessian), \f(CRneb\fP, \f(CRcineb\fP (climbing image NEB),
+\f(CRautoneb\fP (incremental path building) or \f(CRstring\fP/\f(CRgsm\fP (growing string).
+Alias of \f(CR\-\-method\fP; not case\-sensitive. \f(CRneb\fP, \f(CRcineb\fP, \f(CRautoneb\fP, \f(CRstring\fP
+and \f(CRgsm\fP are chain\-of\-states methods and need \f(CR\-\-lts\-product\fP.
+.RE
+.sp
+\fB\-\-lts\-trust\fP \fIVALUE\fP
+.RS 4
+initial trust radius of the step in bohr (default 0.37795).
+.RE
+.sp
+\fB\-\-lts\-trust\-max\fP \fIVALUE\fP
+.RS 4
+upper bound of the trust radius in bohr (default 1.8897).
+.RE
+.sp
+\fB\-\-lts\-hlow\fP \fIVALUE\fP
+.RS 4
+curvature floor of the downhill modes in hartree/bohr^2 (default 0.01).
+.RE
+.sp
+\fB\-\-lts\-max\-steps\fP \fIN\fP
+.RS 4
+maximum number of macro iterations; derived from the convergence level (3
+steps per atom, clamped to 200..10000).
+.RE
+.sp
+\fB\-\-lts\-level\fP \fILEVEL\fP
+.RS 4
+convergence level (thresholds, energy tolerance, SCC accuracy and step
+budget), one of \f(CRsuperloose\fP, \f(CRloose\fP, \f(CRnormal\fP (default), \f(CRtight\fP or \f(CRvtight\fP.
+.RE
+.sp
+\fB\-\-lts\-mode\-overlap\-min\fP \fIVALUE\fP
+.RS 4
+mode following guard: reselect the transition vector below this overlap
+(default 0.3). The value is the dimensionless \f(CR|V^T v|\fP overlap.
+.RE
+.sp
+\fB\-\-lts\-alpha\fP \fIVALUE\fP
+.RS 4
+fraction of the trust radius assigned to the uphill subspace by \f(CRbprfo\fP
+(default 0.5).
+.RE
+.sp
+\fB\-\-lts\-micro\-cycles\fP \fIN\fP
+.RS 4
+maximum number of restricted step micro iterations (default 50).
+.RE
+.sp
+\fB\-\-lts\-target\-mode\fP \fIN\fP
+.RS 4
+which negative mode is followed, 1 = most negative (default 1).
+.RE
+.sp
+\fB\-\-lts\-init\-mode\fP \fIMODE\fP
+.RS 4
+initial transition vector, \f(CRh0\fP (most negative Hessian mode, default) or
+\f(CRforce\fP (largest Cartesian gradient component direction).
+.RE
+.sp
+\fB\-\-lts\-escape\-step\fP \fIVALUE\fP
+.RS 4
+displacement along the lowest internal mode in bohr (default 0.2), applied
+when the start geometry is a minimum so that P\-RFO has a direction to ascend
+along; 0 disables the escape. The active default is echoed as a notice unless
+the flag is given. The full walk budget is 3.0 bohr.
+.RE
+.sp
+\fB\-\-lts\-delta\fP \fIVALUE\fP
+.RS 4
+dimer separation, the distance of each image from the common midpoint in bohr
+(default 0.018897, i.e. 0.01 angstrom; this is the pysisyphus convention, not
+the VASP \f(CRDdR\fP that denotes twice the value).
+.RE
+.sp
+\fB\-\-lts\-dr\fP \fIVALUE\fP
+.RS 4
+finite difference step of the dimer translation probe in bohr (default
+0.0018897).
+.RE
+.sp
+\fB\-\-lts\-rot\-max\-iter\fP \fIN\fP
+.RS 4
+maximum number of dimer rotations per macro iteration (default 5).
+.RE
+.sp
+\fB\-\-lts\-rot\-alpha\fP \fIVALUE\fP
+.RS 4
+damping of the dimer rotation angle (default 0.5; 1 = undamped).
+.RE
+.sp
+\fB\-\-lts\-rot\-frms\fP \fIVALUE\fP
+.RS 4
+RMS torque below which the dimer rotation has converged, in hartree/bohr
+(default 2.65e\-4).
+.RE
+.sp
+\fB\-\-lts\-ninit\fP \fIMODE\fP
+.RS 4
+initial dimer axis, \f(CRrandom\fP (default, seeded by \f(CR\-\-lts\-seed\fP) or \f(CRforce\fP
+(largest Cartesian gradient component direction).
+.RE
+.sp
+\fB\-\-lts\-seed\fP \fIN\fP
+.RS 4
+seed of the random initial dimer axis (default 42). The generator state is
+reset from this seed before every draw, so a run is exactly reproducible.
+.RE
+.sp
+\fB\-\-lts\-step\-max\fP \fIVALUE\fP
+.RS 4
+maximum dimer translation step in bohr (default 0.28346).
+.RE
+.sp
+\fB\-\-lts\-step0\fP \fIVALUE\fP
+.RS 4
+upper bound of the first dimer translation in bohr (default 0.37795); the
+\f(CRdR\fP curvature probe can shorten the actual first displacement.
+.RE
+.sp
+\fB\-\-lts\-translate\-max\-iter\fP \fIN\fP
+.RS 4
+maximum number of quick\-min displacement updates per dimer translation
+(default 1).
+.RE
+.sp
+\fB\-\-lts\-recalc\fP \fIN\fP
+.RS 4
+recompute the exact Hessian every N macro steps, 0 disables (default 1).
+.RE
+.sp
+\fB\-\-lts\-no\-verify\fP
+.RS 4
+skip the frequency confirmation of the located stationary point.
+.RE
+.sp
+\fB\-\-lts\-no\-rigid\fP
+.RS 4
+keep the rigid body (translation and rotation) components in the Cartesian
+step instead of projecting them out.
+.RE
+.sp
+\fB\-\-lts\-restart\fP \fIMODE\fP
+.RS 4
+wavefunction restart policy of the engine, \f(CRoff\fP (default), \f(CRpin\fP or \f(CRwarm\fP.
+.RE
+.sp
+\fB\-\-lts\-hessian\fP \fISOURCE\fP
+.RS 4
+Hessian backend, one of \f(CRnumerical\fP (default), \f(CRmodel\fP (Lindh\-D2) or \f(CRfile\fP.
+.RE
+.sp
+\fB\-\-lts\-hessian\-file\fP \fINAME\fP
+.RS 4
+file read by \f(CR\-\-lts\-hessian file\fP (TURBOMOLE layout); silently discarded when
+the source is not \f(CRfile\fP.
+.RE
+.sp
+\fB\-\-lts\-hess\-step\fP \fIVALUE\fP
+.RS 4
+finite difference step of the numerical confirmation Hessian in bohr
+(default 0.005); the canonical name of \f(CR\-\-lts\-step\fP.
+.RE
+.sp
+\fB\-\-lts\-step\fP \fIVALUE\fP
+.RS 4
+alias of \f(CR\-\-lts\-hess\-step\fP. If the confirmed mode lies within
+\f(CR0 +/\- 3 cm^\-1\fP, the curvature sign is re\-decided with 0.002 bohr and SCC
+accuracy 0.1.
+.RE
+.sp
+\fB\-\-lts\-sccacc\fP \fIVALUE\fP
+.RS 4
+SCC accuracy of the displaced single points of the confirmation Hessian
+(default 0.3).
+.RE
+.sp
+\fB\-\-lts\-product\fP \fINAME\fP
+.RS 4
+product endpoint of a chain\-of\-states search (\f(CRneb\fP, \f(CRcineb\fP, \f(CRautoneb\fP,
+\f(CRstring\fP, \f(CRgsm\fP): a single frame xyz with the same atoms in the same order;
+the positional input file is the reactant.
+.RE
+.sp
+\fB\-\-lts\-images\fP \fIN\fP
+.RS 4
+number of images of a band, the two fixed endpoints included (default 9); for
+\f(CRautoneb\fP it is the requested final number of images.
+.RE
+.sp
+\fB\-\-lts\-kmin, \-\-lts\-kmax\fP \fIVALUE\fP
+.RS 4
+lower and upper spring constant of the dynamic springs in hartree/bohr^2
+(defaults 1e\-2 and 1e\-1, calibrated on the analytic LEPS surface).
+.RE
+.sp
+\fB\-\-lts\-kdecay\fP \fIVALUE\fP
+.RS 4
+decay factor of the dynamic spring formula (default 0.5).
+.RE
+.sp
+\fB\-\-lts\-no\-dynamic\-k\fP
+.RS 4
+use the single spring constant \f(CRkmax\fP for every image.
+.RE
+.sp
+\fB\-\-lts\-climb\fP
+.RS 4
+switch on the climbing image stage (CI\-NEB); implied by \f(CR\-\-lts\-method cineb\fP,
+\f(CRautoneb\fP, \f(CRstring\fP and \f(CRgsm\fP.
+.RE
+.sp
+\fB\-\-lts\-climb\-switch\fP \fIVALUE\fP
+.RS 4
+band force in hartree/bohr below which the climbing image is ignited (default
+9.7234e\-3, the standard 0.5 eV/angstrom).
+.RE
+.sp
+\fB\-\-lts\-no\-idpp\fP
+.RS 4
+straight linear interpolation instead of the IDPP initial path.
+.RE
+.sp
+\fB\-\-lts\-no\-align\fP
+.RS 4
+do not Kabsch align the images before every band evaluation.
+.RE
+.sp
+\fB\-\-lts\-relax\-ends\fP
+.RS 4
+relax the two endpoints with the minimiser before the search.
+.RE
+.sp
+\fB\-\-lts\-max\-displ\fP \fIVALUE\fP
+.RS 4
+upper bound of one displacement component of a band step in bohr
+(default 0.37795).
+.RE
+.sp
+\fB\-\-lts\-frms\-avg, \-\-lts\-frms\-max\fP \fIVALUE\fP
+.RS 4
+band convergence thresholds of the average and the largest per\-image force
+RMS in hartree/bohr (defaults 3e\-4 and 1e\-3).
+.RE
+.sp
+\fB\-\-lts\-autoneb\-nstart\fP \fIN\fP
+.RS 4
+number of images of the coarse start path of an AutoNEB run (default 5).
+.RE
+.sp
+\fB\-\-lts\-autoneb\-max\-paths\fP \fIN\fP
+.RS 4
+hard upper bound of the number of images of an AutoNEB path (default 10); a
+request above it is an error, never a silent truncation.
+.RE
+.sp
+\fB\-\-lts\-autoneb\-max\-depth\fP \fIN\fP
+.RS 4
+hard upper bound of the number of image insertion stages (default 5).
+.RE
+.sp
+\fB\-\-lts\-autoneb\-restart\fP \fINAME\fP
+.RS 4
+multi\-frame xyz path of an earlier AutoNEB run (its \f(CRpath_autoneb.xyz\fP),
+adopted as the initial path so the completed stages are not repeated.
+.RE
+.sp
+\fB\-\-lts\-string\-nnodes\fP \fIN\fP
+.RS 4
+target number of nodes of the growing string, endpoints included (default 9).
+The string is configured here, not by \f(CR\-\-lts\-images\fP.
+.RE
+.sp
+\fB\-\-lts\-string\-grow\-tol\fP \fIVALUE\fP
+.RS 4
+norm threshold of the growth indicator in hartree/bohr (default 5e\-3).
+.RE
+.sp
+\fB\-\-lts\-string\-ds\fP \fIVALUE\fP
+.RS 4
+arc length increment of one growth step of the string in bohr (default 0.5).
+.RE
+.sp
+\fB\-\-lts\-string\-nu2\fP \fIVALUE\fP
+.RS 4
+curvature floor for the node spacing condition, in hartree/bohr^2
+(default 0.05).
+.RE
+.sp
+\fB\-\-lts\-string\-grow\-steps\fP \fIN\fP
+.RS 4
+maximum perpendicular relaxation iterations of one frontier node (default
+200).
+.RE
+.sp
+\fB\-\-lts\-no\-string\-spline\fP
+.RS 4
+central difference tangents of the string instead of the cubic spline
+tangent.
+.RE
+.sp
+\fB\-\-lts\-string\-history\fP
+.RS 4
+print the growth history (position and perpendicular force of every node);
+also honoured by the \f(CRgsm\fP task name.
+.RE
+.SS "INTRINSIC REACTION COORDINATE OPTIONS (\-\-lirc)"
+.sp
+\fB\-\-lirc\-method\fP \fINAME\fP
+.RS 4
+integration method, one of \f(CRhpc\fP (Hessian based predictor\-corrector,
+default), \f(CRlqa\fP (Page\-McIver analytic quadratic propagation, the cheapest),
+\f(CReulerpc\fP (Euler predictor\-corrector) or \f(CRgs\fP (Gonzalez\-Schlegel sphere
+relaxation). Alias of \f(CR\-\-method\fP; not case\-sensitive. The active default is
+echoed as a notice unless the flag is given.
+.RE
+.sp
+\fB\-\-lirc\-step\fP \fIVALUE\fP
+.RS 4
+step length of one macro step in \f(CRbohr*amu^1/2\fP (mass weighted arc length,
+default 0.10; use 0.05 for a tight path). The clean range is 0.05\-0.15 for
+\f(CR\-\-lirc\-method gs\fP, whose macro step stalls in a two cycle from 0.20 on;
+\f(CRhpc\fP and \f(CReulerpc\fP are correct at 0.20. The limit cycle guard only detects
+the cancelling subclass of the stall: a large step can still end far from the
+minimum (measured 0.236 bohr at 0.40 forward).
+.RE
+.sp
+\fB\-\-lirc\-max\-steps\fP \fIN\fP
+.RS 4
+maximum number of macro steps of one direction; derived from the convergence
+level (3 steps per atom, clamped to 200..10000).
+.RE
+.sp
+\fB\-\-lirc\-level\fP \fILEVEL\fP
+.RS 4
+convergence level of the endpoint relaxation (thresholds, energy tolerance,
+SCC accuracy and step budget), one of \f(CRsuperloose\fP, \f(CRloose\fP, \f(CRnormal\fP
+(default), \f(CRtight\fP or \f(CRvtight\fP. The IRC path itself is left by the termination
+signals \f(CR\-\-lirc\-grad\-tol\fP and \f(CR\-\-lirc\-e\-rise\fP.
+.RE
+.sp
+\fB\-\-lirc\-swap\fP
+.RS 4
+exchange the forward and the backward direction defined by the phase
+convention.
+.RE
+.sp
+\fB\-\-lirc\-oneway\fP
+.RS 4
+integrate the forward direction only.
+.RE
+.sp
+\fB\-\-lirc\-target\-mode\fP \fIN\fP
+.RS 4
+which negative mode defines the initial direction, 1 = most negative
+(default 1).
+.RE
+.sp
+\fB\-\-lirc\-micro\-cycles\fP \fIN\fP
+.RS 4
+maximum number of Gonzalez\-Schlegel micro cycles per macro step (default 20).
+.RE
+.sp
+\fB\-\-lirc\-micro\-thresh\fP \fIVALUE\fP
+.RS 4
+convergence threshold of the sphere relaxation in \f(CRbohr*amu^1/2\fP (default
+1e\-3).
+.RE
+.sp
+\fB\-\-lirc\-euler\-n\fP \fIN\fP
+.RS 4
+Euler/Simpson substeps of the analytic LQA propagation (default 5000).
+.RE
+.sp
+\fB\-\-lirc\-loose\-cycles\fP \fIN\fP
+.RS 4
+EulerPC coarse phase: use the plain Euler prediction for the first N macro
+steps, 0 disables the coarse phase (default 3).
+.RE
+.sp
+\fB\-\-lirc\-mbs\-tol\fP \fIVALUE\fP
+.RS 4
+acceptance threshold of the modified Bulirsch\-Stoer corrector in
+\f(CRbohr*amu^1/2\fP (default 1e\-5; the HPC paper uses 1e\-6).
+.RE
+.sp
+\fB\-\-lirc\-mbs\-max\-k\fP \fIN\fP
+.RS 4
+maximum extrapolation level of the modified Bulirsch\-Stoer corrector
+(default 15).
+.RE
+.sp
+\fB\-\-lirc\-mbs\-points\fP \fIN\fP
+.RS 4
+base number of Euler substeps of the modified Bulirsch\-Stoer corrector
+(default 20).
+.RE
+.sp
+\fB\-\-lirc\-dwi\-n\fP \fIN\fP
+.RS 4
+capacity of the DWI surface fit (default 4). The implemented interpolant is
+two point by construction, so every N >= 2 is behaviourally equivalent; N < 2
+is rejected.
+.RE
+.sp
+\fB\-\-lirc\-e\-rise\fP \fIN\fP
+.RS 4
+termination signal (c): stop after N consecutive rising energies (default 3).
+A large N does not guarantee running to the step budget; the limit cycle guard
+\f(CR\-\-lirc\-osc\-window\fP is an independent signal.
+.RE
+.sp
+\fB\-\-lirc\-erise\-steps\fP \fIN\fP
+.RS 4
+alias of \f(CR\-\-lirc\-e\-rise\fP.
+.RE
+.sp
+\fB\-\-lirc\-grad\-tol\fP \fIVALUE\fP
+.RS 4
+termination signal (b): stop when the RMS gradient per Cartesian component
+falls below this value in hartree/bohr (default 1e\-3).
+.RE
+.sp
+\fB\-\-lirc\-osc\-window\fP \fIN\fP
+.RS 4
+limit cycle guard of the \f(CRgs\fP macro step: leave the path after N consecutive
+macro steps that cancel each other (default 8; 0 disables the guard). The
+guard is inert on every validated path and truncates the stalled walk; the
+endpoint it returns is one phase of the oscillation, about one step length
+away from the minimum, so the run is reported as incomplete. Only
+\f(CR\-\-lirc\-method gs\fP is affected.
+.RE
+.sp
+\fB\-\-lirc\-adaptive\fP
+.RS 4
+opt\-in adaptive step length of the \f(CRgs\fP macro step (default off): halve the
+effective step length (floor: a sixteenth of \f(CR\-\-lirc\-step\fP) at the first
+cancelling macro step pair. It changes the validated small step paths and is
+therefore a re\-baseline; every reduction is printed. Only \f(CR\-\-lirc\-method gs\fP
+honours it \- every other method silently ignores it.
+.RE
+.sp
+\fB\-\-lirc\-recalc\fP \fIN\fP
+.RS 4
+rebuild the exact Hessian every N macro steps, \-1 disables (default \-1). Pure
+Bofill updates are sufficient for short paths; long or strongly curved paths
+drift and need an explicit \f(CR\-\-lirc\-recalc 5 .. 10\fP.
+.RE
+.sp
+\fB\-\-lirc\-no\-endpoint\-relax\fP
+.RS 4
+do not relax the two endpoints to assign them to a minimum; the
+\f(CR\-\-lirc\-rmsd\-end\fP criterion is then skipped (and reported as skipped).
+.RE
+.sp
+\fB\-\-lirc\-endpoint\-relax\fP
+.RS 4
+relax the two endpoints to assign them to a minimum (default; the explicit
+flag restores it after a \f(CR\-\-lirc\-no\-endpoint\-relax\fP).
+.RE
+.sp
+\fB\-\-lirc\-rmsd\-end\fP \fIVALUE\fP
+.RS 4
+Kabsch aligned RMSD between an endpoint and its relaxed minimum below which
+the endpoint counts as having reached a minimum, in bohr (default 0.18897).
+.RE
+.sp
+\fB\-\-lirc\-hessian\fP \fISOURCE\fP
+.RS 4
+Hessian backend, one of \f(CRnumerical\fP (default), \f(CRmodel\fP (Lindh\-D2) or \f(CRfile\fP.
+.RE
+.sp
+\fB\-\-lirc\-hessian\-file\fP \fINAME\fP
+.RS 4
+file read by \f(CR\-\-lirc\-hessian file\fP (TURBOMOLE layout); silently discarded
+when the source is not \f(CRfile\fP.
+.RE
+.sp
+\fB\-\-lirc\-hess\-step\fP \fIVALUE\fP
+.RS 4
+finite difference step of the numerical Hessian in bohr (default 0.005); the
+canonical name of \f(CR\-\-lirc\-step\-hess\fP, not to be confused with \f(CR\-\-lirc\-step\fP
+(the arc length of the reaction path).
+.RE
+.sp
+\fB\-\-lirc\-step\-hess\fP \fIVALUE\fP
+.RS 4
+alias of \f(CR\-\-lirc\-hess\-step\fP.
+.RE
+.sp
+\fB\-\-lirc\-sccacc\fP \fIVALUE\fP
+.RS 4
+SCC accuracy of the displaced single points of the Hessian (default 0.3).
+.RE
+.sp
+\fB\-\-lirc\-restart\fP \fIMODE\fP
+.RS 4
+wavefunction restart policy of the engine, \f(CRoff\fP (default), \f(CRpin\fP or \f(CRwarm\fP.
+.RE
+.SS "FREQUENCY AND THERMOCHEMISTRY OPTIONS (\-\-lvib)"
+.sp
+\fB\-\-lvib\-hessian\fP \fISOURCE\fP
+.RS 4
+Hessian backend of the frequency task, one of \f(CRnumerical\fP (default), \f(CRmodel\fP
+(Lindh\-D2) or \f(CRfile\fP (read the Hessian of an earlier run).
+.RE
+.sp
+\fB\-\-lvib\-hessian\-file\fP \fINAME\fP
+.RS 4
+file read by \f(CR\-\-lvib\-hessian file\fP (TURBOMOLE layout). Unlike the other
+tasks, \f(CR\-\-lvib\fP prints the name even when the source is not \f(CRfile\fP, but it
+still only reads it for \f(CRfile\fP.
+.RE
+.sp
+\fB\-\-lvib\-hess\-step\fP \fIVALUE\fP
+.RS 4
+finite difference step of the numerical Hessian in bohr (default 0.005); the
+canonical name of \f(CR\-\-lvib\-step\fP.
+.RE
+.sp
+\fB\-\-lvib\-step\fP \fIVALUE\fP
+.RS 4
+alias of \f(CR\-\-lvib\-hess\-step\fP.
+.RE
+.sp
+\fB\-\-lvib\-sccacc\fP \fIVALUE\fP
+.RS 4
+SCC accuracy of the displaced single points of the numerical Hessian
+(default 0.3).
+.RE
+.sp
+\fB\-\-lvib\-restart\fP \fIMODE\fP
+.RS 4
+wavefunction restart policy of the engine, \f(CRoff\fP (default), \f(CRpin\fP or \f(CRwarm\fP.
+The finite difference sequence resets the wavefunction to the state it entered
+the Hessian with before every displacement, so \f(CRwarm\fP and \f(CRpin\fP hand the
+provider the same start and produce a byte identical \f(CRhessian\fP file; only
+\f(CRoff\fP is distinguishable.
+.RE
+.sp
+\fB\-\-lvib\-odlr\fP
+.RS 4
+request the ODLR approximation. Not implemented: the run reports the request
+and the dense provider refuses it \- the Hessian is always built in full.
+.RE
+.sp
+\fB\-\-lvib\-no\-project\fP
+.RS 4
+do not project the translations and rotations out of the Hessian.
+.RE
+.sp
+\fB\-\-lvib\-temp\fP \fIVALUE\fP
+.RS 4
+temperature of the thermodynamic table in K (default 298.15). An explicit
+value overrides the xcontrol \f(CR$thermo temp\fP key, which overrides the builtin
+default.
+.RE
+.sp
+\fB\-\-lvib\-rotor\-cutoff\fP \fIVALUE\fP
+.RS 4
+rotor cutoff of the quasi\-RRHO entropy treatment in \f(CRcm^\-1\fP (default 50.0;
+the xcontrol \f(CR$thermo sthr\fP key).
+.RE
+.sp
+\fB\-\-lvib\-imag\-cutoff\fP \fIVALUE\fP
+.RS 4
+imaginary frequency cutoff in \f(CRcm^\-1\fP (default \-20.0; the minus sign is
+required). The value sets both the mode counting and, together with the
+xcontrol \f(CR$thermo imagthr\fP key, the partition function of the thermochemistry.
+.RE
+.sp
+\fB\-\-lvib\-freq\-scal\fP \fIVALUE\fP
+.RS 4
+frequency scaling factor of the thermochemistry (default 1.0; the xcontrol
+\f(CR$thermo scale\fP key).
+.RE
+.SS "GENERAL"
+.sp
+\fB\-I, \-\-input\fP \fIFILE\fP
+.RS 4
+use \fIFILE\fP as input source for \f(CRxcontrol(7)\fP instructions
+.RE
+.sp
+\fB\-\-namespace\fP \fISTRING\fP
+.RS 4
+give this \f(CRoxtb(1)\fP run a namespace. All files, even temporary
+ones, will be named according to \fISTRING\fP (might not work everywhere).
+.RE
+.sp
+\fB\-\-[no]copy\fP
+.RS 4
+copies the \f(CRxcontrol\fP file at startup (default = true)
+.RE
+.sp
+\fB\-\-[no]restart\fP
+.RS 4
+restarts calculation from \f(CRxtbrestart\fP (default = true)
+.RE
+.sp
+\fB\-P, \-\-parallel\fP \fIINT\fP
+.RS 4
+number of parallel processes
+.RE
+.sp
+\fB\-\-blas\-threads\fP \fIN\fP
+.RS 4
+set the number of threads used by the linear algebra backend (OpenBLAS or
+MKL) at run time and print the value read back; without the flag the
+backend is left untouched
+.RE
+.sp
+\fB\-\-define\fP
+.RS 4
+performs automatic check of input and terminate
+.RE
+.sp
+\fB\-\-json\fP
+.RS 4
+write xtbout.json file
+.RE
+.sp
+\fB\-\-citation\fP
+.RS 4
+print citation and terminate
+.RE
+.sp
+\fB\-\-license\fP
+.RS 4
+print license and terminate
+.RE
+.sp
+\fB\-v, \-\-verbose\fP
+.RS 4
+be more verbose (not supported in every unit)
+.RE
+.sp
+\fB\-\-ceasefiles\fP
+.RS 4
+reduce the amount of output and files written (e.g. xtbtopo.mol)
+.RE
+.sp
+\fB\-\-strict\fP
+.RS 4
+turns all warnings into hard errors
+.RE
+.sp
+\fB\-h, \-\-help\fP
+.RS 4
+show help page
+.RE
+.sp
+\fB\-\-cut\fP
+.RS 4
+create inner region for \f(CRoniom\fP calculation without performing any calcultion
+.RE
+.SH "ENVIRONMENT VARIABLES"
+.sp
+\f(CRoxtb(1)\fP accesses a path\-like variable to determine the location of its
+parameter files, you have to provide the \f(CRXTBPATH\fP variable in the same
+syntax as the system \f(CRPATH\fP variable. If this variable is not set, \f(CRoxtb(1)\fP
+will try to generate the \f(CRXTBPATH\fP from the deprecated \f(CRXTBHOME\fP variable.
+In case the \f(CRXTBHOME\fP variable is not set it will be generated from the
+\f(CRHOME\fP variable. So in principle storing the parameter files in the users
+home directory is suffient but might lead to come cluttering.
+.sp
+Since the \f(CRXTBHOME\fP variable is deprecated with version 6.0 and newer
+\f(CRoxtb(1)\fP will issue a warning if \f(CRXTBHOME\fP is not part of the \f(CRXTBPATH\fP
+since the \f(CRXTBHOME\fP variable is not used in production runs.
+.sp
+\f(CROMP_NUM_THREADS\fP sets the number of OpenMP threads. A threaded BLAS is the
+largest performance trap on multi core machines: the OpenMP threads and the BLAS
+thread pool multiply, and an idle pool spins between calls. Measured on GFN2
+single points (24 and 501 atoms) at \f(CROMP_NUM_THREADS=8\fP, five runs with the
+minimum taken on an idle machine, the settings that recover the loss differ in
+strength, and the strongest one comes first:
+.IP "1." 4
+\fBbefore the process starts\fP, \f(CRexport OPENBLAS_NUM_THREADS=1\fP (12 ms). The
+environment variable is consumed while the OpenBLAS pool is created, in an ELF
+constructor that runs before \f(CRmain()\fP, so the shell has to export it \- the
+program cannot set it in time.
+.IP "2." 4
+Next, \fB\-\-blas\-threads\fP \fIN\fP together with \f(CROMP_WAIT_POLICY=PASSIVE\fP (20 ms;
+both are read at start\-up as well). The flag alone measures 99 ms, 8.3x the
+environment variable: it resizes the work partition of the pool through the
+runtime API, but the pool itself was already built at eight threads before
+\f(CRmain()\fP, and what remains is the OpenMP teams spinning between the calls,
+which is exactly what the wait policy and the spin count control. Leaving
+everything at its default measures 583 ms.
+.IP "3." 4
+\f(CROPENBLAS_NUM_THREADS=1\fP also wins on a larger system. The gain falls with
+size \- about 49x at 24 atoms against about 2.8x at 501 atoms \- but at 501
+atoms the environment variable still measures 656 ms against 1827 ms with the
+pool left at the thread count, while \fB\-\-blas\-threads 1\fP with
+\f(CROMP_WAIT_POLICY=PASSIVE\fP measures 699 ms and \fB\-\-blas\-threads 1\fP alone
+946 ms.
+.sp
+\f(CRMKL_NUM_THREADS\fP is ignored by a build linked against OpenBLAS and
+\f(CROPENBLAS_DEFAULT_NUM_THREADS\fP measured a no\-op.
+.sp
+The \f(CR\-\-help\fP page is coloured on a terminal. \f(CRCLICOLOR_FORCE\fP set to a value
+other than \f(CR0\fP forces colour even into a pipe and wins over everything else;
+otherwise \f(CRNO_COLOR\fP set to a non\-empty value disables it; otherwise colour
+follows the output terminal, so a piped or redirected page carries no escape
+sequence and is byte\-for\-byte what it is without colour. The colour is
+decoration only: stripping the escape sequences reproduces the plain page
+exactly.
+.sp
+The same limit can be requested from inside the program, without any
+environment variable, with \fB\-\-blas\-threads\fP \fIN\fP: it calls the OpenBLAS (or
+MKL) runtime API through \f(CRdlopen\fP/\f(CRdlsym\fP, prints the thread count it read back
+from the backend and warns with \f(CRno OpenBLAS or MKL symbol found\fP when the
+linked backend exports no such symbol. That warning also covers a
+\fBstatically\fP linked BLAS: its symbols exist only in \f(CR.symtab\fP, which is never
+part of the dynamic lookup scope, so the flag has no effect there although the
+symbol is present in the binary. Without the flag \f(CRoxtb(1)\fP changes nothing.
+.sp
+Both API pairs are resolved by symbol name: \f(CRopenblas_set_num_threads\fP with its
+getter \f(CRopenblas_get_num_threads\fP, and the oneMKL pair \f(CRmkl_set_num_threads\fP /
+\f(CRmkl_get_max_threads\fP (the function \f(CRthreadpoolctl\fP reads MKL's thread count
+with). MKL support is therefore written against the documented oneMKL names; no
+MKL is installed on the machine this option was developed on, so the MKL branch has
+never been executed against a real oneMKL; it was exercised with stub symbols only,
+and the OpenBLAS branch is the one verified by running it.
+\fB\-\-blas\-threads\fP and \fB\-P, \-\-parallel\fP are different knobs (\fB\-\-parallel\fP sets the
+OpenMP thread count and, under an MKL build, the MKL pool as well); where both
+reach the same pool the flag that appears last on the command line wins.
+.sp
+\f(CROMP_STACKSIZE\fP sets the stack size of the OpenMP worker threads \- not the stack
+of the main thread, and not the same setting as \f(CRulimit \-s\fP, although the
+process stack limit does size the worker stacks too: measured, the worker threads
+get 2 MiB while \f(CRulimit \-s\fP is \f(CRunlimited\fP (glibc falls back to the pthread
+default) and the stock \f(CRulimit \-s 8192\fP gives them 8 MiB, so the \f(CRunlimited\fP
+setting is the smaller of the two. This matters because the GFN0 charge model can
+need a worker stack that grows with the system size: in the OpenMP loop over the
+Coulomb derivative \f(CRgetCoulombDerivsCluster\fP, the array reduction
+\f(CRreduction(+:djdr, djdtr, djdL)\fP makes the compiler place each thread's private
+copy of the reduction arrays on the thread stack, \f(CR24*nat*(nat+1) + 96*(nat+1)\fP
+bytes for \f(CRnat\fP atoms, about \f(CR24*nat^2\fP bytes \- 6 060 096 bytes, about 6 MB, at
+500 atoms. When that does not fit, the thread writes into its guard page and the
+process dies with \f(CRSIGSEGV\fP. There is no warning and no usable backtrace:
+measured, the run is completely silent at the smallest sizes that crash (0 bytes
+on stderr), and the single frame the runtime resolves is \f(CRgomp_thread_start\fP
+inside libgomp. The size at which this happens is a property of the environment
+and not of the code: measured with two threads, the first size that crashes is
+about 290 atoms with a 2 MiB worker stack and about 588 atoms with the stock
+8 MiB one, while the formula above is the portable statement. \f(CR\-\-gfn 0\fP reaches
+the limit first (GFN1, GFN2 and GFN\-FF ran clean at 500 and 598 atoms, and GFN2
+also at 1001 atoms, with the same thread counts), but this is a stack size issue
+and not a method issue: with \f(CRulimit \-s 4096\fP even a single threaded run of the
+same system crashes. The workaround is \f(CRexport OMP_STACKSIZE=512M\fP, or a larger
+process stack limit such as \f(CRulimit \-s 65536\fP; it was verified at 290 and 500
+atoms and with the official 6.7.1 binary, where the parallel run then reproduces
+the serial energy. A fixed generous value is enough, because the requirement
+grows with the atom count; \fB\-\-help\fP suggests \f(CRexport OMP_STACKSIZE=4G\fP.
+.SH "LOCAL FILES"
+.sp
+\f(CRoxtb(1)\fP accesses a number of local files in the current working directory
+and also writes some output in specific files. Note that not all input
+and output files allow the \fB\-\-namespace\fP option.
+.SS "INPUT"
+.sp
+\fB.CHRG\fP
+.RS 4
+molecular charge as \fIint\fP
+.RE
+.sp
+\fB.UHF\fP
+.RS 4
+Number of unpaired electrons as \fIint\fP
+.RE
+.sp
+\fBmdrestart\fP
+.RS 4
+contains restart information for MD, \fB\-\-namespace\fP compatible.
+.RE
+.sp
+\fBpcharge\fP
+.RS 4
+point charge input, format is \fIreal\fP \fIreal\fP \fIreal\fP \fIreal\fP [\fIint\fP].
+The first real is used as partial charge, the next three entries
+are the cartesian coordinates and the last is an optional atom type.
+Note that the point charge input is not affected by a CMA transformation.
+Also parallel Hessian calculations will fail due to I/O errors when using
+point charge embedding.
+.RE
+.sp
+\fBxcontrol\fP
+.RS 4
+default input file in \fB\-\-copy\fP mode, see \f(CRxcontrol(7)\fP for details,
+set by \fB\-\-input\fP.
+.RE
+.sp
+\fBxtbrestart\fP
+.RS 4
+contains restart information for SCC, \fB\-\-namespace\fP compatible.
+.RE
+.SS "OUTPUT"
+.sp
+\fBcharges\fP
+.RS 4
+contains Mulliken partial charges calculated in SCC
+.RE
+.sp
+\fBceh.charges\fP
+.RS 4
+contains CEH (Charge\-Extended H\[u00FC]ckel) charges
+.RE
+.sp
+\fBwbo\fP
+.RS 4
+contains Wiberg bond order calculated in SCC, \fB\-\-namespace\fP compatible.
+.RE
+.sp
+\fBenergy\fP
+.RS 4
+total energy in Turbomole format
+.RE
+.sp
+\fBgradient\fP
+.RS 4
+geometry, energy and gradient in Turbomole format
+.RE
+.sp
+\fBhessian\fP
+.RS 4
+contains the (not mass weighted) cartesian Hessian, \fB\-\-namespace\fP compatible.
+.RE
+.sp
+\fBcompliance.dat\fP
+.RS 4
+compliance analysis from an eligible Hessian run. Lists every internal
+coordinate with C\dii\u and 1/C\dii\u, followed by up to 20 strongest
+off\-diagonal couplings per coordinate in descending order of magnitude.
+.RE
+.sp
+\fBxtbtopo.mol\fP
+.RS 4
+topology information written in molfile format.
+.RE
+.sp
+\fBxtbopt.xyz\fP, \fBxtbopt.coord\fP
+.RS 4
+optimized geometry in the same format as the input geometry.
+.RE
+.sp
+\fBxtbhess.coord\fP
+.RS 4
+distorted geometry if imaginary frequency was found
+.RE
+.sp
+\fBxtbopt.log\fP
+.RS 4
+contains all structures obtained in the geometry optimization
+with the respective energy in the comment line in a XMOL formatted
+trajectory
+.RE
+.sp
+\fBxtbsiman.log\fP,\fBxtb.trj.\fIint\fP\fP
+.RS 4
+trajectories from MD
+.RE
+.sp
+\fBscoord.\fIint\fP\fP
+.RS 4
+coordinate dump of MD
+.RE
+.sp
+\fBfod.cub\fP
+.RS 4
+FOD on a cube\-type grid
+.RE
+.sp
+\fBspindensity.cub\fP
+.RS 4
+spindensity on a cube\-type grid
+.RE
+.sp
+\fBdensity.cub\fP
+.RS 4
+density on a cube\-type grid
+.RE
+.sp
+\fBmolden.input\fP
+.RS 4
+MOs and occupation for visualisation and sTDA\-xTB calculations
+.RE
+.sp
+\fBpcgrad\fP
+.RS 4
+gradient of the point charges
+.RE
+.sp
+\fBxtb_esp.cosmo\fP
+.RS 4
+ESP fake cosmo output
+.RE
+.sp
+\fBxtb_esp_profile.dat\fP
+.RS 4
+ESP histogramm data
+.RE
+.sp
+\fBvibspectrum\fP
+.RS 4
+Turbomole style vibrational spectrum data group
+.RE
+.sp
+\fBg98.out\fP, \fBg98l.out\fP, \fBg98_canmode.out\fP, \fBg98_locmode.out\fP
+.RS 4
+g98 fake output with normal or local modes
+.RE
+.sp
+\fB.tmpxtbmodef\fP
+.RS 4
+input for mode following
+.RE
+.sp
+\fBcoordprot.0\fP
+.RS 4
+protonated species
+.RE
+.sp
+\fBxtblmoinfo\fP
+.RS 4
+centers of the localized molecular orbitals
+.RE
+.sp
+\fBlmocent.coord\fP
+.RS 4
+centers of the localized molecular orbitals
+.RE
+.sp
+\fBtmpxx\fP
+.RS 4
+number of recommended modes for mode following
+.RE
+.sp
+\fBxtb_normalmodes\fP, \fBxtb_localmodes\fP
+.RS 4
+binary dump for mode following
+.RE
+.SS "TOUCH"
+.sp
+\fBxtbmdok\fP
+.RS 4
+generated by successful MD
+.RE
+.sp
+\fB.xtbok\fP
+.RS 4
+generated after each successful \f(CRoxtb(1)\fP run
+.RE
+.sp
+\fB.sccnotconverged\fP
+.RS 4
+generated after failed SCC with printlevel=2
+.RE
+.SH "WARNINGS"
+.sp
+\f(CRoxtb(1)\fP can generate the two types of warnings, the first warning section
+is printed immediately after the normal banner at startup, summing up the
+evaluation of all input sources (commandline, xcontrol, xtbrc). To check
+this warnings exclusively before running an expensive calculation a
+input check is implemented via the \fB\-\-define\fP flag. Please, study this
+warnings carefully!
+.sp
+After \f(CRoxtb(1)\fP has evaluated the all input sources it immediately enters
+the production mode. Severe errors will lead to an abnormal termination
+which is signalled by the printout to STDERR and a non\-zero return value
+(usually 128). All non\-fatal errors are summerized in the end of the calculation
+in one block, right before the timing analysis.
+.sp
+To aid the user to fix the problems generating these warnings a brief
+summary of each warning with its respective string representation in the
+output will be shown here:
+.sp
+\fBANCopt failed to converge the optimization\fP
+.RS 4
+geometry optimization has failed to converge in the given number
+optimization cycles. This is not neccessary a problem if only a
+small number of cycles was given for the optimization on purpose.
+All further calculations are done on the last geometry of the
+optimization.
+.RE
+.sp
+\fBHessian on incompletely optimized geometry!\fP
+.RS 4
+This warning will be issued twice, once before the Hessian,
+calculations starts (it would otherwise take some time before
+this this warning could be detected) and in the warning block
+in the end. The warning will be generated if the gradient norm
+on the given geometry is higher than a certain threshold.
+.RE
+.SH "EXIT STATUS"
+.sp
+\fB0\fP
+.RS 4
+normal termination of \f(CRoxtb(1)\fP
+.RE
+.sp
+\fB128\fP
+.RS 4
+Failure (termination via error stop generates 128 as return value)
+.RE
+.SH "BUGS"
+.sp
+please report all bugs with an example input, \f(CR\-\-copy\fP dump of internal settings
+and the used geometry, as well as the \f(CR\-\-verbose\fP output to xtb@thch.uni\-bonn.de
+.SH "RESOURCES"
+.sp
+Main web site: http://grimme.uni\-bonn.de/software/xtb
+.SH "COPYING"
+.sp
+Copyright (C) 2017\-2023 Stefan Grimme
+.sp
+xtb is free software: you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+.sp
+xtb is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+.sp
+You should have received a copy of the GNU Lesser General Public License
+along with xtb.  If not, see \fIhttps://www.gnu.org/licenses/\fP.

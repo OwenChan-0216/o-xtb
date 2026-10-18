@@ -200,9 +200,11 @@ touch).
 
 ## Documentation
 
-- `man 1 oxtb` and `man 7 xcontrol` — the manual pages, installed from
-  `man/oxtb.1.adoc` and `man/xcontrol.7.adoc` as AsciiDoc sources under
-  `share/man`.
+- `man 1 oxtb` and `man 7 xcontrol` — the manual pages.  The AsciiDoc sources
+  `man/oxtb.1.adoc` / `man/xcontrol.7.adoc` are installed under `share/man`, and
+  `man/tools/adoc2man.py` renders them into the roff pages `man/oxtb.1` /
+  `man/xcontrol.7`, which are committed and installed alongside the sources
+  (the drift gate `xtb/landscape-man-render` keeps the two in step).
 
 The documentation site is published at <https://owenchan-0216.github.io/o-xtb/>
 and is rebuilt on every push to `main`.  It holds the user guide, the generated
