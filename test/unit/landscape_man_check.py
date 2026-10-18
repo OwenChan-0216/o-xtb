@@ -16,40 +16,58 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
-"""`man/oxtb.1.adoc` consistency check of the landscape suite options.
+"""Consistency check of the two man pages against the implementation.
 
-The repository has no rendering tool chain (asciidoctor, a2x, pandoc, groff
-and man are all absent), so the man page cannot be rendered here.  This check
-replaces the missing renderer with a **structural** validation and a
-**coverage** gate, and it is the gate a later edit has to pass before the
-documentation may drift away from the implementation again:
+The repository has no AsciiDoc tool chain in the build (no asciidoctor, a2x,
+pandoc or mandoc); ``man/tools/adoc2man.py`` renders the pages and
+``xtb/landscape-man-render`` keeps the committed roff artifacts in step with
+the sources.  This check is the **coverage** gate next to that render gate: it
+is what prevents the prose from drifting away from the parser again.
 
-  coverage, forward
-      every implemented suite spelling (`--l*` plus `--method`) appears as an
-      **entry** of the man page, i.e. on a `*--flag*::` line with a
-      description below it.  A spelling that only occurs in prose does not
-      count as documented (the review of the CLI redesign found several
-      "documented in passing" flags that no reader could find).
+``man/oxtb.1.adoc``, both directions:
 
-  coverage, reverse
-      every `--l*` spelling that occurs **anywhere** in the man page - entry
-      or prose - is implemented and documented by `--help`.  This direction
-      catches a man page that promises a flag that does not exist.
+  forward
+      every implemented CLI spelling is either an **entry** of the man page
+      (a ``*--flag*::`` line with a description below it) or is listed in the
+      explicit allowlist below with a one-line reason.  A spelling that only
+      occurs in prose does not count (the CLI-redesign review found several
+      "documented in passing" flags no reader could find).
+
+  forward, aliases covered
+      the merged house styles are written out, so ``--copy``/``--nocopy``,
+      ``--restart``/``--norestart``, ``--charge`` and ``--gfn0``/``--gfn1``/
+      ``--gfn2`` are entries of their twin and need no allowlist entry.
+
+  reverse
+      every flag-shaped spelling of the man page is implemented and documented
+      by ``--help``.  Long spellings are checked wherever they occur (prose
+      included), short spellings only on entry lines, which keeps shell
+      commands such as ``ulimit -s`` out of the check.  This direction catches
+      a page that promises a flag the parser does not implement (the former
+      ``--temp``/``--reactor`` entries).
 
   structure
-      every entry has at least one indented line of text, every section title
-      carries an underline of exactly its own length, every monospace span
-      (backtick) and every bold span (`*`) is closed on its own line, and no
-      suite flag appears in two entries.
+      every entry has an indented line of text, every section underline has
+      exactly the title's length, every monospace and bold span is closed on
+      its own line, and no flag appears in two entries.
 
-The suite spelling sets are extracted with exactly the rules of
-`landscape_help_check.py` (imported from the same directory, so the two gates
-cannot drift apart).  Usage:
+``man/xcontrol.7.adoc``:
 
-    landscape_man_check.py <src/prog/main.F90> <src/xhelp.f90> <man/oxtb.1.adoc> [rundir]
+  blocks
+      every ``$block`` name the ``xcontrol`` dispatcher of
+      ``src/set_module.f90`` accepts appears in the page.  The page is not
+      gated at the key level: the many legacy/debug keys are covered by the
+      "these keys exist and are accepted, see ``--copy``" pointer paragraph,
+      so only the block names can rot unnoticed (report 163).
 
-The exit status is non-zero when a gate fails; the diagnostic lists of the
-native (non-suite) spellings are printed but never gated.
+The option spellings of ``main.F90``/``xhelp.f90`` are extracted with exactly
+the rules of ``landscape_help_check.py`` (imported from the same directory, so
+the two gates cannot disagree about what a spelling is).  Usage:
+
+    landscape_man_check.py <main.F90> <xhelp.f90> <man/oxtb.1.adoc> \\
+        <man/xcontrol.7.adoc> <src/set_module.f90> [rundir]
+
+The exit status is non-zero when a gate fails.
 """
 
 import os
@@ -60,14 +78,29 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import landscape_help_check as hc  # noqa: E402  (path is set up above)
 
 #: An entry line of the man page (`*--flag* 'ARG'::`); the SYNOPSIS line
-#: `*xtb* ...` is not an entry because it does not end in `::`
+#: `*oxtb* ...` is not an entry because it does not end in `::`
 ENTRY = re.compile(r"^\*.*::\s*$")
-#: A flag token, in an entry line or in prose
-MAN_TOKEN = re.compile(r"--[a-z0-9-]+")
+#: A flag-shaped token: one or two dashes, then an identifier that starts with
+#: a letter.  The letter is what separates an option from the level keywords
+#: `-1`/`-2`/`-3` and from the AsciiDoc underline runs (`----`), neither of
+#: which may be read as a spelling.
+FLAG = re.compile(r"(?<![\w-])-{1,2}[A-Za-z][A-Za-z0-9_-]*")
 #: A section title underline (AsciiDoc two-line style)
-UNDERLINE = re.compile(r"^[-~]{2,}$")
+UNDERLINE = re.compile(r"^[-~^+]{2,}$")
 #: A commented-out block delimiter (`//////////////////`)
 COMMENT_DELIMITER = re.compile(r"^/{4,}$")
+#: The `xcontrol` dispatcher: `select case(line(2:))` ... `case('name')`
+BLOCK_DISPATCH_OPEN = "select case(line(2:))"
+CASE_LABEL = re.compile(r"case\s*\(\s*'([a-z0-9_]+)'\s*\)")
+
+#: Implemented spellings that are deliberately **not** man entries.  Every
+#: entry carries a one-line reason; the list must stay small and explicit, so
+#: a new spelling is documented rather than quietly allowed.
+MAN_ALLOWLIST = {
+    "--coffee": "easter egg: documented by `--help`, deliberately absent from the man page",
+    "--siman": "parsed but not a registered run type (aborts in set_runtyp; removed from `--help`)",
+    "--gmd": "parsed but not a registered run type (aborts in set_runtyp; removed from `--help`)",
+}
 
 
 def read(path):
@@ -75,31 +108,63 @@ def read(path):
         return handle.read()
 
 
-def man_entry_flags(text):
-    """Suite spellings of the man **entries** (`*--flag*::` lines)."""
-    flags = set()
+def is_option(token):
+    """Whether a spelling is an option (a letter follows the dashes)."""
+    return FLAG.fullmatch(token) is not None
+
+
+def option_flags(tokens):
+    """The option-shaped spellings of a token set."""
+    return {token for token in tokens if is_option(token)}
+
+
+def man_entries(text):
+    """The option spellings on the entry lines (`*--flag*::`)."""
+    entries = set()
     for line in text.splitlines():
         if ENTRY.match(line):
-            flags.update(MAN_TOKEN.findall(line))
-    return hc.suite_flags(flags)
+            entries.update(FLAG.findall(line))
+    return entries
 
 
-def man_occurrence_flags(text):
-    """Every suite spelling anywhere in the man page (entry or prose)."""
-    return hc.suite_flags(set(MAN_TOKEN.findall(text)))
+def man_reverse_tokens(text):
+    """The flag-shaped spellings the man page must not invent.
+
+    Long spellings (`--x`) are collected wherever they occur, prose included,
+    because a phantom option can hide in a sentence.  Short spellings (`-x`)
+    are collected only from the entry lines: a bare `-s` in the prose is a
+    shell option (`ulimit -s`), not a program spelling.
+    """
+    tokens = set()
+    for line in text.splitlines():
+        found = FLAG.findall(line)
+        if ENTRY.match(line):
+            tokens.update(found)
+        else:
+            tokens.update(token for token in found if token.startswith("--"))
+    return tokens
+
+
+def xcontrol_blocks(set_module_source):
+    """The `$block` names of the ``xcontrol`` dispatcher."""
+    start = set_module_source.index(BLOCK_DISPATCH_OPEN)
+    end = set_module_source.index("end select", start)
+    return set(CASE_LABEL.findall(set_module_source[start:end]))
+
+
+def xcontrol_mentions(text):
+    """The `$name` tokens of the ``xcontrol`` man page."""
+    return set(re.findall(r"\$([a-z0-9_]+)", text))
 
 
 def structural_findings(text):
-    """Return the structural defects of the man page.
+    """Return the structural defects of `man/oxtb.1.adoc`.
 
     The commented-out block (a `////` delimiter pair) is skipped, exactly like
-    a renderer would.  The known, pre-existing duplicate of the native
-    `--chrg` entry (two entries with different argument shapes, `INT` and
-    `INT:INT`) is reported separately: it is outside the suite namespace.
+    a renderer would.
     """
     findings = []
-    suite_duplicates = []
-    native_duplicates = []
+    duplicates = []
     counts = {}
     lines = text.splitlines()
     in_comment = False
@@ -132,7 +197,7 @@ def structural_findings(text):
                         number, line
                     )
                 )
-            for flag in MAN_TOKEN.findall(line):
+            for flag in FLAG.findall(line):
                 counts[flag] = counts.get(flag, 0) + 1
 
         # (c) markup has to be closed on the same line
@@ -146,88 +211,96 @@ def structural_findings(text):
                 "line {0}: unclosed bold span: {1!r}".format(number, line)
             )
 
-    # (d) no suite flag in two entries; native duplicates stay diagnostic
+    # (d) no flag may appear in two entries
     for flag, count in sorted(counts.items()):
         if count > 1:
-            if hc.suite_flags({flag}):
-                suite_duplicates.append((flag, count))
-            else:
-                native_duplicates.append((flag, count))
-    for flag, count in suite_duplicates:
-        findings.append(
-            "suite flag {0} appears in {1} entries".format(flag, count)
-        )
-    return findings, native_duplicates
+            duplicates.append((flag, count))
+    for flag, count in duplicates:
+        findings.append("flag {0} appears in {1} entries".format(flag, count))
+    return findings
 
 
 def main():
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 6:
         print(
             "usage: landscape_man_check.py main.F90 xhelp.F90 man/oxtb.1.adoc "
-            "[rundir]"
+            "man/xcontrol.7.adoc src/set_module.f90 [rundir]"
         )
         return 2
 
     main_source = read(sys.argv[1])
     help_source = read(sys.argv[2])
     man_source = read(sys.argv[3])
+    xcontrol_source = read(sys.argv[4])
+    set_module_source = read(sys.argv[5])
 
-    implemented = hc.suite_flags(hc.implemented_flags(main_source))
-    documented = hc.suite_flags(hc.documented_flags(help_source, expand_no=True))
-    entries = man_entry_flags(man_source)
-    occurrences = man_occurrence_flags(man_source)
+    implemented = option_flags(hc.implemented_flags(main_source))
+    documented = option_flags(hc.documented_flags(help_source, expand_no=True))
+    entries = man_entries(man_source)
+    reverse = man_reverse_tokens(man_source)
 
     print("landscape man page consistency check")
-    print("  main = " + sys.argv[1])
-    print("  help = " + sys.argv[2])
-    print("  man  = " + sys.argv[3])
+    print("  main     = " + sys.argv[1])
+    print("  help     = " + sys.argv[2])
+    print("  man      = " + sys.argv[3])
+    print("  xcontrol = " + sys.argv[4])
+    print("  set      = " + sys.argv[5])
     print(
-        "extraction rules (imported from landscape_help_check.py for the two "
-        "spelling sets of main/help, hardcoded here for the man page):"
-    )
-    print("  man entry       a `*--flag*::` entry line of the man page")
-    print("  man occurrence  every suite token of the man page, entry or prose")
-    print(
-        "  suite flags     implemented = {0}, documented = {1}, "
-        "man entries = {2}, man occurrences = {3}".format(
-            len(implemented), len(documented), len(entries), len(occurrences)
+        "implementation spellings: implemented = {0} (option-shaped), "
+        "documented = {1}, man entries = {2}".format(
+            len(implemented), len(documented), len(entries)
         )
     )
 
     failed = False
 
-    # coverage, forward: every implemented suite flag is a man entry
-    missing = sorted(implemented - entries)
+    # coverage, forward: every implemented spelling is an entry or allowlisted
+    allowlisted = sorted(implemented & set(MAN_ALLOWLIST))
+    missing = sorted(implemented - entries - set(MAN_ALLOWLIST))
     print(
-        "implemented suite flags without a man entry ({0}): {1}".format(
+        "implemented spellings without a man entry ({0}): {1}".format(
             len(missing), " ".join(missing) or "(none)"
         )
     )
     if missing:
         failed = True
-
-    # coverage, forward (help): every documented suite flag is a man entry
-    help_missing = sorted(documented - entries)
     print(
-        "documented suite flags without a man entry ({0}): {1}".format(
-            len(help_missing), " ".join(help_missing) or "(none)"
+        "allowlisted, not in the man page on purpose ({0}): {1}".format(
+            len(allowlisted),
+            " | ".join(
+                "{0} ({1})".format(f, MAN_ALLOWLIST[f]) for f in allowlisted
+            )
+            or "(none)",
         )
     )
-    if help_missing:
+    for flag, reason in MAN_ALLOWLIST.items():
+        if flag not in implemented:
+            print(
+                "FAIL: allowlist entry {0} is not an implemented spelling "
+                "({1})".format(flag, reason)
+            )
+            failed = True
+
+    # coverage, reverse: no man spelling the parser does not implement
+    not_implemented = sorted(reverse - implemented)
+    print(
+        "man spellings that are not implemented ({0}): {1}".format(
+            len(not_implemented), " ".join(not_implemented) or "(none)"
+        )
+    )
+    if not_implemented:
         failed = True
-
-    # coverage, reverse: no man spelling that the parser does not implement
-    extra = sorted(occurrences - implemented)
+    not_documented = sorted(reverse - documented)
     print(
-        "man suite spellings that are not implemented ({0}): {1}".format(
-            len(extra), " ".join(extra) or "(none)"
+        "man spellings that are not documented by `--help` ({0}): {1}".format(
+            len(not_documented), " ".join(not_documented) or "(none)"
         )
     )
-    if extra:
+    if not_documented:
         failed = True
 
     # structure
-    findings, native_duplicates = structural_findings(man_source)
+    findings = structural_findings(man_source)
     print(
         "structural findings ({0}): {1}".format(
             len(findings), " | ".join(findings) or "(none)"
@@ -235,19 +308,29 @@ def main():
     )
     if findings:
         failed = True
+
+    # xcontrol: every dispatched $block name is mentioned in the page
+    blocks = xcontrol_blocks(set_module_source)
+    mentions = xcontrol_mentions(xcontrol_source)
+    missing_blocks = sorted(blocks - mentions)
     print(
-        "known native duplicate entries (diagnostic, not gated): {0}".format(
-            " ".join("{0} x{1}".format(f, n) for f, n in native_duplicates)
-            or "(none)"
+        "xcontrol blocks: code = {0}, page mentions = {1}, missing = {2}: {3}".format(
+            len(blocks),
+            len(mentions),
+            len(missing_blocks),
+            " ".join("$" + b for b in missing_blocks) or "(none)",
         )
     )
+    if missing_blocks:
+        failed = True
 
     if failed:
-        print("FAIL: the man page and the implementation disagree")
+        print("FAIL: the man pages and the implementation disagree")
         return 1
-    print("PASS: every suite option is documented as a man entry")
-    print("PASS: the man page promises no option that is not implemented")
+    print("PASS: every implemented spelling is a man entry or allowlisted")
+    print("PASS: the man page promises no spelling the parser lacks")
     print("PASS: the man page is structurally sound")
+    print("PASS: every xcontrol block is documented in xcontrol(7)")
     return 0
 
 

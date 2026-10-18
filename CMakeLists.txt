@@ -350,13 +350,13 @@ install(
 # pages.  `man/oxtb.1` and `man/xcontrol.7` are generated from the sources by
 # `man/tools/adoc2man.py` (stdlib only) and committed, and
 # `test/unit/landscape-man-render` fails when a source was edited without
-# re-rendering.  Both forms are installed: the AsciiDoc source for readers and
-# re-rendering, the roff page because `man` cannot read `.adoc`.  The rendered
-# page is installed only under its real name (`oxtb.1`); there is no `xtb.1`
-# alias.
+# re-rendering.  The rendered page is installed under its real name (no
+# `xtb.1` alias) because `man` cannot read `.adoc`, and the AsciiDoc source is
+# installed under `share/doc` **not** under `share/man`: a source left in a man
+# directory makes `man` print `ignoring bogus filename ...adoc` whenever that
+# directory is in `MANPATH`.
 install(
    FILES
-   "${PROJECT_SOURCE_DIR}/man/oxtb.1.adoc"
    "${PROJECT_SOURCE_DIR}/man/oxtb.1"
    DESTINATION
    "${CMAKE_INSTALL_MANDIR}/man1"
@@ -364,10 +364,19 @@ install(
 
 install(
    FILES
-   "${PROJECT_SOURCE_DIR}/man/xcontrol.7.adoc"
    "${PROJECT_SOURCE_DIR}/man/xcontrol.7"
    DESTINATION
    "${CMAKE_INSTALL_MANDIR}/man7"
+)
+
+# The AsciiDoc sources, for readers and re-rendering.  Kept out of the man
+# directories on purpose (see above).
+install(
+   FILES
+   "${PROJECT_SOURCE_DIR}/man/oxtb.1.adoc"
+   "${PROJECT_SOURCE_DIR}/man/xcontrol.7.adoc"
+   DESTINATION
+   "${CMAKE_INSTALL_DOCDIR}/man-src"
 )
 
 # Build output artifacts

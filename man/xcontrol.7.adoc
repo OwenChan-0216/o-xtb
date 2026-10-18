@@ -6,7 +6,8 @@ XCONTROL(7)
 
 NAME
 ----
-xcontrol - instruction file for `oxtb(1)` version 6.0 and newer
+xcontrol - instruction file for `oxtb(1)` (o-xtb 0.2.1, xTB 6.7.1 Hamiltonian),
+the xcontrol input of xTB 6.0 and newer
 
 SYNOPSIS
 --------
@@ -35,6 +36,16 @@ by itself. You can tell `oxtb(1)` by *--copy* to
 save you original instructions, note that this implementation will strip all
 comments while copying (print what you see, not what you read), to aid debugging.
 
+Besides the keys documented below, several data groups accept legacy or debug
+keys that exist and are accepted but are not listed here: they are either short
+aliases of a documented key (for example `kr`, `kf`, `kt`, `ko`, `kd` and `kq`
+for the model-Hessian force constants of `$opt`) or internal toggles left in
+place for compatibility. The `$set` legacy instruction and the `$ffnb`,
+`$reactor`, `$siman` and `$solvation` groups are documented with their own
+sections below. The authoritative list of every accepted key of a run is the
+canonical instruction set `oxtb(1)` echoes when it is asked to *--copy* its
+input.
+
 $fit
 ~~~~
 logical instruction to  set `oxtb(1)` in `mfit(1)` compatibility mode
@@ -46,6 +57,11 @@ $samerand
 ~~~~~~~~~
 logical instruction to initialize the random number generator
 with the same sequence. This is equivalent to using `$seed 41`.
+
+$derived
+~~~~~~~~
+logical instruction accepted for compatibility only. The reader has no keys
+and the handler is an empty stub, so the instruction has no effect.
 
 $seed 'int'
 ~~~~~~~~~~~
@@ -73,7 +89,7 @@ $cma
 ~~~~
 shifts molecule to center of mass and transforms cartesian coordinates
 into the coordinate system of the principle axis (not affected by
-`isotopes'-file).
+`isotopes` file).
 
 $constrain
 ~~~~~~~~~~
@@ -165,7 +181,7 @@ $embedding
     Alternatively the 'gam' value can be given directly as fifth argument,
     to simulate point charges provide a huge value for 'gam'.
 
-*gradient*='file::
+*gradient*='file'::
     gradient of the point charges is written to 'file' (default: 'pcgrad')
 
 $external
@@ -190,6 +206,12 @@ $external
 *turbodir*='STRING'::
     path to your Turbomole directory (usually found in `TURBODIR` or
     `TURBOIMG` variable)
+
+$ffnb
+~~~~~
+Force-field neighbour list. The key of each line is ignored; the value has the
+form `atom:neighbour,...` and lists the bonded neighbours of one atom; an atom
+index followed by a zero has no neighbours.
 
 $fix
 ~~~~
@@ -236,6 +258,11 @@ $gbsa
 *grid*='level'::
     changes the grid used for the surface accessable surface area
     (normal, tight, vtight/verytight, extreme are available).
+
+$solvation
+~~~~~~~~~~
+Alias of `$gbsa`: the same keys and the same handler are used, so a block may
+be opened with either name.
 
 $gfn
 ~~~~
@@ -373,7 +400,7 @@ $opt
 *output*='file'::
     redirect output of optimization to 'file'
 
-*logfile*='file::
+*logfile*='file'::
     write optimization log to 'file' (default: xtbopt.log)
 
 *optlevel*='level'::
@@ -443,6 +470,38 @@ $path (6.1 only)
    width of the RMSD criterium
 *product*='file'::
    file name of the product structure
+
+$reactor
+~~~~~~~~
+Reactor dynamics setup.
+
+*kpush*='real'::
+   Gaussian RMSD prefactor pushing away from the educt
+*alp*='real'::
+   width of the Gaussian RMSD criterium
+*max*='int'::
+   number of saved images for the RMSD potential
+*density*='real'::
+   density of the system
+
+$siman
+~~~~~~
+Simulated-annealing setup. The instruction block is read and accepted, but the
+`siman` run type itself is not registered in this build, so a run that selects
+it aborts; the block is kept for input compatibility.
+
+*dump*='real'::
+   snapshot interval of the annealing run
+*n*='int'::
+   number of temperatures
+*ewin*='real'::
+   energy window of the conformational search
+*temp*='real'::
+   final temperature of the annealing run
+*enan*='bool'::
+   enable the energy analysis
+*check*='int'::
+   RMSD check flag: 1 disables the check, 0 enables it
 
 $scan
 ~~~~~
@@ -622,8 +681,8 @@ $write
 
 LEGACY
 ~~~~~~
-To ensure compatibility with older versions of the `oxtb(1)` prior to version 6.0
-a group instruction set is allowed which accepts the same syntax as the
+To ensure compatibility with older versions of `oxtb(1)` prior to version 6.0
+the legacy `$set` instruction is allowed; it accepts the same syntax as the
 original set-block. Here we provide a list of set-block commands and their
 corresponding instructions in `xcontrol(7)`.
 
@@ -674,7 +733,7 @@ NOTE: `oxtb(1)` can read a set-block by itself and will print out a
 *microopt*::     use *mircocycle* in *opt* group instead
 *mode_local*::   use *local* in *modef* group instead
 *mode_n*::       use *n* in *modef* group instead
-*mode_prj*::     use *prj* in *modef group instead
+*mode_prj*::     use *prj* in *modef* group instead
 *mode_step*::    use *step* in *modef* group instead
 *mode_updat*::   use *updat* in *modef* group instead
 *mode_vthr*::    use *vthr* in *modef* group instead
@@ -694,7 +753,7 @@ NOTE: `oxtb(1)` can read a set-block by itself and will print out a
 *shake*::        use *shake* in *md* group instead
 *sphere*::       use *sphere* in *sphere* group instead
 *springexp*::    use *springexp* in *fix* group instead
-*stephess*::     use *step* in *hess group instead
+*stephess*::     use *step* in *hess* group instead
 *thermo_sthr*::  use *sthr* in *thermo* group instead
 *thermo*::       use *temp* in *thermo* group instead
 *uhf*::          use *uhf* logical instead

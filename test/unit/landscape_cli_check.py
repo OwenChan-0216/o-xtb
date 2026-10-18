@@ -5527,28 +5527,33 @@ def check_help_topic(exe, inp, rundir, main_src):
     (the longest block) included, and the unknown topic has to name the
     categories and exit non-zero.
     """
-    from landscape_help_check import implemented_flags
+    from landscape_help_check import HELP_ALLOWLIST, implemented_flags
 
     with open(main_src) as handle:
         implemented = implemented_flags(handle.read())
     if len(implemented) != 247:
         fail("the parser implements %d spellings, expected 247"
              % len(implemented))
+    # `--siman` and `--gmd` are parsed but are not registered run types; they
+    # are deliberately absent from the help table (see the allowlist in
+    # `landscape_help_check.py`), so the index must not show them and must not
+    # be expected to.
+    expected = implemented - set(HELP_ALLOWLIST)
 
     status, page = run_help(exe, rundir, ["--help"])
     if status != 0:
         fail("oxtb --help terminated with status %d" % status, page)
     shown = index_spellings(page)
-    missing = sorted(implemented - shown)
-    phantom = sorted(shown - implemented)
+    missing = sorted(expected - shown)
+    phantom = sorted(shown - expected)
     if missing:
         fail("the index misses %d of the %d implemented spellings: %s"
-             % (len(missing), len(implemented), " ".join(missing)), page)
+             % (len(missing), len(expected), " ".join(missing)), page)
     if phantom:
         fail("the index shows %d spellings the parser does not implement: %s"
              % (len(phantom), " ".join(phantom)), page)
     print("index: %d spellings, the %d implemented ones, none phantom"
-          % (len(shown), len(implemented)))
+          % (len(shown), len(expected)))
 
     for topic, first, phrase in HELP_TOPIC_SAMPLES:
         status, out = run_help(exe, rundir, ["--help", topic])

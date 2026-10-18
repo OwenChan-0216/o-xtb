@@ -277,17 +277,14 @@ subroutine help(iunit, topic, status)
       "    re-optimise the structures of the molecular dynamics trajectory xtb.trj", &
       "    at the current optimisation level; the energies are written to", &
       "    xtb_ensemble.xyz"])
-   call add("--siman", "runtypes", &
-      "simulated annealing (run type not registered)", &
-      [character(len=160) :: &
-      "    conformational search by simulated annealing; the run type is not", &
-      "    registered in this build, so the run aborts"])
+   ! `--siman` and `--gmd` are deliberately absent from this table: both are
+   ! parsed by `src/prog/main.F90` but are not registered run types, so a run
+   ! aborts in `set_runtyp` with an honest message; advertising them in
+   ! `--help` only promises a capability the build does not have.  The two
+   ! spellings are on the help/man gates' documented allowlist for that reason.
    call add("--ewin REAL", "runtypes", &
       "energy window of the conformational search (Eh)", &
       [character(len=160) :: "    energy window of the conformational search (default 20.0)"])
-   call add("--gmd", "runtypes", &
-      "deprecated; the run aborts", &
-      [character(len=160) :: "    deprecated; the run aborts with a message"])
    call add("--ljson", "suite", &
       "write landscape_<TASK>.json for every task", &
       [character(len=160) :: &
@@ -1010,16 +1007,16 @@ subroutine help(iunit, topic, status)
       [character(len=160) :: &
       "    analytical linearized Poisson-Boltzmann (ALPB) model,", &
       "    available solvents are acetone, acetonitrile, aniline, benzaldehyde,", &
-      "    benzene, ch2cl2, chcl3, cs2, dioxane, dmf, dmso, ether, ethylacetate, furane,", &
-      "    hexandecane, hexane, methanol, nitromethane, octanol, woctanol, phenol, toluene,", &
-      "    thf, water.", &
+      "    benzene, ch2cl2, chcl3, cs2, dioxane, dmf, dmso, ethanol, ether,", &
+      "    ethylacetate, furane, hexadecane, hexane, methanol, nitromethane, octanol,", &
+      "    woctanol, phenol, toluene, thf, water.", &
       "    The solvent input is not case-sensitive. The Gsolv", &
       "    reference state can be chosen as reference, bar1M, or gsolv (default)."])
    call add("-g, --gbsa SOLVENT [STATE]", "solvation", &
       "GBSA implicit solvation", &
       [character(len=160) :: &
       "    generalized born (GB) model with solvent accessable surface (SASA) model,", &
-      "    available solvents are acetone, acetonitrile, benzene (only GFN1-xTB), CH2Cl2,", &
+      "    available solvents are acetone, acetonitrile, benzene, CH2Cl2,", &
       "    CHCl3, CS2, DMF (only GFN2-xTB), DMSO, ether, H2O, methanol,", &
       "    n-hexane (only GFN2-xTB), THF and toluene.", &
       "    The solvent input is not case-sensitive.", &

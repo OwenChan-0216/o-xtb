@@ -81,6 +81,18 @@ RULE_CHECKS = ("main", "help")
 SET_S_PREFIX = "--l"
 SET_S_EXTRA = "--method"
 
+#: Implemented spellings that are deliberately **not** documented by `--help`.
+#: `--siman` and `--gmd` are parsed by `src/prog/main.F90` but are not
+#: registered run types: the `set_runtyp` dispatcher has no `siman`/`gmd`
+#: case, so a run aborts with that honest message instead of "Unknown
+#: option".  Advertising them in the help table would promise a capability
+#: this build does not have, so they stay out of it and this allowlist keeps
+#: the dialect-A gate meaningful (report 163).  Every entry needs a reason.
+HELP_ALLOWLIST = {
+    "--siman": "parsed but not a registered run type (aborts in set_runtyp)",
+    "--gmd": "parsed but not a registered run type (aborts in set_runtyp)",
+}
+
 
 def describe_rules():
     """Print the extraction rules that produce the counts below."""
@@ -222,8 +234,27 @@ def main():
         if s_difference:
             failed.append((name, s_difference))
         if name == "A":
-            if implemented_undocumented:
-                failed.append((name, implemented_undocumented))
+            allowed = [
+                flag
+                for flag in implemented_undocumented
+                if flag in HELP_ALLOWLIST
+            ]
+            if allowed:
+                print(
+                    "dialect A: allowlisted, not documented on purpose: {0}".format(
+                        " ".join(
+                            "{0} ({1})".format(f, HELP_ALLOWLIST[f])
+                            for f in allowed
+                        )
+                    )
+                )
+            gated = [
+                flag
+                for flag in implemented_undocumented
+                if flag not in HELP_ALLOWLIST
+            ]
+            if gated:
+                failed.append((name, gated))
             if documented_unimplemented:
                 failed.append((name, documented_unimplemented))
 

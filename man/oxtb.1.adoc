@@ -7,8 +7,9 @@ OXTB(1)
 NAME
 ----
 
-oxtb - performs semiempirical quantummechanical calculations,
-      for version 6.0 and newer
+oxtb - performs semiempirical quantummechanical calculations
+      (o-xtb 0.2.1, implementing the xTB 6.7.1 Hamiltonian and the
+      `xcontrol(7)` input of xTB 6.0 and newer)
 
 SYNOPSIS
 --------
@@ -54,47 +55,65 @@ For a full list visit: https://grimme-lab.github.io/mctc-lib/page/index.html
 INPUT SOURCES
 -------------
 `oxtb(1)` gets its information from different sources. The one with highest
-priority is the commandline with all allowed flags and arguments described below.
-The secondary source is the `xcontrol(7)` system, which can in principle
-use as many input files as wished. The `xcontrol(7)` system is the successor
-of the set-block as present in version 5.8.2 and earlier. This implementation
-of `oxtb(1)` reads the `xcontrol(7)` from two of three possible sources,
-the local xcontrol file or the 'FILE' used to specify the geometry
-and the global configuration file found in the `XTBPATH`.
+priority is the commandline with all allowed flags and arguments described
+below. The secondary source is the `xcontrol(7)` system, which can in principle
+use as many input files as wished. The `xcontrol(7)` system is the successor of
+the set-block as present in version 5.8.2 and earlier. This implementation of
+`oxtb(1)` reads the `xcontrol(7)` from two of three possible sources, the local
+xcontrol file or the 'FILE' used to specify the geometry and the global
+configuration file found in the `XTBPATH`.
 
 OPTIONS
 -------
 
-*-c, --chrg* 'INT':: 
-    specify molecular charge as 'INT', overrides `.CHRG` file and `xcontrol` option
-
-*-c, --chrg* 'INT:INT':: 
-    specify charges for 'inner region:outer region' for `oniom` calculation, overrides `.CHRG` file and `xcontrol` option
+*-c, --chrg, --charge* 'INT'::
+    specify molecular charge as 'INT', overrides `.CHRG` file and `xcontrol`
+    option. For an `oniom` calculation the form 'INT:INT' gives the charges of
+    the 'inner region:outer region'.
 
 *-u, --uhf* 'INT'::
-    specify number of unpaired electrons as 'INT', overrides `.UHF` file and `xcontrol` option
-    (default: 0 (singlet) for even electron number, 1 (doublet) for odd electron number)
+    specify number of unpaired electrons as 'INT', overrides `.UHF` file and
+    `xcontrol` option (default: 0 (singlet) for even electron number, 1
+    (doublet) for odd electron number)
 
-*--gfn* 'INT'::
+*--gfn, --gfn0, --gfn1, --gfn2* ['INT']::
     specify parametrisation of GFN-xTB: 0 (GFN0-xTB), 1 (GFN1-xTB),
     2 (GFN2-xTB, the default) or ff (GFN-FF, the same as `--gfnff`); any
-    other value is refused with an error
+    other value is refused with an error. The shorthands `--gfn0`, `--gfn1`
+    and `--gfn2` select 0, 1 and 2 without an argument.
 
 *--gfnff, --gff* ::
     specify parametrisation of GFN-FF
 
+*--iff* ::
+    use the IFF (intermolecular force field) calculator; the fragment sizes are
+    taken from `--nat`
+
+*--mcgfnff* ::
+    use the MC-GFN-FF force field
+
+*--nat* 'LIST'::
+    number of atoms per fragment of the IFF calculation, comma separated
+
 *--tblite* ::
     use tblite library as implementation for xTB
+
+*--color* 'SCHEME'::
+    colour scheme of the tblite output, one of auto (follow the build feature,
+    default), always or never (tblite builds only)
     
 *--ceh <GRAD> [REAL]* ::
-      calculate CEH (Charge-Extended Hückel model) charges and write them to the ceh.charges file,
-      optionally, calculate numerical gradients and write them to the ceh.charges.numgrad file
-      with an adjustable step size for the numerical gradients.
+      calculate CEH (Charge-Extended Hückel model) charges and write them to the
+      ceh.charges file, optionally, calculate numerical gradients and write them
+      to the ceh.charges.numgrad file with an adjustable step size for the
+      numerical gradients.
 
 *--ptb* ::
     performs single-point calculation with the density tight-binding method PTB.
-    Provides electronic structure and properties, such as, e.g., atomic charges, bond orders, and dipole moments,
-    but does not provide any energy-related properties, such as, e.g., total energy, nuclear gradients, or vibrational frequencies.
+    Provides electronic structure and properties, such as, e.g., atomic charges,
+    bond orders, and dipole moments, but does not provide any energy-related
+    properties, such as, e.g., total energy, nuclear gradients, or vibrational
+    frequencies.
 
 *--spinpol*::
     enables spin-polarization for xTB methods (tblite required)
@@ -102,15 +121,28 @@ OPTIONS
 *--oniom* 'METHOD' 'LIST'::
     use subtractive embedding via ONIOM method. 'METHOD' is given as `high:low`
     where `high` can be 'orca', 'turbomole', 'gfn2', 'gfn1', or 'gfnff' and
-    `low` can be 'gfn2', 'gfn1', or 'gfnff'.
-    The inner region is given as comma-separated indices directly in the commandline
-    or in a file with each index on a separate line.
+    `low` can be 'gfn2', 'gfn1', or 'gfnff'. The inner region is given as
+    comma-separated indices directly in the commandline or in a file with each
+    index on a separate line.
+
+*--driver* ['EXECUTABLE']::
+    use an external driver program for the energy and the gradient; the optional
+    argument names the executable to run (there is no built-in default)
+
+*--orca* ::
+    use the external ORCA program for the energy and the gradient
+
+*--mopac* ::
+    use the external MOPAC program for the energy and the gradient
+
+*--tm* ::
+    use the external Turbomole program for the energy and the gradient
 
 *--efield* 'REAL,REAL,REAL'::
     static electric field in Cartesian coordinates, overrides `.EFIELD` file,
     works only via tblite for the xTB Hamiltonians, or with GFN-FF and PTB.
 
-*--etemp, --temp* 'REAL'::
+*--etemp* 'REAL'::
     electronic temperature for SCC (default = 300K)
 
 *--esp* ::
@@ -123,7 +155,8 @@ OPTIONS
     accuracy for SCC calculation, lower is better (default = 1.0)
 
 *--iterations, --maxiterations* 'INT'::
-    maximum number of SCC iterations per single point calculation (default = 250)
+    maximum number of SCC iterations per single point calculation (default =
+    250)
 
 *--vparam* 'FILE'::
     Parameter file for xTB calculation
@@ -131,19 +164,21 @@ OPTIONS
 *--alpb* 'SOLVENT' ['STATE']::
     analytical linearized Poisson-Boltzmann (ALPB) model,
     available solvents are 'acetone', 'acetonitrile', 'aniline', 'benzaldehyde',
-    'benzene', 'ch2cl2', 'chcl3', 'cs2', 'dioxane', 'dmf', 'dmso', 'ether',
-    'ethylacetate', 'furane', 'hexandecane', 'hexane', 'methanol', 'nitromethane',
-    'octanol', 'woctanol', 'phenol', 'toluene', 'thf', 'water'.
+    'benzene', 'ch2cl2', 'chcl3', 'cs2', 'dioxane', 'dmf', 'dmso', 'ethanol',
+    'ether', 'ethylacetate', 'furane', 'hexadecane', 'hexane', 'methanol',
+    'nitromethane', 'octanol', 'woctanol', 'phenol', 'toluene', 'thf', 'water'.
     The solvent input is not case-sensitive.
-    The Gsolv reference state can be chosen as 'reference', 'bar1M', or 'gsolv' (default).
+    The Gsolv reference state can be chosen as 'reference', 'bar1M', or 'gsolv'
+    (default).
 
 *-g, --gbsa* 'SOLVENT' ['STATE']::
     generalized born (GB) model with solvent accessable surface (SASA) model,
-    available solvents are 'acetone', 'acetonitrile', 'benzene' (only GFN1-xTB),
-    'CH2Cl2', 'CHCl3', 'CS2', 'DMF' (only GFN2-xTB), 'DMSO', 'ether', 'H2O',
-    'methanol', 'n-hexane' (only GFN2-xTB), 'THF' and 'toluene'.
+    available solvents are 'acetone', 'acetonitrile', 'benzene', 'CH2Cl2',
+    'CHCl3', 'CS2', 'DMF' (only GFN2-xTB), 'DMSO', 'ether', 'H2O', 'methanol',
+    'n-hexane' (only GFN2-xTB), 'THF' and 'toluene'.
     The solvent input is not case-sensitive.
-    The Gsolv reference state can be chosen as 'reference', 'bar1M', or 'gsolv' (default).
+    The Gsolv reference state can be chosen as 'reference', 'bar1M', or 'gsolv'
+    (default).
 
 *--gbe* 'SOLVENT/EPSILON'::
     generalized Born for finite epsilon (GBe) solvation model (tblite required),
@@ -160,20 +195,21 @@ OPTIONS
 *--cosmo* 'SOLVENT/EPSILON'::
     domain decomposition conductor-like screening model (ddCOSMO)
     available solvents are all solvents that are available for alpb.
-    Additionally, the dielectric constant can be set manually or an ideal conductor
-    can be chosen by setting epsilon to infinity.
-    
+    Additionally, the dielectric constant can be set manually or an ideal
+    conductor can be chosen by setting epsilon to infinity.
+
 *--tmcosmo* 'SOLVENT/EPSILON'::
     same as --cosmo, but uses TM convention for writing the .cosmo files.
 
 *--cpcmx* 'SOLVENT'::
     extended conduction-like polarizable continuum solvation model (CPCM-X),
-    available solvents are all solvents included in the Minnesota Solvation Database.
+    available solvents are all solvents included in the Minnesota Solvation
+    Database.
 
 *--cma* ::
     shifts molecule to center of mass and transforms cartesian coordinates
     into the coordinate system of the principle axis (not affected by
-    `isotopes`-file).
+    `isotopes` file).
 
 *--pop*::
     requests printout of Mulliken population analysis
@@ -182,24 +218,34 @@ OPTIONS
     requests printout of molden file
 
 *--alpha* ::
-    requests the extension of electrical properties to static molecular dipole polarizabilities
+    requests the extension of electrical properties to static molecular dipole
+    polarizabilities
 
-*--raman* ::
-    requests Raman spectrum calculation via combination of GFN2-xTB and PTB
-    using the temperature 'REAL' (default 298.15 K) and the wavelength of 
-    the incident laser which must be given in nm 'REAL' (default 514 nm)
-    
+*--raman* ['TEMP'] ['WAVELENGTH']::
+    requests Raman spectrum calculation via combination of GFN2-xTB and PTB,
+    using the temperature 'TEMP' (default 298.15 K) and the wavelength of the
+    incident laser in nm 'WAVELENGTH' (default 514 nm); PTB needs a tblite
+    build, otherwise the option is refused
+
 *--dipole*::
     requests dipole printout
 
 *--wbo*::
     requests Wiberg bond order printout
 
+*--wrtopo* 'LIST'::
+    comma separated topology printouts, from etot, gnorm, nb, bpair, alist,
+    blist, tlist, vtors, vbond, vangl, hbbond, eeq and json (json selects all
+    of them); a misspelled keyword aborts the run
+
 *--lmo*::
     requests localization of orbitals
 
 *--fod*::
     requests FOD calculation
+
+*--enso*::
+    write the machine-readable thermochemistry xtb_enso.json in a frequency run
 
 *--cycles* 'INT'::
     maximum number of optimization cycles
@@ -228,17 +274,17 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
 
 *--vip*::
     performs calculation of ionisation potential.
-    This needs the .param_ipea.xtb parameters
+    This needs the param_ipea-xtb.txt parameters
     and a GFN1 Hamiltonian.
 
 *--vea*::
     performs calculation of electron affinity.
-    This needs the .param_ipea.xtb parameters
+    This needs the param_ipea-xtb.txt parameters
     and a GFN1 Hamiltonian.
 
 *--vipea*::
     performs calculation of electron affinity and ionisation potential.
-    This needs the .param_ipea.xtb parameters
+    This needs the param_ipea-xtb.txt parameters
     and a GFN1 Hamiltonian.
 
 *--vfukui*::
@@ -246,7 +292,7 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
 
 *--vomega*::
     performs calculation of electrophilicity index.
-    This needs the .param_ipea.xtb parameters
+    This needs the param_ipea-xtb.txt parameters
     and a GFN1 Hamiltonian.
 
 *--grad*::
@@ -312,7 +358,8 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     systems with more than one atom and no frozen atoms.
 
 *--o1nh*::
-    perform the numerical hessian calculation using the ODLR approximation (O1NumHess)
+    perform the numerical hessian calculation using the ODLR approximation
+    (O1NumHess)
 
 *--imagmin* 'REAL'::
     magnitudes below this value (cm⁻¹) are ignored in the O1NumHess
@@ -329,9 +376,23 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     meta dynamics simulation on start geometry, saving 'int' snapshots
     of the trajectory to bias the simulation
 
+*--bias-input, --gesc* 'FILE'::
+    file with the RMSD bias of the metadynamics run (`--metadyn`)
+
 *--omd*::
     molecular dynamics simulation on `ancopt(3)` optimized geometry,
     a loose optimization level will be chosen
+
+*--mdopt*::
+    re-optimise the structures of the molecular dynamics trajectory xtb.trj at
+    the current optimisation level; the energies are written to xtb_ensemble.xyz
+
+*--screen*::
+    optimisation loop over an ensemble: QMDFF generates it when a file
+    'solvent' exists, otherwise it is read from the file xtbscreen.xyz
+
+*--ewin* 'REAL'::
+    energy window of the conformational search (default 20.0 Eh)
 
 *--metaopt* ['LEVEL']::
     call `ancopt(3)` to perform a geometry optimization,
@@ -341,31 +402,29 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
     use meta dynamics to calculate a path from the input geometry
     to the given product structure
 
-*--reactor*::
-    experimental
-
 *--modef* 'INT'::
     modefollowing algorithm. 'INT' specifies the mode that should be
     used for the modefollowing.
 
 *--dipro* ['REAL']:: 
-    the dimer projection method for the calculation of electronic coupling integrals between two fragments.
-    'REAL' sets the threshold for nearly degenerate orbitals to still be considered (default = 0.1 eV).
+    the dimer projection method for the calculation of electronic coupling
+    integrals between two fragments. 'REAL' sets the threshold for nearly
+    degenerate orbitals to still be considered (default = 0.1 eV).
     
 
 SUITE OPTIONS
 -------------
 
-The landscape task suite (`src/landscape`) is selected by one of the run
-types `--lopt`, `--lscan`, `--lts`, `--lirc` or `--lvib` (see RUNTYPS
-above), and by the redeployed `--opt` and `--ohess`; the sub-options below
-configure the selected task and the common `--ljson` switch is listed with
-the run types. Every sub-option selects a landscape run type itself, so
-combining one with a native run type is a **run type conflict** and aborts
-during argument parsing (`oxtb mol.xyz --sp --lscan-fc 0.05` fails with a run type
-conflict naming `--scc` and `--lscan-fc`); the native run types do not ignore
-these options, they never get that far. `--opt` and `--ohess` take the suite's
-`--method`, `--cycles`, `--acc` and `--ljson` but not the per-task sub-options.
+The landscape task suite (`src/landscape`) is selected by one of the run types
+`--lopt`, `--lscan`, `--lts`, `--lirc` or `--lvib` (see RUNTYPS above), and by
+the redeployed `--opt` and `--ohess`; the sub-options below configure the
+selected task and the common `--ljson` switch is listed with the run types.
+Every sub-option selects a landscape run type itself, so combining one with a
+native run type is a **run type conflict** and aborts during argument parsing
+(`oxtb mol.xyz --sp --lscan-fc 0.05` fails with a run type conflict naming
+`--scc` and `--lscan-fc`); the native run types do not ignore these options,
+they never get that far. `--opt` and `--ohess` take the suite's `--method`,
+`--cycles`, `--acc` and `--ljson` but not the per-task sub-options.
 
 The suite keeps every quantity in atomic units internally and converts at
 the input boundary. Unless an option says otherwise a length is in bohr, an
@@ -387,22 +446,22 @@ MINIMISATION OPTIONS (--lopt)
 
 *--lopt-engine* 'NAME'::
     minimisation algorithm of the suite, one of `sd`, `cg`, `lbfgs` (default),
-    `bfgs`, `diis` or `rfo`. Alias of `--method`; the name is not case-sensitive.
-    Because the native `--opt` runs `ancopt(3)`, the active default engine is
-    echoed as a notice unless the flag is given.
+    `bfgs`, `diis` or `rfo`. Alias of `--method`; the name is not
+    case-sensitive. Because the native `--opt` runs `ancopt(3)`, the active
+    default engine is echoed as a notice unless the flag is given.
 
 *--lopt-level* 'LEVEL'::
     convergence level, one of `superloose`, `loose`, `normal` (default), `tight`
-    or `vtight`; not case-sensitive. One level drives four axes at once: the four
-    thresholds (maximum and RMS gradient in hartree/bohr, maximum and RMS
+    or `vtight`; not case-sensitive. One level drives four axes at once: the
+    four thresholds (maximum and RMS gradient in hartree/bohr, maximum and RMS
     displacement in bohr), the energy tolerance `e_tol` (hartree), the SCC
     accuracy of the engine and the multiplier of the step budget (3 steps per
     atom at `normal`, clamped to 200..10000).
 
 *--lopt-hessian* 'SOURCE'::
     Hessian backend, one of `numerical` (default; the suite's own central
-    differences of the electronic gradient), `model` (Lindh-D2 model Hessian from
-    `src/model_hessian`) or `file` (read the TURBOMOLE layout written by an
+    differences of the electronic gradient), `model` (Lindh-D2 model Hessian
+    from `src/model_hessian`) or `file` (read the TURBOMOLE layout written by an
     earlier run, see `--lopt-hessian-file`).
 
 *--lopt-max-steps* 'N'::
@@ -411,11 +470,11 @@ MINIMISATION OPTIONS (--lopt)
     change it. A budget given here wins over the level-derived value.
 
 *--lopt-hess-step* 'VALUE'::
-    finite difference step of the numerical Hessian in bohr (default 0.005). Only
-    `--lopt-engine rfo` builds a numerical Hessian; the other five engines
+    finite difference step of the numerical Hessian in bohr (default 0.005).
+    Only `--lopt-engine rfo` builds a numerical Hessian; the other five engines
     (including the default `lbfgs`) never do, and the value is ignored for
-    `--lopt-hessian model` or `file`. The run then echoes the effective value and
-    marks it as not used.
+    `--lopt-hessian model` or `file`. The run then echoes the effective value
+    and marks it as not used.
 
 *--lopt-sccacc* 'VALUE'::
     SCC accuracy of the displaced single points of the numerical Hessian
@@ -427,24 +486,24 @@ MINIMISATION OPTIONS (--lopt)
 
 *--lopt-hessian-file* 'NAME'::
     file read by `--lopt-hessian file` (TURBOMOLE `$hessian` layout, the
-    `hessian` file written by `--hess` and by `--lvib`). The name is used only by
-    the `file` source: with `numerical` or `model` it is silently discarded and
-    never echoed (a registered, deliberately unfixed honesty gap).
+    `hessian` file written by `--hess` and by `--lvib`). The name is used only
+    by the `file` source: with `numerical` or `model` it is silently discarded
+    and never echoed (a registered, deliberately unfixed honesty gap).
 
 SCAN OPTIONS (--lscan)
 ~~~~~~~~~~~~~~~~~~~~~~
 
 *--lscan-coord* 'TYPE'::
-    type of the first scanned coordinate, one of `distance` (default), `angle` or
-    `dihedral`; not case-sensitive.
+    type of the first scanned coordinate, one of `distance` (default), `angle`
+    or `dihedral`; not case-sensitive.
 
 *--lscan-atoms* 'LIST'::
     1-based atom indices of the first coordinate, comma or blank separated (two
     for a distance, three for an angle, four for a dihedral).
 
 *--lscan-step* 'VALUE'::
-    step size of the first coordinate in angstrom (distance) or degree (angle and
-    dihedral).
+    step size of the first coordinate in angstrom (distance) or degree (angle
+    and dihedral).
 
 *--lscan-nstep* 'N'::
     number of steps of the first coordinate; a sweep visits the coordinate
@@ -472,35 +531,35 @@ SCAN OPTIONS (--lscan)
     number of scanned coordinates, 1 (default) or 2.
 
 *--lscan-restart* 'MODE'::
-    wavefunction policy of the engine at every scan point, `off` (default), `pin`
-    or `warm`. `off` and `pin` reset the incoming wavefunction from the stored
-    reference, `warm` **keeps** it, so `warm` carries the SCF history of the
-    previous point into the next one (measured: reusing the wavefunction moves
-    the gradient by about 4e-7 hartree/bohr, which is why the suite keeps the
-    policy uniform inside one evaluation sequence). The geometry warm start is a
-    separate mechanism, `warm_start`, which is on by default and reuses the
+    wavefunction policy of the engine at every scan point, `off` (default),
+    `pin` or `warm`. `off` and `pin` reset the incoming wavefunction from the
+    stored reference, `warm` **keeps** it, so `warm` carries the SCF history of
+    the previous point into the next one (measured: reusing the wavefunction
+    moves the gradient by about 4e-7 hartree/bohr, which is why the suite keeps
+    the policy uniform inside one evaluation sequence). The geometry warm start
+    is a separate mechanism, `warm_start`, which is on by default and reuses the
     previous point's geometry.
 
 *--lscan-oneway*::
     scan the forward branch only; no reverse branch and no hysteresis report.
 
 *--lscan-cold-start*::
-    start every scan point from the input geometry instead of the geometry of the
-    previous point.
+    start every scan point from the input geometry instead of the geometry of
+    the previous point.
 
 *--lscan-fc* 'VALUE'::
     force constant of the constraint bias potential (the coordinate deviation
     raised to the power `--lscan-expo` and scaled by this value) in
     hartree/bohr^2 (default 0.5). This is ten times the xtb scan force constant
     `fcconstr = 0.05` of the `$scan` block, so the active default is echoed as a
-    notice unless the flag is given; use `--lscan-fc 0.05` when compatibility with
-    existing `xtbscan.log` tool chains matters.
+    notice unless the flag is given; use `--lscan-fc 0.05` when compatibility
+    with existing `xtbscan.log` tool chains matters.
 
 *--lscan-expo* 'VALUE'::
-    exponent of the constraint potential (default 2.0). Only distance constraints
-    use it: an angle is biased by the squared angular deviation and a dihedral
-    by `(1 - cos dphi)`, both scaled by the same force constant and bounded by
-    twice it, with a zero torque at 180 degree.
+    exponent of the constraint potential (default 2.0). Only distance
+    constraints use it: an angle is biased by the squared angular deviation and
+    a dihedral by `(1 - cos dphi)`, both scaled by the same force constant and
+    bounded by twice it, with a zero torque at 180 degree.
 
 *--lscan-max-steps* 'N'::
     step budget of the inner relaxation of every scan point; derived from the
@@ -550,7 +609,8 @@ TRANSITION STATE OPTIONS (--lts)
 
 *--lts-level* 'LEVEL'::
     convergence level (thresholds, energy tolerance, SCC accuracy and step
-    budget), one of `superloose`, `loose`, `normal` (default), `tight` or `vtight`.
+    budget), one of `superloose`, `loose`, `normal` (default), `tight` or
+    `vtight`.
 
 *--lts-mode-overlap-min* 'VALUE'::
     mode following guard: reselect the transition vector below this overlap
@@ -573,13 +633,13 @@ TRANSITION STATE OPTIONS (--lts)
 *--lts-escape-step* 'VALUE'::
     displacement along the lowest internal mode in bohr (default 0.2), applied
     when the start geometry is a minimum so that P-RFO has a direction to ascend
-    along; 0 disables the escape. The active default is echoed as a notice unless
-    the flag is given. The full walk budget is 3.0 bohr.
+    along; 0 disables the escape. The active default is echoed as a notice
+    unless the flag is given. The full walk budget is 3.0 bohr.
 
 *--lts-delta* 'VALUE'::
-    dimer separation, the distance of each image from the common midpoint in bohr
-    (default 0.018897, i.e. 0.01 angstrom; this is the pysisyphus convention, not
-    the VASP `DdR` that denotes twice the value).
+    dimer separation, the distance of each image from the common midpoint in
+    bohr (default 0.018897, i.e. 0.01 angstrom; this is the pysisyphus
+    convention, not the VASP `DdR` that denotes twice the value).
 
 *--lts-dr* 'VALUE'::
     finite difference step of the dimer translation probe in bohr (default
@@ -631,8 +691,8 @@ TRANSITION STATE OPTIONS (--lts)
     Hessian backend, one of `numerical` (default), `model` (Lindh-D2) or `file`.
 
 *--lts-hessian-file* 'NAME'::
-    file read by `--lts-hessian file` (TURBOMOLE layout); silently discarded when
-    the source is not `file`.
+    file read by `--lts-hessian file` (TURBOMOLE layout); silently discarded
+    when the source is not `file`.
 
 *--lts-hess-step* 'VALUE'::
     finite difference step of the numerical confirmation Hessian in bohr
@@ -653,8 +713,8 @@ TRANSITION STATE OPTIONS (--lts)
     the positional input file is the reactant.
 
 *--lts-images* 'N'::
-    number of images of a band, the two fixed endpoints included (default 9); for
-    `autoneb` it is the requested final number of images.
+    number of images of a band, the two fixed endpoints included (default 9);
+    for `autoneb` it is the requested final number of images.
 
 *--lts-kmin, --lts-kmax* 'VALUE'::
     lower and upper spring constant of the dynamic springs in hartree/bohr^2
@@ -667,12 +727,12 @@ TRANSITION STATE OPTIONS (--lts)
     use the single spring constant `kmax` for every image.
 
 *--lts-climb*::
-    switch on the climbing image stage (CI-NEB); implied by `--lts-method cineb`,
-    `autoneb`, `string` and `gsm`.
+    switch on the climbing image stage (CI-NEB); implied by
+    `--lts-method cineb`, `autoneb`, `string` and `gsm`.
 
 *--lts-climb-switch* 'VALUE'::
-    band force in hartree/bohr below which the climbing image is ignited (default
-    9.7234e-3, the standard 0.5 eV/angstrom).
+    band force in hartree/bohr below which the climbing image is ignited
+    (default 9.7234e-3, the standard 0.5 eV/angstrom).
 
 *--lts-no-idpp*::
     straight linear interpolation instead of the IDPP initial path.
@@ -706,8 +766,8 @@ TRANSITION STATE OPTIONS (--lts)
     adopted as the initial path so the completed stages are not repeated.
 
 *--lts-string-nnodes* 'N'::
-    target number of nodes of the growing string, endpoints included (default 9).
-    The string is configured here, not by `--lts-images`.
+    target number of nodes of the growing string, endpoints included (default
+    9). The string is configured here, not by `--lts-images`.
 
 *--lts-string-grow-tol* 'VALUE'::
     norm threshold of the growth indicator in hartree/bohr (default 5e-3).
@@ -746,8 +806,8 @@ INTRINSIC REACTION COORDINATE OPTIONS (--lirc)
     default 0.10; use 0.05 for a tight path). The clean range is 0.05-0.15 for
     `--lirc-method gs`, whose macro step stalls in a two cycle from 0.20 on;
     `hpc` and `eulerpc` are correct at 0.20. The limit cycle guard only detects
-    the cancelling subclass of the stall: a large step can still end far from the
-    minimum (measured 0.236 bohr at 0.40 forward).
+    the cancelling subclass of the stall: a large step can still end far from
+    the minimum (measured 0.236 bohr at 0.40 forward).
 
 *--lirc-max-steps* 'N'::
     maximum number of macro steps of one direction; derived from the convergence
@@ -756,8 +816,8 @@ INTRINSIC REACTION COORDINATE OPTIONS (--lirc)
 *--lirc-level* 'LEVEL'::
     convergence level of the endpoint relaxation (thresholds, energy tolerance,
     SCC accuracy and step budget), one of `superloose`, `loose`, `normal`
-    (default), `tight` or `vtight`. The IRC path itself is left by the termination
-    signals `--lirc-grad-tol` and `--lirc-e-rise`.
+    (default), `tight` or `vtight`. The IRC path itself is left by the
+    termination signals `--lirc-grad-tol` and `--lirc-e-rise`.
 
 *--lirc-swap*::
     exchange the forward and the backward direction defined by the phase
@@ -771,7 +831,8 @@ INTRINSIC REACTION COORDINATE OPTIONS (--lirc)
     (default 1).
 
 *--lirc-micro-cycles* 'N'::
-    maximum number of Gonzalez-Schlegel micro cycles per macro step (default 20).
+    maximum number of Gonzalez-Schlegel micro cycles per macro step (default
+    20).
 
 *--lirc-micro-thresh* 'VALUE'::
     convergence threshold of the sphere relaxation in `bohr*amu^1/2` (default
@@ -798,13 +859,13 @@ INTRINSIC REACTION COORDINATE OPTIONS (--lirc)
 
 *--lirc-dwi-n* 'N'::
     capacity of the DWI surface fit (default 4). The implemented interpolant is
-    two point by construction, so every N >= 2 is behaviourally equivalent; N < 2
-    is rejected.
+    two point by construction, so every N >= 2 is behaviourally equivalent; N <
+    2 is rejected.
 
 *--lirc-e-rise* 'N'::
-    termination signal (c): stop after N consecutive rising energies (default 3).
-    A large N does not guarantee running to the step budget; the limit cycle guard
-    `--lirc-osc-window` is an independent signal.
+    termination signal (c): stop after N consecutive rising energies (default
+    3). A large N does not guarantee running to the step budget; the limit cycle
+    guard `--lirc-osc-window` is an independent signal.
 
 *--lirc-erise-steps* 'N'::
     alias of `--lirc-e-rise`.
@@ -829,9 +890,9 @@ INTRINSIC REACTION COORDINATE OPTIONS (--lirc)
     honours it - every other method silently ignores it.
 
 *--lirc-recalc* 'N'::
-    rebuild the exact Hessian every N macro steps, -1 disables (default -1). Pure
-    Bofill updates are sufficient for short paths; long or strongly curved paths
-    drift and need an explicit `--lirc-recalc 5 .. 10`.
+    rebuild the exact Hessian every N macro steps, -1 disables (default -1).
+    Pure Bofill updates are sufficient for short paths; long or strongly curved
+    paths drift and need an explicit `--lirc-recalc 5 .. 10`.
 
 *--lirc-no-endpoint-relax*::
     do not relax the two endpoints to assign them to a minimum; the
@@ -891,10 +952,10 @@ FREQUENCY AND THERMOCHEMISTRY OPTIONS (--lvib)
 
 *--lvib-restart* 'MODE'::
     wavefunction restart policy of the engine, `off` (default), `pin` or `warm`.
-    The finite difference sequence resets the wavefunction to the state it entered
-    the Hessian with before every displacement, so `warm` and `pin` hand the
-    provider the same start and produce a byte identical `hessian` file; only
-    `off` is distinguishable.
+    The finite difference sequence resets the wavefunction to the state it
+    entered the Hessian with before every displacement, so `warm` and `pin` hand
+    the provider the same start and produce a byte identical `hessian` file;
+    only `off` is distinguishable.
 
 *--lvib-odlr*::
     request the ODLR approximation. Not implemented: the run reports the request
@@ -915,7 +976,8 @@ FREQUENCY AND THERMOCHEMISTRY OPTIONS (--lvib)
 *--lvib-imag-cutoff* 'VALUE'::
     imaginary frequency cutoff in `cm^-1` (default -20.0; the minus sign is
     required). The value sets both the mode counting and, together with the
-    xcontrol `$thermo imagthr` key, the partition function of the thermochemistry.
+    xcontrol `$thermo imagthr` key, the partition function of the
+    thermochemistry.
 
 *--lvib-freq-scal* 'VALUE'::
     frequency scaling factor of the thermochemistry (default 1.0; the xcontrol
@@ -930,11 +992,13 @@ GENERAL
      give this `oxtb(1)` run a namespace. All files, even temporary
      ones, will be named according to 'STRING' (might not work everywhere).
 
-*--[no]copy*::
-     copies the `xcontrol` file at startup (default = true)
+*--copy, --nocopy*::
+     copies the `xcontrol` file at startup (default = true); `--nocopy`
+     disables it
 
-*--[no]restart*::
-     restarts calculation from `xtbrestart` (default = true)
+*--restart, --norestart*::
+     restarts calculation from `xtbrestart` (default = true); `--norestart`
+     disables it
 
 *-P, --parallel* 'INT'::
      number of parallel processes
@@ -959,6 +1023,16 @@ GENERAL
 *-v, --verbose*::
      be more verbose (not supported in every unit)
 
+*-V, --very-verbose*::
+     be very verbose (this also enables the verbose output)
+
+*--version*::
+     print the version banner and terminate
+
+*--nocellopt*::
+     do not optimise the lattice of a periodic system, the cell is kept fixed
+     (default: the cell is optimised)
+
 *--ceasefiles*::
      reduce the amount of output and files written (e.g. xtbtopo.mol)
 
@@ -969,17 +1043,25 @@ GENERAL
      show help page
 
 *--cut*::
-      create inner region for `oniom` calculation without performing any calcultion
+      create inner region for `oniom` calculation without performing any
+      calcultion
 
 ENVIRONMENT VARIABLES
 ---------------------
 `oxtb(1)` accesses a path-like variable to determine the location of its
 parameter files, you have to provide the `XTBPATH` variable in the same
-syntax as the system `PATH` variable. If this variable is not set, `oxtb(1)`
-will try to generate the `XTBPATH` from the deprecated `XTBHOME` variable.
-In case the `XTBHOME` variable is not set it will be generated from the
-`HOME` variable. So in principle storing the parameter files in the users
-home directory is suffient but might lead to come cluttering.
+syntax as the system `PATH` variable. When `XTBPATH` is unset or empty the
+program derives its own parameter directory from the running executable,
+testing the install layout `bindir/../share/o-xtb` and then the build layout
+`bindir/share/o-xtb`, so a
+relocated install keeps working without any environment variable. That
+directory is prepended to the deprecated `XTBHOME` fallback, and `XTBHOME`
+itself falls back to `HOME`, so the full precedence is explicit `XTBPATH`,
+`XTBHOME` with the executable-relative directory in front, then `HOME`.
+Every method except the first still needs on-disk parameter files, which
+only `--gfn 0` (GFN0-xTB) requires at run time - every other Hamiltonian
+carries its parameters in the binary - so `--gfn 0` works from any directory
+of an installed tree with `XTBPATH` unset.
 
 Since the `XTBHOME` variable is deprecated with version 6.0 and newer
 `oxtb(1)` will issue a warning if `XTBHOME` is not part of the `XTBPATH`
@@ -1034,40 +1116,41 @@ Both API pairs are resolved by symbol name: `openblas_set_num_threads` with its
 getter `openblas_get_num_threads`, and the oneMKL pair `mkl_set_num_threads` /
 `mkl_get_max_threads` (the function `threadpoolctl` reads MKL's thread count
 with). MKL support is therefore written against the documented oneMKL names; no
-MKL is installed on the machine this option was developed on, so the MKL branch has
-never been executed against a real oneMKL; it was exercised with stub symbols only,
-and the OpenBLAS branch is the one verified by running it.
+MKL is installed on the machine this option was developed on, so the MKL branch
+has never been executed against a real oneMKL; it was exercised with stub
+symbols only, and the OpenBLAS branch is the one verified by running it.
 *--blas-threads* and *-P, --parallel* are different knobs (*--parallel* sets the
 OpenMP thread count and, under an MKL build, the MKL pool as well); where both
 reach the same pool the flag that appears last on the command line wins.
 
 `OMP_STACKSIZE` sets the stack size of the OpenMP worker threads - not the stack
 of the main thread, and not the same setting as `ulimit -s`, although the
-process stack limit does size the worker stacks too: measured, the worker threads
-get 2 MiB while `ulimit -s` is `unlimited` (glibc falls back to the pthread
-default) and the stock `ulimit -s 8192` gives them 8 MiB, so the `unlimited`
-setting is the smaller of the two. This matters because the GFN0 charge model can
-need a worker stack that grows with the system size: in the OpenMP loop over the
-Coulomb derivative `getCoulombDerivsCluster`, the array reduction
-`reduction(+:djdr, djdtr, djdL)` makes the compiler place each thread's private
-copy of the reduction arrays on the thread stack, `24*nat*(nat+1) + 96*(nat+1)`
-bytes for `nat` atoms, about `24*nat^2` bytes - 6 060 096 bytes, about 6 MB, at
-500 atoms. When that does not fit, the thread writes into its guard page and the
-process dies with `SIGSEGV`. There is no warning and no usable backtrace:
-measured, the run is completely silent at the smallest sizes that crash (0 bytes
-on stderr), and the single frame the runtime resolves is `gomp_thread_start`
-inside libgomp. The size at which this happens is a property of the environment
-and not of the code: measured with two threads, the first size that crashes is
-about 290 atoms with a 2 MiB worker stack and about 588 atoms with the stock
-8 MiB one, while the formula above is the portable statement. `--gfn 0` reaches
-the limit first (GFN1, GFN2 and GFN-FF ran clean at 500 and 598 atoms, and GFN2
-also at 1001 atoms, with the same thread counts), but this is a stack size issue
-and not a method issue: with `ulimit -s 4096` even a single threaded run of the
-same system crashes. The workaround is `export OMP_STACKSIZE=512M`, or a larger
-process stack limit such as `ulimit -s 65536`; it was verified at 290 and 500
-atoms and with the official 6.7.1 binary, where the parallel run then reproduces
-the serial energy. A fixed generous value is enough, because the requirement
-grows with the atom count; *--help* suggests `export OMP_STACKSIZE=4G`.
+process stack limit does size the worker stacks too: measured, the worker
+threads get 2 MiB while `ulimit -s` is `unlimited` (glibc falls back to the
+pthread default) and the stock `ulimit -s 8192` gives them 8 MiB, so the
+`unlimited` setting is the smaller of the two. This matters because the GFN0
+charge model can need a worker stack that grows with the system size: in the
+OpenMP loop over the Coulomb derivative `getCoulombDerivsCluster`, the array
+reduction `reduction(+:djdr, djdtr, djdL)` makes the compiler place each
+thread's private copy of the reduction arrays on the thread stack,
+`24*nat*(nat+1) + 96*(nat+1)` bytes for `nat` atoms, about `24*nat^2` bytes - 6
+060 096 bytes, about 6 MB, at 500 atoms. When that does not fit, the thread
+writes into its guard page and the process dies with `SIGSEGV`. There is no
+warning and no usable backtrace: measured, the run is completely silent at the
+smallest sizes that crash (0 bytes on stderr), and the single frame the runtime
+resolves is `gomp_thread_start` inside libgomp. The size at which this happens
+is a property of the environment and not of the code: measured with two threads,
+the first size that crashes is about 290 atoms with a 2 MiB worker stack and
+about 588 atoms with the stock 8 MiB one, while the formula above is the
+portable statement. `--gfn 0` reaches the limit first (GFN1, GFN2 and GFN-FF ran
+clean at 500 and 598 atoms, and GFN2 also at 1001 atoms, with the same thread
+counts), but this is a stack size issue and not a method issue: with
+`ulimit -s 4096` even a single threaded run of the same system crashes. The
+workaround is `export OMP_STACKSIZE=512M`, or a larger process stack limit such
+as `ulimit -s 65536`; it was verified at 290 and 500 atoms and with the official
+6.7.1 binary, where the parallel run then reproduces the serial energy. A fixed
+generous value is enough, because the requirement grows with the atom count;
+*--help* suggests `export OMP_STACKSIZE=4G`.
 
 LOCAL FILES
 -----------
@@ -1135,15 +1218,16 @@ OUTPUT
 *xtbopt.xyz*, *xtbopt.coord*::
    optimized geometry in the same format as the input geometry.
 
-*xtbhess.coord*::
-   distorted geometry if imaginary frequency was found
+*xtbhess.*::
+   distorted geometry if an imaginary frequency was found, in the format of the
+   input geometry (e.g. `xtbhess.xyz` for an xyz input)
 
 *xtbopt.log*::
    contains all structures obtained in the geometry optimization
    with the respective energy in the comment line in a XMOL formatted
    trajectory
 
-*xtbsiman.log*,*xtb.trj.'int'*::
+*xtbsiman.log*, *xtb.trj.'int'*::
    trajectories from MD
 
 *scoord.'int'*::
@@ -1194,22 +1278,32 @@ OUTPUT
 *xtb_normalmodes*, *xtb_localmodes*::
    binary dump for mode following
 
+*xtbscan.log*::
+   relaxed or two-dimensional scan written by `--lscan`, format compatible with
+   the upstream `relaxed_scan` driver.
+
+*xtbts.xyz*, *xtbts.log*::
+   transition state and its imaginary mode written by `--lts`.
+
+*path.xyz*, *path_autoneb.xyz*, *path_ts_list.xyz*::
+   band and chain-of-states path written by `--lts`.
+
+*irc_forward.xyz*, *irc_backward.xyz*, *irc_path.xyz*, *irc.log*::
+   intrinsic reaction coordinate written by `--lirc`.
+
+*landscape_<TASK>.json*::
+   structured result written by `--ljson` for every native and landscape task;
+   the tblite-gated `--dipro` and `--ceh` short circuit before the writer and
+   write no document.
+
 TOUCH
 ~~~~~
 
 *xtbmdok*::
    generated by successful MD
 
-*.xtbok*::
-   generated after each successful `oxtb(1)` run
-
 *.sccnotconverged*::
    generated after failed SCC with printlevel=2
-
-//////////////////
-NAMING CONVENTIONS
-------------------
-//////////////////
 
 WARNINGS
 --------
@@ -1223,7 +1317,7 @@ warnings carefully!
 After `oxtb(1)` has evaluated the all input sources it immediately enters
 the production mode. Severe errors will lead to an abnormal termination
 which is signalled by the printout to STDERR and a non-zero return value
-(usually 128). All non-fatal errors are summerized in the end of the calculation
+(1). All non-fatal errors are summerized in the end of the calculation
 in one block, right before the timing analysis.
 
 To aid the user to fix the problems generating these warnings a brief
@@ -1249,8 +1343,11 @@ EXIT STATUS
 *0*::
    normal termination of `oxtb(1)`
 
-*128*::
-   Failure (termination via error stop generates 128 as return value)
+*1*::
+   failure: every fatal path goes through the environment's error handler,
+   which prints `abnormal termination of oxtb` on STDERR and exits 1. An
+   unknown option is a warning, not a failure (exit 0), unless *--strict* is
+   given, which turns all warnings into errors (exit 1).
 
 BUGS
 ----

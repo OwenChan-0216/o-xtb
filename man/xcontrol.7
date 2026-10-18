@@ -11,7 +11,8 @@
 .ad l
 .SH "NAME"
 .sp
-xcontrol \- instruction file for \f(CRoxtb(1)\fP version 6.0 and newer
+xcontrol \- instruction file for \f(CRoxtb(1)\fP (o\-xtb 0.2.1, xTB 6.7.1 Hamiltonian),
+the xcontrol input of xTB 6.0 and newer
 .SH "SYNOPSIS"
 .sp
 oxtb \-I,\-\-input \fBxcontrol\fP \fIFILE\fP
@@ -37,6 +38,16 @@ It should be noted that \f(CRoxtb(1)\fP is able to produce \f(CRxcontrol(7)\fP i
 by itself. You can tell \f(CRoxtb(1)\fP by \fB\-\-copy\fP to
 save you original instructions, note that this implementation will strip all
 comments while copying (print what you see, not what you read), to aid debugging.
+.sp
+Besides the keys documented below, several data groups accept legacy or debug
+keys that exist and are accepted but are not listed here: they are either short
+aliases of a documented key (for example \f(CRkr\fP, \f(CRkf\fP, \f(CRkt\fP, \f(CRko\fP, \f(CRkd\fP and \f(CRkq\fP
+for the model\-Hessian force constants of \f(CR$opt\fP) or internal toggles left in
+place for compatibility. The \f(CR$set\fP legacy instruction and the \f(CR$ffnb\fP,
+\f(CR$reactor\fP, \f(CR$siman\fP and \f(CR$solvation\fP groups are documented with their own
+sections below. The authoritative list of every accepted key of a run is the
+canonical instruction set \f(CRoxtb(1)\fP echoes when it is asked to \fB\-\-copy\fP its
+input.
 .SS "$fit"
 .sp
 logical instruction to  set \f(CRoxtb(1)\fP in \f(CRmfit(1)\fP compatibility mode
@@ -47,6 +58,10 @@ be absent in every productive run.
 .sp
 logical instruction to initialize the random number generator
 with the same sequence. This is equivalent to using \f(CR$seed 41\fP.
+.SS "$derived"
+.sp
+logical instruction accepted for compatibility only. The reader has no keys
+and the handler is an empty stub, so the instruction has no effect.
 .SS "$seed \fIint\fP"
 .sp
 initialize the random number generator from a single integer. The value is
@@ -70,7 +85,7 @@ set Nalpha\-Nbeta of the molecule
 .sp
 shifts molecule to center of mass and transforms cartesian coordinates
 into the coordinate system of the principle axis (not affected by
-`isotopes'\-file).
+\f(CRisotopes\fP file).
 .SS "$constrain"
 .RS 4
 \fBNOTE:\fP This data group refers to constraining the gradient by appling
@@ -191,7 +206,7 @@ Alternatively the \fIgam\fP value can be given directly as fifth argument,
 to simulate point charges provide a huge value for \fIgam\fP.
 .RE
 .sp
-\fBgradient\fP='file
+\fBgradient\fP=\fIfile\fP
 .RS 4
 gradient of the point charges is written to \fIfile\fP (default: \fIpcgrad\fP)
 .RE
@@ -234,6 +249,11 @@ name of the \f(CRorca(1)\fP input file
 path to your Turbomole directory (usually found in \f(CRTURBODIR\fP or
 \f(CRTURBOIMG\fP variable)
 .RE
+.SS "$ffnb"
+.sp
+Force\-field neighbour list. The key of each line is ignored; the value has the
+form \f(CRatom:neighbour,...\fP and lists the bonded neighbours of one atom; an atom
+index followed by a zero has no neighbours.
 .SS "$fix"
 .RS 4
 \fBNOTE:\fP the fix group refers to exact fixing. For geometry optimizations
@@ -296,6 +316,10 @@ ion radius for salt screening in GBSA
 changes the grid used for the surface accessable surface area
 (normal, tight, vtight/verytight, extreme are available).
 .RE
+.SS "$solvation"
+.sp
+Alias of \f(CR$gbsa\fP: the same keys and the same handler are used, so a block may
+be opened with either name.
 .SS "$gfn"
 .sp
 \fBmethod\fP=\fI0\fP|\fI1\fP|\fI2\fP|\fIff\fP
@@ -551,7 +575,7 @@ method can be \fIrf\fP for ANCopt (default), \fIlbfgs\fP for L\-ANCopt or
 redirect output of optimization to \fIfile\fP
 .RE
 .sp
-\fBlogfile\fP='file
+\fBlogfile\fP=\fIfile\fP
 .RS 4
 write optimization log to \fIfile\fP (default: xtbopt.log)
 .RE
@@ -673,6 +697,64 @@ width of the RMSD criterium
 \fBproduct\fP=\fIfile\fP
 .RS 4
 file name of the product structure
+.RE
+.SS "$reactor"
+.sp
+Reactor dynamics setup.
+.sp
+\fBkpush\fP=\fIreal\fP
+.RS 4
+Gaussian RMSD prefactor pushing away from the educt
+.RE
+.sp
+\fBalp\fP=\fIreal\fP
+.RS 4
+width of the Gaussian RMSD criterium
+.RE
+.sp
+\fBmax\fP=\fIint\fP
+.RS 4
+number of saved images for the RMSD potential
+.RE
+.sp
+\fBdensity\fP=\fIreal\fP
+.RS 4
+density of the system
+.RE
+.SS "$siman"
+.sp
+Simulated\-annealing setup. The instruction block is read and accepted, but the
+\f(CRsiman\fP run type itself is not registered in this build, so a run that selects
+it aborts; the block is kept for input compatibility.
+.sp
+\fBdump\fP=\fIreal\fP
+.RS 4
+snapshot interval of the annealing run
+.RE
+.sp
+\fBn\fP=\fIint\fP
+.RS 4
+number of temperatures
+.RE
+.sp
+\fBewin\fP=\fIreal\fP
+.RS 4
+energy window of the conformational search
+.RE
+.sp
+\fBtemp\fP=\fIreal\fP
+.RS 4
+final temperature of the annealing run
+.RE
+.sp
+\fBenan\fP=\fIbool\fP
+.RS 4
+enable the energy analysis
+.RE
+.sp
+\fBcheck\fP=\fIint\fP
+.RS 4
+RMSD check flag: 1 disables the check, 0 enables it
 .RE
 .SS "$scan"
 .sp
@@ -968,8 +1050,8 @@ write DFTB+ style hessian.out file containing the unprojected hessian
 .RE
 .SS "LEGACY"
 .sp
-To ensure compatibility with older versions of the \f(CRoxtb(1)\fP prior to version 6.0
-a group instruction set is allowed which accepts the same syntax as the
+To ensure compatibility with older versions of \f(CRoxtb(1)\fP prior to version 6.0
+the legacy \f(CR$set\fP instruction is allowed; it accepts the same syntax as the
 original set\-block. Here we provide a list of set\-block commands and their
 corresponding instructions in \f(CRxcontrol(7)\fP.
 .RS 4
@@ -1181,7 +1263,7 @@ use \fBn\fP in \fBmodef\fP group instead
 .sp
 \fBmode_prj\fP
 .RS 4
-use \fBprj\fP in *modef group instead
+use \fBprj\fP in \fBmodef\fP group instead
 .RE
 .sp
 \fBmode_step\fP
@@ -1276,7 +1358,7 @@ use \fBspringexp\fP in \fBfix\fP group instead
 .sp
 \fBstephess\fP
 .RS 4
-use \fBstep\fP in *hess group instead
+use \fBstep\fP in \fBhess\fP group instead
 .RE
 .sp
 \fBthermo_sthr\fP
