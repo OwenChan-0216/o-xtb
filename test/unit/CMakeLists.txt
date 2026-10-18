@@ -4000,6 +4000,34 @@ add_test("xtb/landscape-docs-site"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-docs-site
   -P "${CMAKE_CURRENT_BINARY_DIR}/docs_site_py.cmake")
 
+# The `## The command each case runs` index of `examples/README.md` is generated
+# from every `examples/**/run.sh` by `examples/tools/gen_command_index.py`, so the
+# two cannot drift: a changed `run.sh` whose command is not regenerated into the
+# README turns this test red (measured).  `--check` writes nothing and the gate
+# runs it against a build-dir copy of `examples/`, so a read-only checkout passes
+# and the source tree is never touched.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/examples_index.cmake" [=[
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}")
+file(COPY "${SRC}/examples" DESTINATION "${RUNDIR}")
+execute_process(
+  COMMAND "${PYTHON}" "${RUNDIR}/examples/tools/gen_command_index.py" --check
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "gen_command_index.py --check failed with status ${status}\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-examples-index"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSRC=${PROJECT_SOURCE_DIR}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-examples-index
+  -P "${CMAKE_CURRENT_BINARY_DIR}/examples_index.cmake")
+
 # The dangerous builtin defaults are echoed as a `[NOTICE]` line, and the
 # explicit flag silences the notice (CLI redesign sections 8.3 and 17.3).
 # `landscape_cli_check.py` mode `echo` runs both routes of a case and asserts
