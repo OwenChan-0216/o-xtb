@@ -379,6 +379,42 @@ install(
    "${CMAKE_INSTALL_DOCDIR}/man-src"
 )
 
+# Shell completions.
+# `completions/oxtb.bash`, `completions/_oxtb` and `completions/oxtb.fish` are
+# generated from the `--help` option table of `src/xhelp.f90` by
+# `completions/tools/gen_completions.py` and committed;
+# `test/unit/landscape-completions` fails when a source was edited without
+# regenerating them.  They are installed into the shell's own data directory
+# under the prefix - `share/bash-completion/completions`,
+# `share/zsh/site-functions` and `share/fish/vendor_completions.d` - not into
+# the user's home: the per-user locations are written by `install.sh`, and a
+# `zsh` needs `fpath+=(.../share/zsh/site-functions)` before `compinit` to pick
+# the file up.  The bash file is installed without its `.bash` suffix, because
+# bash-completion looks up the file under the command name (`oxtb`), exactly
+# like `install.sh` does it for the per-user location.
+install(
+   FILES
+   "${PROJECT_SOURCE_DIR}/completions/oxtb.bash"
+   DESTINATION
+   "${CMAKE_INSTALL_DATADIR}/bash-completion/completions"
+   RENAME
+   "${XTB_EXE_NAME}"
+)
+
+install(
+   FILES
+   "${PROJECT_SOURCE_DIR}/completions/_oxtb"
+   DESTINATION
+   "${CMAKE_INSTALL_DATADIR}/zsh/site-functions"
+)
+
+install(
+   FILES
+   "${PROJECT_SOURCE_DIR}/completions/oxtb.fish"
+   DESTINATION
+   "${CMAKE_INSTALL_DATADIR}/fish/vendor_completions.d"
+)
+
 # Build output artifacts
 if (WITH_OBJECT)
    install(

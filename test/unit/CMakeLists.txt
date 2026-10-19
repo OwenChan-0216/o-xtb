@@ -4038,6 +4038,42 @@ add_test("xtb/landscape-man-render"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-man-render
   -P "${CMAKE_CURRENT_BINARY_DIR}/man_render.cmake")
 
+# The shell completions must not drift away from the option table.  The three
+# scripts (`completions/oxtb.bash`, `completions/_oxtb`, `completions/oxtb.fish`)
+# are generated from the `call add` records of `src/xhelp.f90` by
+# `completions/tools/gen_completions.py` and are committed, so editing an option
+# without regenerating them turns this red.  The generator imports the very
+# extractor the `--help` gate uses (`test/unit/landscape_help_check.py`, through
+# `docs/docs-site/tools/gen_cli_reference.py`), which is why those two files - and
+# neither the built binary nor the source tree - are copied next to it.  `--check`
+# writes nothing and the run happens in a build-dir copy, so a read-only checkout
+# passes.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/completions.cmake" [=[
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}")
+file(COPY "${SRC}/completions" DESTINATION "${RUNDIR}")
+file(COPY "${SRC}/src/xhelp.f90" DESTINATION "${RUNDIR}/src")
+file(COPY "${SRC}/test/unit/landscape_help_check.py" DESTINATION "${RUNDIR}/test/unit")
+file(COPY "${SRC}/docs/docs-site/tools/gen_cli_reference.py" DESTINATION "${RUNDIR}/docs/docs-site/tools")
+execute_process(
+  COMMAND "${PYTHON}" "${RUNDIR}/completions/tools/gen_completions.py" --check
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE out
+  ERROR_VARIABLE out
+)
+message("${out}")
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "the shell completions are stale (status ${status})")
+endif()
+]=])
+add_test("xtb/landscape-completions"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSRC=${PROJECT_SOURCE_DIR}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-completions
+  -P "${CMAKE_CURRENT_BINARY_DIR}/completions.cmake")
+
 # The documentation site gate.  `docs/docs-site/tools/check_site.py` is the
 # dependency-free local equivalent of `mkdocs build --strict`: it needs neither
 # MkDocs nor a network, so it runs here.  It regenerates the command-line

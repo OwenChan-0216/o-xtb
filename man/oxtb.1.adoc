@@ -1162,6 +1162,48 @@ as `ulimit -s 65536`; it was verified at 290 and 500 atoms and with the official
 generous value is enough, because the requirement grows with the atom count;
 *--help* suggests `export OMP_STACKSIZE=4G`.
 
+SHELL COMPLETION
+----------------
+The source tree ships three completion scripts in `completions/`: `oxtb.bash`
+for bash, `_oxtb` for zsh and `oxtb.fish` for fish. They complete the option
+spellings, the legal values of every option that has a fixed value set - for
+example `--lopt-level` completes `superloose`, `loose`, `normal`, `tight` and
+`vtight` - the file names of the geometry argument and of the options that
+read a file, and nothing at all for an option whose argument is a number.
+
+Only the space separated value syntax is completed. The argument parser reads
+`--gfn 1`, while a `--gfn=1` is neither a flag nor a file name for it and is
+silently ignored, so the completed form is always the separated one.
+
+The three files are generated from the `--help` option table of `oxtb(1)` by
+`completions/tools/gen_completions.py` (stdlib only) and committed; the test
+`xtb/landscape-completions` turns red when an option changes without them
+being regenerated. `install.sh` writes them into the per-user locations
+`~/.local/share/bash-completion/completions/oxtb`,
+`~/.local/share/zsh/site-functions/_oxtb` and
+`~/.config/fish/completions/oxtb.fish`; the package install puts the same
+three files under the prefix, in `share/bash-completion/completions`,
+`share/zsh/site-functions` and `share/fish/vendor_completions.d`.
+
+Neither the bash-completion package nor a writable directory that already sits
+in zsh's search path is assumed, so two lines enable the completions, and
+`install.sh` prints exactly those two lines after installing the files:
+
+- `fpath+=(~/.local/share/zsh/site-functions)` for zsh, which has to come
+  *before* the `compinit` call of `~/.zshrc` because `compinit` reads `fpath`
+  when it runs.
+- `source ~/.local/share/bash-completion/completions/oxtb` for bash, to be put
+  into `~/.bashrc`; the script is self contained and does not need any helper
+  of the bash-completion package. fish reads its own completion directory and
+  needs no line at all.
+
+`install.sh` never edits a shell start-up file on its own. The explicit opt-in
+is the environment variable `XTB_PATCH_ZSHRC=ON`: it writes a marked,
+idempotent block that holds the `fpath` line above the `compinit` call of
+`~/.zshrc`, after copying that file to `~/.zshrc.bak.<timestamp>`. The three
+completion files are installed unless `XTB_REGISTER_COMPLETION=OFF` is given,
+and `XTB_COMPLETIONS_ONLY=ON` refreshes them without running a build.
+
 LOCAL FILES
 -----------
 

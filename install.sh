@@ -37,6 +37,20 @@
 #                     (default: OFF, like XTB_REGISTER_COMMAND; `man` reads
 #                     $XTB_MAN_DIR/man1/oxtb.1 and $XTB_MAN_DIR/man7/xcontrol.7
 #                     only when that directory is in MANPATH)
+#   XTB_DATA_DIR   completion root          default: $XDG_DATA_HOME or
+#                     $HOME/.local/share; the three completion files go to
+#                     $XTB_DATA_DIR/bash-completion/completions/oxtb,
+#                     $XTB_DATA_DIR/zsh/site-functions/_oxtb and
+#                     $XDG_CONFIG_HOME|$HOME/.config/fish/completions/oxtb.fish
+#   XTB_REGISTER_COMPLETION  OFF skips those three files (default: ON - they
+#                     are data files, not a change to any shell's start-up)
+#   XTB_PATCH_ZSHRC  ON writes a marked, idempotent `fpath+=(...)` block into
+#                     ~/.zshrc, above the compinit call, after backing the file
+#                     up to ~/.zshrc.bak.<timestamp> (default: OFF).  Without it
+#                     the script only prints the two lines the user has to add
+#                     - it never edits ~/.zshrc on its own.
+#   XTB_COMPLETIONS_ONLY  ON runs only the completion step, then exits; this is
+#                     how the completion files are refreshed without a build
 #
 # The executable this script produces is fully static on glibc systems:
 # CMAKE_EXE_LINKER_FLAGS=-static, BLA_STATIC=ON and the static libgomp.  That
@@ -75,8 +89,22 @@ PREFIX="${XTB_PREFIX:-${HOME}/programs/o-xtb}"
 BIN_DIR="${XTB_BIN_DIR:-${HOME}/.local/bin}"
 MAN_DIR="${XTB_MAN_DIR:-${HOME}/.local/share/man}"
 REGISTER_MAN="${XTB_REGISTER_MAN:-OFF}"
+DATA_DIR="${XTB_DATA_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}}"
+CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}"
+BASH_COMPLETION_DIR="${DATA_DIR}/bash-completion/completions"
+ZSH_COMPLETION_DIR="${DATA_DIR}/zsh/site-functions"
+FISH_COMPLETION_DIR="${CONFIG_DIR}/fish/completions"
+REGISTER_COMPLETION="${XTB_REGISTER_COMPLETION:-ON}"
+PATCH_ZSHRC="${XTB_PATCH_ZSHRC:-OFF}"
+COMPLETIONS_ONLY="${XTB_COMPLETIONS_ONLY:-OFF}"
 CMAKE="${XTB_CMAKE:-$(command -v cmake)}"
 JOBS="${XTB_JOBS:-8}"
+
+# Marks of the optional ~/.zshrc block.  They are the idempotency key: the
+# patch step removes an existing block and writes it again, so running it
+# twice leaves one block and the same bytes.
+ZSHRC_BEGIN="# >>> oxtb completion >>>"
+ZSHRC_END="# <<< oxtb completion <<<"
 
 # The command line program is called `oxtb` in this renamed tree and `xtb` in
 # the upstream tree; it is the single name this script needs from the rename.
@@ -87,6 +115,88 @@ trap 'rc=$?; printf "\n!!! FAILED at step: %s (exit %d)\n" "${STEP:-unknown}" "$
 
 step() { STEP="$1"; printf '\n=== %s\n' "$STEP"; }
 ok()   { printf '    ok: %s\n' "$1"; }
+
+# `~` spelling of a path under $HOME, for the lines we print.
+tilde() { printf '%s' "${1/#${HOME}/\~}"; }
+
+# The three completion files are generated from `src/xhelp.f90` into
+# `completions/` and committed (`xtb/landscape-completions` keeps them in step
+# with the option table).  They are plain data files: installing them changes
+# no shell's start-up, which is why this step is ON by default while the man
+# registration above and the ~/.zshrc patch below are opt-in.
+install_completions()
+{
+   if [ "${REGISTER_COMPLETION}" != "ON" ]; then
+      printf '    note: completion files not installed (XTB_REGISTER_COMPLETION=OFF)\n'
+      return 0
+   fi
+   step "install shell completions"
+   mkdir -p "${BASH_COMPLETION_DIR}" "${ZSH_COMPLETION_DIR}" "${FISH_COMPLETION_DIR}"
+   install -m 0644 "${SOURCE_DIR}/completions/oxtb.bash" "${BASH_COMPLETION_DIR}/${COMMAND_NAME}"
+   install -m 0644 "${SOURCE_DIR}/completions/_oxtb" "${ZSH_COMPLETION_DIR}/_${COMMAND_NAME}"
+   install -m 0644 "${SOURCE_DIR}/completions/oxtb.fish" "${FISH_COMPLETION_DIR}/${COMMAND_NAME}.fish"
+   ok "$(tilde "${BASH_COMPLETION_DIR}/${COMMAND_NAME}")"
+   ok "$(tilde "${ZSH_COMPLETION_DIR}/_${COMMAND_NAME}")"
+   ok "$(tilde "${FISH_COMPLETION_DIR}/${COMMAND_NAME}.fish")"
+
+   # Neither a writable `fpath` directory in zsh's default search path nor the
+   # bash-completion package is guaranteed to exist, so the two lines are
+   # printed and never applied to a start-up file by default.
+   printf '\n    enable them:\n'
+   printf '      zsh : fpath+=(%s)     # must come BEFORE compinit in ~/.zshrc\n' \
+      "$(tilde "${ZSH_COMPLETION_DIR}")"
+   printf '      bash: source %s\n' "$(tilde "${BASH_COMPLETION_DIR}/${COMMAND_NAME}")"
+   printf '      fish: nothing to do (fish reads %s itself)\n' \
+      "$(tilde "${FISH_COMPLETION_DIR}")"
+}
+
+# Optional (~/.zshrc is never touched by default): write the `fpath` line into
+# ~/.zshrc above the compinit call, after a timestamped backup.  A block that
+# is already present is removed first, so the step is idempotent; the file is
+# rewritten in place (`cat`, not `mv`) so its mode and owner survive.
+patch_zshrc()
+{
+   local rc="${HOME}/.zshrc" fpath_line block tmp backup
+   fpath_line="fpath=($(tilde "${ZSH_COMPLETION_DIR}") \$fpath)"
+   block="${ZSHRC_BEGIN}
+# oxtb shell completion (written by install.sh with XTB_PATCH_ZSHRC=ON).
+# Keep this block above the compinit call: zsh reads fpath only there.
+${fpath_line}
+${ZSHRC_END}"
+   if [ -f "${rc}" ]; then
+      backup="${rc}.bak.$(date +%Y%m%d%H%M%S)"
+      cp -p "${rc}" "${backup}"
+      ok "backup: $(tilde "${backup}")"
+   else
+      : >"${rc}"
+      ok "created: $(tilde "${rc}")"
+   fi
+   tmp="$(mktemp)"
+   awk -v begin="${ZSHRC_BEGIN}" -v end="${ZSHRC_END}" -v block="${block}" '
+      $0 == begin { inside = 1; next }
+      $0 == end { inside = 0; next }
+      inside { next }
+      !done && index($0, "compinit") > 0 { print block; done = 1 }
+      { print }
+      END { if (!done) print block }
+   ' "${rc}" >"${tmp}"
+   cat "${tmp}" >"${rc}"
+   rm -f "${tmp}"
+   ok "block written above the compinit call in $(tilde "${rc}")"
+   if ! grep -qF "${fpath_line}" "${rc}" || ! grep -q 'compinit' "${rc}"; then
+      printf '    note: no compinit call found in %s - the block is at the end;\n' \
+         "$(tilde "${rc}")" >&2
+      printf '          run `autoload -Uz compinit && compinit` after it\n' >&2
+   fi
+}
+
+if [ "${COMPLETIONS_ONLY}" = "ON" ]; then
+   install_completions
+   if [ "${PATCH_ZSHRC}" = "ON" ]; then
+      patch_zshrc
+   fi
+   exit 0
+fi
 
 selfcheck_dir="$(mktemp -d)"
 trap 'rm -rf "${selfcheck_dir}"' EXIT
@@ -159,6 +269,11 @@ if [ "${REGISTER_MAN}" = "ON" ]; then
    ok "$(readlink "${MAN_DIR}/man7/xcontrol.7")"
 else
    printf '    note: man pages not registered (XTB_REGISTER_MAN=OFF); set it to ON\n'
+fi
+
+install_completions
+if [ "${PATCH_ZSHRC}" = "ON" ]; then
+   patch_zshrc
 fi
 
 step "self check"
