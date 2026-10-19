@@ -1186,21 +1186,32 @@ three files under the prefix, in `share/bash-completion/completions`,
 `share/zsh/site-functions` and `share/fish/vendor_completions.d`.
 
 Neither the bash-completion package nor a writable directory that already sits
-in zsh's search path is assumed, so two lines enable the completions, and
-`install.sh` prints exactly those two lines after installing the files:
+in zsh's search path is assumed, so `install.sh` prints the lines to add after
+installing the files:
 
-- `fpath+=(~/.local/share/zsh/site-functions)` for zsh, which has to come
-  *before* the `compinit` call of `~/.zshrc` because `compinit` reads `fpath`
-  when it runs.
+- `fpath+=(~/.local/share/zsh/site-functions)` for zsh. Its position matters:
+  `compinit` reads `fpath` when it runs, and a shell framework such as
+  oh-my-zsh runs `compinit` from its own `source` line, so the line belongs
+  *above* whichever of the two `~/.zshrc` contains - appending it at the end of
+  the file registers `_oxtb` for nothing and the tab key falls back to file
+  names.
 - `source ~/.local/share/bash-completion/completions/oxtb` for bash, to be put
   into `~/.bashrc`; the script is self contained and does not need any helper
   of the bash-completion package. fish reads its own completion directory and
   needs no line at all.
 
+When the completion initialisation cannot be moved below the `fpath` line,
+the two commands below it do the same job: `autoload -Uz _oxtb` makes the
+function loadable from the `fpath` directory, and `compdef _oxtb oxtb` binds
+it to the command. The `autoload` is not optional - without it the shell looks
+for an external command `_oxtb` and fails with `command not found`.
+
 `install.sh` never edits a shell start-up file on its own. The explicit opt-in
 is the environment variable `XTB_PATCH_ZSHRC=ON`: it writes a marked,
-idempotent block that holds the `fpath` line above the `compinit` call of
-`~/.zshrc`, after copying that file to `~/.zshrc.bak.<timestamp>`. The three
+idempotent block that holds the `fpath` line above the first line of
+`~/.zshrc` that initialises completion - a `compinit` call, or the `source`
+line of a framework such as oh-my-zsh - after copying that file to
+`~/.zshrc.bak.<timestamp>`. The three
 completion files are installed unless `XTB_REGISTER_COMPLETION=OFF` is given,
 and `XTB_COMPLETIONS_ONLY=ON` refreshes them without running a build.
 

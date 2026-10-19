@@ -1610,22 +1610,33 @@ three files under the prefix, in \f(CRshare/bash\-completion/completions\fP,
 \f(CRshare/zsh/site\-functions\fP and \f(CRshare/fish/vendor_completions.d\fP.
 .sp
 Neither the bash\-completion package nor a writable directory that already sits
-in zsh's search path is assumed, so two lines enable the completions, and
-\f(CRinstall.sh\fP prints exactly those two lines after installing the files:
+in zsh's search path is assumed, so \f(CRinstall.sh\fP prints the lines to add after
+installing the files:
 .IP \(bu 2
-\f(CRfpath+=(~/.local/share/zsh/site\-functions)\fP for zsh, which has to come
-\fBbefore\fP the \f(CRcompinit\fP call of \f(CR~/.zshrc\fP because \f(CRcompinit\fP reads \f(CRfpath\fP
-when it runs.
+\f(CRfpath+=(~/.local/share/zsh/site\-functions)\fP for zsh. Its position matters:
+\f(CRcompinit\fP reads \f(CRfpath\fP when it runs, and a shell framework such as
+oh\-my\-zsh runs \f(CRcompinit\fP from its own \f(CRsource\fP line, so the line belongs
+\fBabove\fP whichever of the two \f(CR~/.zshrc\fP contains \- appending it at the end of
+the file registers \f(CR_oxtb\fP for nothing and the tab key falls back to file
+names.
 .IP \(bu 2
 \f(CRsource ~/.local/share/bash\-completion/completions/oxtb\fP for bash, to be put
 into \f(CR~/.bashrc\fP; the script is self contained and does not need any helper
 of the bash\-completion package. fish reads its own completion directory and
 needs no line at all.
 .sp
+When the completion initialisation cannot be moved below the \f(CRfpath\fP line,
+the two commands below it do the same job: \f(CRautoload \-Uz _oxtb\fP makes the
+function loadable from the \f(CRfpath\fP directory, and \f(CRcompdef _oxtb oxtb\fP binds
+it to the command. The \f(CRautoload\fP is not optional \- without it the shell looks
+for an external command \f(CR_oxtb\fP and fails with \f(CRcommand not found\fP.
+.sp
 \f(CRinstall.sh\fP never edits a shell start\-up file on its own. The explicit opt\-in
 is the environment variable \f(CRXTB_PATCH_ZSHRC=ON\fP: it writes a marked,
-idempotent block that holds the \f(CRfpath\fP line above the \f(CRcompinit\fP call of
-\f(CR~/.zshrc\fP, after copying that file to \f(CR~/.zshrc.bak.<timestamp>\fP. The three
+idempotent block that holds the \f(CRfpath\fP line above the first line of
+\f(CR~/.zshrc\fP that initialises completion \- a \f(CRcompinit\fP call, or the \f(CRsource\fP
+line of a framework such as oh\-my\-zsh \- after copying that file to
+\f(CR~/.zshrc.bak.<timestamp>\fP. The three
 completion files are installed unless \f(CRXTB_REGISTER_COMPLETION=OFF\fP is given,
 and \f(CRXTB_COMPLETIONS_ONLY=ON\fP refreshes them without running a build.
 .SH "LOCAL FILES"

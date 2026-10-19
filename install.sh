@@ -45,10 +45,12 @@
 #   XTB_REGISTER_COMPLETION  OFF skips those three files (default: ON - they
 #                     are data files, not a change to any shell's start-up)
 #   XTB_PATCH_ZSHRC  ON writes a marked, idempotent `fpath+=(...)` block into
-#                     ~/.zshrc, above the compinit call, after backing the file
-#                     up to ~/.zshrc.bak.<timestamp> (default: OFF).  Without it
-#                     the script only prints the two lines the user has to add
-#                     - it never edits ~/.zshrc on its own.
+#                     ~/.zshrc, above the first line that initialises
+#                     completion (`compinit`, or a shell framework such as
+#                     oh-my-zsh that runs it), after backing the file up to
+#                     ~/.zshrc.bak.<timestamp> (default: OFF).  Without it the
+#                     script only prints the lines the user has to add - it
+#                     never edits ~/.zshrc on its own.
 #   XTB_COMPLETIONS_ONLY  ON runs only the completion step, then exits; this is
 #                     how the completion files are refreshed without a build
 #
@@ -140,27 +142,47 @@ install_completions()
    ok "$(tilde "${FISH_COMPLETION_DIR}/${COMMAND_NAME}.fish")"
 
    # Neither a writable `fpath` directory in zsh's default search path nor the
-   # bash-completion package is guaranteed to exist, so the two lines are
-   # printed and never applied to a start-up file by default.
+   # bash-completion package is guaranteed to exist, so the lines are printed
+   # and never applied to a start-up file by default.  For zsh the position
+   # matters: `compinit` reads `fpath` once and the framework of the shell (for
+   # example the oh-my-zsh source, which runs `compinit` for the user) does it
+   # at its own line, so appending the `fpath` line at the end of ~/.zshrc
+   # registers nothing.
    printf '\n    enable them:\n'
-   printf '      zsh : fpath+=(%s)     # must come BEFORE compinit in ~/.zshrc\n' \
-      "$(tilde "${ZSH_COMPLETION_DIR}")"
+   printf '      zsh : put this line in ~/.zshrc ABOVE the line that initialises\n'
+   printf '            completion (`compinit`, or a framework such as oh-my-zsh),\n'
+   printf '            then open a new shell:\n'
+   printf '              fpath+=(%s)\n' "$(tilde "${ZSH_COMPLETION_DIR}")"
+   printf '            if that is not possible - completion is initialised\n'
+   printf '            before your line can run - put this AFTER it instead:\n'
+   printf '              autoload -Uz _%s && compdef _%s %s\n' \
+      "${COMMAND_NAME}" "${COMMAND_NAME}" "${COMMAND_NAME}"
    printf '      bash: source %s\n' "$(tilde "${BASH_COMPLETION_DIR}/${COMMAND_NAME}")"
    printf '      fish: nothing to do (fish reads %s itself)\n' \
       "$(tilde "${FISH_COMPLETION_DIR}")"
 }
 
 # Optional (~/.zshrc is never touched by default): write the `fpath` line into
-# ~/.zshrc above the compinit call, after a timestamped backup.  A block that
-# is already present is removed first, so the step is idempotent; the file is
-# rewritten in place (`cat`, not `mv`) so its mode and owner survive.
+# ~/.zshrc above the completion initialisation, after a timestamped backup.  A
+# block that is already present is removed first, so the step is idempotent;
+# the file is rewritten in place (`cat`, not `mv`) so its mode and owner
+# survive.
+#
+# The insertion point is the first line that creates the completion registry:
+# a `compinit` call, or the `source` line of a shell framework that runs it
+# (oh-my-zsh, antigen, prezto, zplug, zinit, zcomet) - appending the line is what
+# silently fails, because `compinit` already read `fpath` by then.  A commented
+# line is never taken for the anchor, and the framework names are matched in
+# their on-disk spelling (`oh-my-zsh.sh`, `antigen.zsh`, `zinit.zsh`, ...) so a
+# plugin name in a `plugins=(...)` array is not mistaken for the anchor.
 patch_zshrc()
 {
    local rc="${HOME}/.zshrc" fpath_line block tmp backup
    fpath_line="fpath=($(tilde "${ZSH_COMPLETION_DIR}") \$fpath)"
    block="${ZSHRC_BEGIN}
 # oxtb shell completion (written by install.sh with XTB_PATCH_ZSHRC=ON).
-# Keep this block above the compinit call: zsh reads fpath only there.
+# Keep this block above the line that initialises completion
+# (a compinit call, or a framework such as oh-my-zsh that runs it).
 ${fpath_line}
 ${ZSHRC_END}"
    if [ -f "${rc}" ]; then
@@ -176,17 +198,30 @@ ${ZSHRC_END}"
       $0 == begin { inside = 1; next }
       $0 == end { inside = 0; next }
       inside { next }
-      !done && index($0, "compinit") > 0 { print block; done = 1 }
+      !done && $0 !~ /^[[:space:]]*#/ &&
+         $0 ~ /compinit|oh-my-zsh\.sh|antigen\.zsh|zprezto|zplug\/init\.zsh|zinit\.zsh|zcomet/ {
+         print block; done = 1
+      }
       { print }
       END { if (!done) print block }
    ' "${rc}" >"${tmp}"
    cat "${tmp}" >"${rc}"
    rm -f "${tmp}"
-   ok "block written above the compinit call in $(tilde "${rc}")"
-   if ! grep -qF "${fpath_line}" "${rc}" || ! grep -q 'compinit' "${rc}"; then
-      printf '    note: no compinit call found in %s - the block is at the end;\n' \
+   if ! grep -qF "${ZSHRC_BEGIN}" "${rc}"; then
+      printf '    note: the block was not written to %s\n' "$(tilde "${rc}")" >&2
+      return 1
+   fi
+   if [ "$(tail -n 1 "${rc}")" = "${ZSHRC_END}" ]; then
+      ok "block written in $(tilde "${rc}") (no anchor line found)"
+      printf '    note: no completion-initialising line found in %s - the block\n' \
          "$(tilde "${rc}")" >&2
-      printf '          run `autoload -Uz compinit && compinit` after it\n' >&2
+      printf '          is at the end; append either\n' >&2
+      printf '            autoload -Uz compinit && compinit\n' >&2
+      printf '          or, if something else initialises completion first,\n' >&2
+      printf '            autoload -Uz _%s && compdef _%s %s\n' \
+         "${COMMAND_NAME}" "${COMMAND_NAME}" "${COMMAND_NAME}" >&2
+   else
+      ok "block written above the completion initialisation in $(tilde "${rc}")"
    fi
 }
 
