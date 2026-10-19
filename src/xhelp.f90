@@ -100,10 +100,11 @@ write(iunit,'(3x,a)') &
    ""
 end subroutine citation
 
-subroutine help(iunit, topic, status)
+subroutine help(iunit, topic, status, values_only)
    use xtb_features, only : get_xtb_feature
-   !> Write the `--help` page, or the full text of one option, or one
-   !> category of the grouped index.
+   !> Write the `--help` page, the full text of one option, one category of
+   !> the grouped index, or (with `values_only`) the machine readable value
+   !> table of the `--help-values` flag.
    implicit none
    !> Unit to write to
    integer, intent(in) :: iunit
@@ -112,6 +113,8 @@ subroutine help(iunit, topic, status)
    character(len=*), intent(in) :: topic
    !> 0 when a page was written, 1 for an unknown topic
    integer, intent(out) :: status
+   !> Write the `--help-values` table instead of a help page
+   logical, intent(in), optional :: values_only
 
    !> One documented command line option of the page.
    type :: help_option
@@ -129,10 +132,71 @@ subroutine help(iunit, topic, status)
       !> The same keys with their original case; matched before `aliases` so
       !> the one letter pair `-v`/`-V` stays distinguishable
       character(len=:), allocatable :: aliases_exact
+      !> Legal values of the option, one per element; unallocated when the
+      !> option is a flag or takes a free value.  Printed as `Values: ...`
+      !> by the topic page and dumped by `--help-values`
+      character(len=16), allocatable :: values(:)
    end type help_option
 
    !> Number of categories and of options of the page
-   integer, parameter :: n_cat = 17, n_opt = 223
+   integer, parameter :: n_cat = 17, n_opt = 222
+   !> Legal values of every option with a constrained value set.  One named
+   !> array per set, referenced by the `values=` argument of `add`, so a set
+   !> lives in exactly one place: `--help <topic>` prints it as a uniform
+   !> `Values: ...` line and `--help-values` dumps it for a generator.  The
+   !> order is the one the prose lists the values in.
+   character(len=16), parameter :: v_optlevel(10) = [character(len=16) :: &
+      "crude", "sloppy", "loose", "lax", "normal", "tight", "verytight", &
+      "vtight", "extreme", "superloose"]
+   !> The upstream level keywords of the native `optlevel2int` bridge, the set
+   !> `--bhess`/`--metaopt` reach: the eight upstream names plus the `vtight`
+   !> spelling, and **without** the suite-only `superloose` (the native bridge
+   !> silently maps an unknown keyword to `normal`).
+   character(len=16), parameter :: v_optlevel_native(9) = [character(len=16) :: &
+      "crude", "sloppy", "loose", "lax", "normal", "tight", "verytight", &
+      "vtight", "extreme"]
+   character(len=16), parameter :: v_level(5) = [character(len=16) :: &
+      "superloose", "loose", "normal", "tight", "vtight"]
+   character(len=16), parameter :: v_minimiser(6) = [character(len=16) :: &
+      "sd", "cg", "lbfgs", "bfgs", "diis", "rfo"]
+   character(len=16), parameter :: v_saddle(8) = [character(len=16) :: &
+      "prfo", "bprfo", "dimer", "neb", "cineb", "autoneb", "string", "gsm"]
+   character(len=16), parameter :: v_irc(4) = [character(len=16) :: &
+      "gs", "hpc", "lqa", "eulerpc"]
+   character(len=16), parameter :: v_method(26) = [character(len=16) :: &
+      "auto", "sd", "cg", "lbfgs", "bfgs", "diis", "rfo", "prfo", "bprfo", &
+      "dimer", "neb", "cineb", "autoneb", "string", "gsm", "gs", "hpc", &
+      "lqa", "eulerpc", "ancopt", "rf", "lancopt", "l-ancopt", "fire", &
+      "inertial", "pbc_lbfgs"]
+   character(len=16), parameter :: v_hessian(3) = [character(len=16) :: &
+      "numerical", "model", "file"]
+   character(len=16), parameter :: v_restart(3) = [character(len=16) :: &
+      "off", "pin", "warm"]
+   character(len=16), parameter :: v_coord(3) = [character(len=16) :: &
+      "distance", "angle", "dihedral"]
+   character(len=16), parameter :: v_scanmode(2) = [character(len=16) :: &
+      "relaxed", "rigid"]
+   character(len=16), parameter :: v_initmode(2) = [character(len=16) :: &
+      "h0", "force"]
+   character(len=16), parameter :: v_ninit(2) = [character(len=16) :: &
+      "random", "force"]
+   character(len=16), parameter :: v_ndim(2) = [character(len=16) :: "1", "2"]
+   character(len=16), parameter :: v_gfn(4) = [character(len=16) :: &
+      "0", "1", "2", "ff"]
+   character(len=16), parameter :: v_color(3) = [character(len=16) :: &
+      "auto", "always", "never"]
+   character(len=16), parameter :: v_wrtopo(13) = [character(len=16) :: &
+      "etot", "gnorm", "nb", "bpair", "alist", "blist", "tlist", "vtors", &
+      "vbond", "vangl", "hbbond", "eeq", "json"]
+   character(len=16), parameter :: v_alpb(25) = [character(len=16) :: &
+      "acetone", "acetonitrile", "aniline", "benzaldehyde", "benzene", &
+      "ch2cl2", "chcl3", "cs2", "dioxane", "dmf", "dmso", "ethanol", &
+      "ether", "ethylacetate", "furane", "hexadecane", "hexane", "methanol", &
+      "nitromethane", "octanol", "woctanol", "phenol", "toluene", "thf", &
+      "water"]
+   character(len=16), parameter :: v_gbsa(14) = [character(len=16) :: &
+      "acetone", "acetonitrile", "benzene", "ch2cl2", "chcl3", "cs2", "dmf", &
+      "dmso", "ether", "water", "methanol", "hexane", "thf", "toluene"]
    !> Category keys, in print order
    character(len=16), parameter :: cat_key(n_cat) = [character(len=16) :: &
       "runtypes", &
@@ -201,7 +265,7 @@ subroutine help(iunit, topic, status)
       "    ANCopt is reachable as --opt --method ancopt, and the level keyword follows", &
       "    the upstream names crude, sloppy, loose, lax, normal (default), tight,", &
       "    verytight, extreme, the spelling vtight and the suite-only superloose; the", &
-      "    run echoes the level it uses"])
+      "    run echoes the level it uses"], values=v_optlevel)
    call add("--cycles [INT]", "runtypes", &
       "maximum number of optimisation cycles", &
       [character(len=160) :: "    maximum number of optimization cycles."])
@@ -213,7 +277,7 @@ subroutine help(iunit, topic, status)
       [character(len=160) :: &
       "    minimize the geometry with the landscape task suite and run its harmonic", &
       "    frequency analysis (the legacy ancopt(3) plus numerical Hessian path is", &
-      "    --ohess --method ancopt)"])
+      "    --ohess --method ancopt)"], values=v_optlevel)
    call add("--bhess [LEVEL]", "runtypes", &
       "biased numerical Hessian on an ANCopt geometry", &
       [character(len=160) :: &
@@ -221,7 +285,7 @@ subroutine help(iunit, topic, status)
       "", &
       "    Molecular Hessian runs with more than one atom, no frozen atoms, and no periodicity", &
       "    automatically print compliance constants, relaxed force constants, and bond local-mode", &
-      "    frequencies, and write compliance.dat."])
+      "    frequencies, and write compliance.dat."], values=v_optlevel_native)
    call add("--o1nh", "runtypes", &
       "O1NumHess numerical Hessian (ODLR)", &
       [character(len=160) :: "    perform the numerical hessian calculation using the ODLR approximation (O1NumHess)"])
@@ -255,7 +319,7 @@ subroutine help(iunit, topic, status)
       "ANCopt, then metadynamics for other minima", &
       [character(len=160) :: &
       "    call ancopt(3) to perform a geometry optimization, then try to find other", &
-      "    minimas by meta dynamics"])
+      "    minimas by meta dynamics"], values=v_optlevel_native)
    call add("--path [FILE]", "runtypes", &
       "metadynamics path to a product structure", &
       [character(len=160) :: &
@@ -352,26 +416,28 @@ subroutine help(iunit, topic, status)
       "    --method is the canonical name of --lopt-engine, --lscan-method,", &
       "    --lts-method and --lirc-method: the same value is idempotent, a different", &
       "    value through two of the flags aborts the run.  The name is not", &
-      "    case-sensitive"])
+      "    case-sensitive"], values=v_method)
    call add("--lopt-engine NAME", "minimisation", &
       "minimiser: sd, cg, lbfgs, bfgs, diis or rfo", &
       [character(len=160) :: &
       "    minimisation algorithm of the landscape suite, one of sd, cg, lbfgs,", &
       "    bfgs, diis or rfo (default lbfgs).  Alias of --method.  The name is", &
-      "    not case-sensitive"])
+      "    not case-sensitive"], values=v_minimiser)
    call add("--lopt-level LEVEL", "minimisation", &
       "convergence level of the minimisation", &
       [character(len=160) :: &
       "    convergence level of the landscape suite (thresholds, energy tolerance, SCC", &
       "    accuracy and the step budget), one of superloose, loose,", &
-      "    normal (default), tight or vtight.  The level name is not case-sensitive"])
+      "    normal (default), tight or vtight.  The level name is not case-sensitive"], &
+      values=v_level)
    call add("--lopt-hessian SOURCE", "minimisation", &
       "Hessian backend: numerical, model or file", &
       [character(len=160) :: &
       "    Hessian backend of the landscape suite (minimisation and Hessian", &
       "    based steps), one of numerical (default, central differences of the", &
       "    electronic gradient), model (Lindh-D2 model Hessian) or file (read the", &
-      "    Hessian written by an earlier run, named by --lopt-hessian-file)"])
+      "    Hessian written by an earlier run, named by --lopt-hessian-file)"], &
+      values=v_hessian)
    call add("--lopt-max-steps N", "minimisation", &
       "step budget of the minimisation", &
       [character(len=160) :: &
@@ -396,7 +462,8 @@ subroutine help(iunit, topic, status)
       "    --lopt-hess-step"])
    call add("--lopt-restart MODE", "minimisation", &
       "wavefunction restart policy: off, pin or warm", &
-      [character(len=160) :: "    wavefunction restart policy of the engine, off (default), pin or warm"])
+      [character(len=160) :: "    wavefunction restart policy of the engine, off (default), pin or warm"], &
+      values=v_restart)
    call add("--lopt-hessian-file NAME", "minimisation", &
       "Hessian file read by --lopt-hessian file", &
       [character(len=160) :: "    file read by --lopt-hessian file (TURBOMOLE Hessian layout)"])
@@ -404,7 +471,7 @@ subroutine help(iunit, topic, status)
       "type of the first coordinate: distance, angle, dihedral", &
       [character(len=160) :: &
       "    type of the first scanned coordinate, one of distance, angle or dihedral", &
-      "    (the type name is not case-sensitive)"])
+      "    (the type name is not case-sensitive)"], values=v_coord)
    call add("--lscan-atoms LIST", "scan", &
       "atom indices of the first coordinate", &
       [character(len=160) :: &
@@ -425,26 +492,30 @@ subroutine help(iunit, topic, status)
       "    scan to a two-dimensional Cartesian product grid"])
    call add("--lscan-mode MODE", "scan", &
       "scan mode: relaxed or rigid", &
-      [character(len=160) :: "    scan mode, relaxed (default) or rigid (not case-sensitive)"])
+      [character(len=160) :: "    scan mode, relaxed (default) or rigid (not case-sensitive)"], &
+      values=v_scanmode)
    call add("--lscan-method NAME", "scan", &
       "inner minimiser of a relaxed scan", &
       [character(len=160) :: &
       "    inner minimiser of a relaxed scan, one of sd, cg, lbfgs (default), bfgs,", &
-      "    diis or rfo.  Alias of --method.  The name is not case-sensitive"])
+      "    diis or rfo.  Alias of --method.  The name is not case-sensitive"], &
+      values=v_minimiser)
    call add("--lscan-level LEVEL", "scan", &
       "convergence level of the inner minimisation", &
       [character(len=160) :: &
       "    convergence level of the inner minimisation (thresholds, energy tolerance,", &
       "    SCC accuracy and the step budget), one of superloose, loose,", &
-      "    normal (default), tight or vtight"])
+      "    normal (default), tight or vtight"], values=v_level)
    call add("--lscan-ndim N", "scan", &
       "number of scanned coordinates, 1 or 2", &
-      [character(len=160) :: "    number of scanned coordinates, 1 (default) or 2"])
+      [character(len=160) :: "    number of scanned coordinates, 1 (default) or 2"], &
+      values=v_ndim)
    call add("--lscan-restart MODE", "scan", &
       "wavefunction policy of the scan points", &
       [character(len=160) :: &
       "    wavefunction policy of the scan points, off (default), pin or warm", &
-      "    (warm_start reuses only the geometry, never the wavefunction)"])
+      "    (warm_start reuses only the geometry, never the wavefunction)"], &
+      values=v_restart)
    call add("--lscan-oneway", "scan", &
       "forward branch only (no hysteresis report)", &
       [character(len=160) :: "    scan the forward branch only (no reverse branch, no hysteresis report)"])
@@ -480,7 +551,8 @@ subroutine help(iunit, topic, status)
       "    minimiser and Hessian source as --lscan-hess-step"])
    call add("--lscan-hessian SOURCE", "scan", &
       "Hessian backend of the scan points", &
-      [character(len=160) :: "    Hessian backend of the scan points, one of numerical (default), model or file"])
+      [character(len=160) :: "    Hessian backend of the scan points, one of numerical (default), model or file"], &
+      values=v_hessian)
    call add("--lscan-hessian-file NAME", "scan", &
       "Hessian file read by --lscan-hessian file", &
       [character(len=160) :: "    file read by --lscan-hessian file (TURBOMOLE Hessian layout)"])
@@ -490,7 +562,8 @@ subroutine help(iunit, topic, status)
       "    search method, one of prfo (default), bprfo (restricted step), dimer", &
       "    (first derivatives only, no Hessian), neb, cineb (climbing image NEB),", &
       "    autoneb (incremental path building) or string / gsm (growing string).", &
-      "    Alias of --method.  The method name is not case-sensitive"])
+      "    Alias of --method.  The method name is not case-sensitive"], &
+      values=v_saddle)
    call add("--lts-trust VALUE", "saddle", &
       "initial trust radius (bohr)", &
       [character(len=160) :: "    initial trust radius of the step in bohr (default 0.37795)"])
@@ -510,7 +583,7 @@ subroutine help(iunit, topic, status)
       "convergence level of the search", &
       [character(len=160) :: &
       "    convergence level (thresholds, energy tolerance, SCC accuracy and the step", &
-      "    budget), one of superloose, loose, normal, tight, vtight"])
+      "    budget), one of superloose, loose, normal, tight, vtight"], values=v_level)
    call add("--lts-mode-overlap-min VALUE", "saddle", &
       "mode-following guard: reselect below overlap", &
       [character(len=160) :: "    mode following guard: reselect the transition vector below this overlap (default 0.3)"])
@@ -527,7 +600,7 @@ subroutine help(iunit, topic, status)
       "initial transition vector: h0 or force", &
       [character(len=160) :: &
       "    initial transition vector, h0 (most negative Hessian mode, default) or force", &
-      "    (largest Cartesian gradient component direction)"])
+      "    (largest Cartesian gradient component direction)"], values=v_initmode)
    call add("--lts-escape-step VALUE", "saddle", &
       "escape walk from a minimum (0 disables)", &
       [character(len=160) :: &
@@ -555,7 +628,7 @@ subroutine help(iunit, topic, status)
       "initial dimer axis: random or force", &
       [character(len=160) :: &
       "    initial dimer axis, random (default, seeded by --lts-seed) or force", &
-      "    (largest Cartesian gradient component direction)"])
+      "    (largest Cartesian gradient component direction)"], values=v_ninit)
    call add("--lts-seed N", "saddle", &
       "seed of the random initial dimer axis", &
       [character(len=160) :: "    seed of the random initial dimer axis (default 42)"])
@@ -581,10 +654,12 @@ subroutine help(iunit, topic, status)
       [character(len=160) :: "    keep the rigid body (translation/rotation) components in the Cartesian step"])
    call add("--lts-restart MODE", "saddle", &
       "wavefunction restart policy: off, pin or warm", &
-      [character(len=160) :: "    wavefunction restart policy of the engine, off (default), pin or warm"])
+      [character(len=160) :: "    wavefunction restart policy of the engine, off (default), pin or warm"], &
+      values=v_restart)
    call add("--lts-hessian SOURCE", "saddle", &
       "Hessian backend: numerical, model or file", &
-      [character(len=160) :: "    Hessian backend, one of numerical (default), model (Lindh-D2) or file"])
+      [character(len=160) :: "    Hessian backend, one of numerical (default), model (Lindh-D2) or file"], &
+      values=v_hessian)
    call add("--lts-hessian-file NAME", "saddle", &
       "Hessian file read by --lts-hessian file", &
       [character(len=160) :: "    file read by --lts-hessian file (TURBOMOLE Hessian layout)"])
@@ -700,7 +775,8 @@ subroutine help(iunit, topic, status)
       "    step of 0.20 or less) or gs (Gonzalez-Schlegel sphere relaxation, compatible", &
       "    reference; 1.9-2.1 E/g per point and the largest path deviation, validated", &
       "    for steps up to 0.15).", &
-      "    Alias of --method.  The method name is not case-sensitive"])
+      "    Alias of --method.  The method name is not case-sensitive"], &
+      values=v_irc)
    call add("--lirc-step VALUE", "irc", &
       "mass weighted arc length step (bohr*amu^1/2)", &
       [character(len=160) :: &
@@ -722,7 +798,8 @@ subroutine help(iunit, topic, status)
       "    convergence level of the endpoint relaxation (thresholds, energy tolerance,", &
       "    SCC accuracy and the step budget), one of superloose, loose,", &
       "    normal, tight, vtight (the IRC path itself is left by the gradient and", &
-      "    energy-rise termination signals, see --lirc-grad-tol/--lirc-e-rise)"])
+      "    energy-rise termination signals, see --lirc-grad-tol/--lirc-e-rise)"], &
+      values=v_level)
    call add("--lirc-swap", "irc", &
       "exchange the forward and backward directions", &
       [character(len=160) :: "    exchange the forward and backward directions defined by the phase convention"])
@@ -821,7 +898,8 @@ subroutine help(iunit, topic, status)
       "    skipped) with --lirc-no-endpoint-relax"])
    call add("--lirc-hessian SOURCE", "irc", &
       "Hessian backend: numerical, model or file", &
-      [character(len=160) :: "    Hessian backend, one of numerical (default), model (Lindh-D2) or file"])
+      [character(len=160) :: "    Hessian backend, one of numerical (default), model (Lindh-D2) or file"], &
+      values=v_hessian)
    call add("--lirc-hessian-file NAME", "irc", &
       "Hessian file read by --lirc-hessian file", &
       [character(len=160) :: "    file read by --lirc-hessian file (TURBOMOLE Hessian layout)"])
@@ -841,13 +919,14 @@ subroutine help(iunit, topic, status)
       [character(len=160) :: "    SCC accuracy of the displaced single points of the Hessian (default 0.3)"])
    call add("--lirc-restart MODE", "irc", &
       "wavefunction restart policy: off, pin or warm", &
-      [character(len=160) :: "    wavefunction restart policy of the engine, off (default), pin or warm"])
+      [character(len=160) :: "    wavefunction restart policy of the engine, off (default), pin or warm"], &
+      values=v_restart)
    call add("--lvib-hessian SOURCE", "frequencies", &
       "Hessian backend: numerical, model or file", &
       [character(len=160) :: &
       "    Hessian backend of the frequency task, one of numerical (default, central", &
       "    differences of the electronic gradient), model (Lindh-D2) or file (read the", &
-      "    Hessian of an earlier run)"])
+      "    Hessian of an earlier run)"], values=v_hessian)
    call add("--lvib-hessian-file NAME", "frequencies", &
       "Hessian file read by --lvib-hessian file", &
       [character(len=160) :: "    file read by --lvib-hessian file (TURBOMOLE Hessian layout)"])
@@ -873,7 +952,8 @@ subroutine help(iunit, topic, status)
       "    hand the provider the same start and produce a byte identical", &
       "    `hessian` file; only off is distinguishable (it records the cold start", &
       "    wavefunction).  The two spellings are kept, the equivalence is", &
-      "    asserted by the xtb/landscape-lvib-restart-warm check"])
+      "    asserted by the xtb/landscape-lvib-restart-warm check"], &
+      values=v_restart)
    call add("--lvib-odlr", "frequencies", &
       "request the ODLR approximation (not implemented)", &
       [character(len=160) :: "    request the ODLR approximation; not implemented, the run reports the request"])
@@ -903,7 +983,7 @@ subroutine help(iunit, topic, status)
       [character(len=160) :: &
       "    specify parametrisation of GFN-xTB: 0 (GFN0-xTB), 1 (GFN1-xTB), 2", &
       "    (GFN2-xTB, the default) or ff (GFN-FF, the same as --gfnff); any", &
-      "    other value is refused with an error"])
+      "    other value is refused with an error"], values=v_gfn)
    call add("--gfn0", "hamiltonian", &
       "GFN0-xTB Hamiltonian (a discouraged spelling)", &
       [character(len=160) :: &
@@ -1011,7 +1091,8 @@ subroutine help(iunit, topic, status)
       "    ethylacetate, furane, hexadecane, hexane, methanol, nitromethane, octanol,", &
       "    woctanol, phenol, toluene, thf, water.", &
       "    The solvent input is not case-sensitive. The Gsolv", &
-      "    reference state can be chosen as reference, bar1M, or gsolv (default)."])
+      "    reference state can be chosen as reference, bar1M, or gsolv (default)."], &
+      values=v_alpb)
    call add("-g, --gbsa SOLVENT [STATE]", "solvation", &
       "GBSA implicit solvation", &
       [character(len=160) :: &
@@ -1020,7 +1101,8 @@ subroutine help(iunit, topic, status)
       "    CHCl3, CS2, DMF (only GFN2-xTB), DMSO, ether, H2O, methanol,", &
       "    n-hexane (only GFN2-xTB), THF and toluene.", &
       "    The solvent input is not case-sensitive.", &
-      "    The Gsolv reference state can be chosen as reference, bar1M, or gsolv (default)."])
+      "    The Gsolv reference state can be chosen as reference, bar1M, or gsolv (default)."], &
+      values=v_gbsa)
    call add("--gbe SOLVENT/EPSILON", "solvation", &
       "GBe solvation for finite epsilon (tblite)", &
       [character(len=160) :: &
@@ -1120,7 +1202,7 @@ subroutine help(iunit, topic, status)
       "colour scheme of the tblite output", &
       [character(len=160) :: &
       "    colour scheme of the tblite output, one of auto (follow the build", &
-      "    feature, default), always or never (tblite builds only)"])
+      "    feature, default), always or never (tblite builds only)"], values=v_color)
    call add("--namespace STRING", "output", &
       "namespace of every file of the run", &
       [character(len=160) :: &
@@ -1129,12 +1211,25 @@ subroutine help(iunit, topic, status)
    call add("--json", "output", &
       "write the xtbout.json file", &
       [character(len=160) :: "    write xtbout.json file"])
+   call add("--help-values", "output", &
+      "machine-readable dump of the option value sets", &
+      [character(len=160) :: &
+      "    print the legal value set of every documented option as a stable,", &
+      "    line-oriented table, one record per option in --help order, with a", &
+      "    TAB between the three fields", &
+      "      category <spellings> <values>", &
+      "    `spellings` is the spelling line of --help (a token that starts", &
+      "    with a dash is an option spelling, any other token is its argument", &
+      "    placeholder) and `values` is the space separated legal value set,", &
+      "    empty when the option has none; lines starting with `#` are", &
+      "    comments and fix this format (format 1).  A completion generator", &
+      "    codes against this table"])
    call add("--wrtopo LIST", "output", &
       "comma separated topology printouts", &
       [character(len=160) :: &
       "    comma separated topology printouts, from etot, gnorm, nb, bpair, alist,", &
       "    blist, tlist, vtors, vbond, vangl, hbbond, eeq and json (json selects", &
-      "    all of them); a misspelled keyword aborts the run"])
+      "    all of them); a misspelled keyword aborts the run"], values=v_wrtopo)
    call add("--citation", "output", &
       "print citation and terminate", &
       [character(len=160) :: "    print citation and terminate"])
@@ -1190,6 +1285,14 @@ subroutine help(iunit, topic, status)
       "    set the thread count of the linear algebra backend (OpenBLAS or MKL)", &
       "    at run time and print the value read back; without the flag the", &
       "    backend is left untouched (default)"])
+
+   if (present(values_only)) then
+      if (values_only) then
+         call write_values_dump(iunit)
+         status = 0
+         return
+      end if
+   end if
 
    if (len_trim(topic) == 0) then
       call write_index(iunit, use_color)
@@ -1284,14 +1387,17 @@ contains
    end function styled
 
    !> Append one option to opts; called once per documented option.
-   subroutine add(spellings, category, summary, detail)
+   subroutine add(spellings, category, summary, detail, values)
       character(len=*), intent(in) :: spellings, category, summary
       character(len=*), intent(in) :: detail(:)
+      !> Legal values of the option; absent for a flag or a free value
+      character(len=16), intent(in), optional :: values(:)
       n = n + 1
       opts(n)%spellings = spellings
       opts(n)%category = category
       opts(n)%summary = summary
       opts(n)%detail = detail
+      if (present(values)) opts(n)%values = values
       call append_aliases(opts(n)%aliases, opts(n)%aliases_exact, spellings)
    end subroutine add
 
@@ -1417,7 +1523,8 @@ contains
          trim(opts(i)%summary)
    end subroutine write_entry
 
-   !> The full text of one option: spellings, every detail line, blank.
+   !> The full text of one option: spellings, every detail line, the uniform
+   !> `Values:` line when the option has a value set, blank.
    subroutine write_option(iunit, i, use_color)
       integer, intent(in) :: iunit, i
       logical, intent(in) :: use_color
@@ -1426,8 +1533,59 @@ contains
       do j = 1, size(opts(i)%detail)
          write(iunit,'(a)') trim(opts(i)%detail(j))
       end do
+      if (allocated(opts(i)%values)) then
+         if (size(opts(i)%values) > 0) then
+            write(iunit,'(a)') "Values: " // join_values(opts(i)%values, ", ")
+         end if
+      end if
       write(iunit,'(a)') ''
    end subroutine write_option
+
+   !> Join a value set with `separator`; an empty set gives an empty string.
+   pure function join_values(values, separator) result(res)
+      !> Value set
+      character(len=16), allocatable, intent(in) :: values(:)
+      !> Separator between two values
+      character(len=*), intent(in) :: separator
+      !> Joined list
+      character(len=:), allocatable :: res
+      integer :: k
+      res = ""
+      if (.not. allocated(values)) return
+      do k = 1, size(values)
+         if (k > 1) res = res // separator
+         res = res // trim(values(k))
+      end do
+   end function join_values
+
+   !> The `--help-values` table: one tab separated record per documented
+   !> option, in `--help` order, plus `#` comment lines that fix the format so
+   !> a completion generator never has to guess.
+   subroutine write_values_dump(iunit)
+      integer, intent(in) :: iunit
+      integer :: i, n_valued
+      n_valued = 0
+      do i = 1, n
+         if (allocated(opts(i)%values)) then
+            if (size(opts(i)%values) > 0) n_valued = n_valued + 1
+         end if
+      end do
+      write(iunit,'(a)') &
+         "# oxtb --help-values format 1", &
+         "# one record per documented option, in --help order; one TAB between", &
+         "# the three fields:", &
+         "#   field 1 category, field 2 spellings, field 3 values", &
+         "# field 2 is the spelling line of `oxtb --help`: comma separated", &
+         "# tokens, a token that starts with a dash is an option spelling and", &
+         "# any other token is its argument placeholder; field 3 is the space", &
+         "# separated legal value set, empty when the option has none.", &
+         "# lines starting with # are comments"
+      write(iunit,'(a,i0,a,i0)') "# options: ", n, " with values: ", n_valued
+      do i = 1, n
+         write(iunit,'(a,a,a,a,a)') trim(opts(i)%category), achar(9), &
+            trim(opts(i)%spellings), achar(9), join_values(opts(i)%values, " ")
+      end do
+   end subroutine write_values_dump
 
    !> The closing prose: machine settings, output conventions, man pointer.
    subroutine write_tail(iunit)

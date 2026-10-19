@@ -118,6 +118,18 @@ number of atoms per fragment of the IFF calculation, comma separated
 use tblite library as implementation for xTB
 .RE
 .sp
+\fB\-\-help\-values\fP
+.RS 4
+print the legal value set of every documented option as a stable,
+line\-oriented table, one record per option in the order of \f(CR\-\-help\fP: a
+category key, the spelling line of \f(CR\-\-help\fP (a token that starts with a
+dash is an option spelling, any other token is its argument placeholder)
+and the space separated legal value set, empty when the option has none,
+separated by a TAB.  Lines starting with \f(CR#\fP are comments and fix the
+format (format 1).  This is the table a shell completion generator codes
+against; \f(CR\-\-help <OPTION>\fP prints the same set as a \f(CRValues:\fP line.
+.RE
+.sp
 \fB\-\-color\fP \fISCHEME\fP
 .RS 4
 colour scheme of the tblite output, one of auto (follow the build feature,
@@ -408,8 +420,8 @@ performs a gradient calculation
 .RS 4
 run the landscape suite geometry optimization (pass \f(CR\-\-method ancopt\fP
 for the native \f(CRancopt(3)\fP),
-levels from crude, sloppy, loose, normal (default), tight, verytight
-to extreme can be chosen
+levels from crude, sloppy, loose, lax, normal (default), tight, verytight,
+vtight, extreme and the suite\-only superloose can be chosen
 .RE
 .sp
 \fB\-\-lopt\fP

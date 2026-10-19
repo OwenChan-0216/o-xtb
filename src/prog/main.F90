@@ -1853,6 +1853,18 @@ contains
       !> topic (the topic lookup is in `src/xhelp.f90`)
       integer :: help_status
 
+      interface
+         !> The `--help` page and the `--help-values` table.  The definition is
+         !> in `src/xhelp.f90`; the explicit interface is needed for the
+         !> optional `values_only` argument of the last call site.
+         subroutine help(iunit, topic, status, values_only)
+            integer, intent(in) :: iunit
+            character(len=*), intent(in) :: topic
+            integer, intent(out) :: status
+            logical, intent(in), optional :: values_only
+         end subroutine help
+      end interface
+
       set%gfn_method = 2
       dipro%diprocalc = .false.
       coffee = .false.
@@ -1923,6 +1935,12 @@ contains
             else
                call help(env%unit, '', help_status)
             end if
+            call terminate(help_status)
+
+         case ('--help-values')
+            ! Machine-readable dump of the legal value sets of the option
+            ! table; the contract a completion generator codes against.
+            call help(env%unit, '', help_status, values_only=.true.)
             call terminate(help_status)
 
          case ('--citation')
@@ -2862,7 +2880,11 @@ contains
             if (allocated(sec)) then
                read(sec, *, iostat=idum) idum2
                if (idum == 0) then
-                  lsset%ndim = idum2
+                  if (idum2 == 1 .or. idum2 == 2) then
+                     lsset%ndim = idum2
+                  else
+                     call env%error("The --lscan-ndim flag accepts 1 or 2", source)
+                  end if
                else
                   call env%error("The --lscan-ndim flag requires an integer", source)
                end if

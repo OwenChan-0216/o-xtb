@@ -3952,6 +3952,39 @@ add_test("xtb/landscape-help-coverage"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-help-coverage
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The machine readable value table (`--help-values`, `--help <OPTION>`'s
+# `Values:` line) is the contract a shell completion generator codes against,
+# so a declared value the program does not accept would corrupt it silently.
+# `landscape_values_check.py` parses the dump of the **built binary**, compares
+# every `Values:` line of `--help` with the dump, and probes the binary with
+# every declared value: a value the parser rejects turns the test red.  It
+# needs the executable, so unlike the source-only coverage gate it runs with an
+# environment.  `--bhess`/`--metaopt` have no rejection oracle (the native
+# `optlevel2int` maps an unknown keyword to `normal`) and are pinned as
+# unverified inside the script.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/values_py.cmake" [=[
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${PYTHON}" "${SCRIPT}" "${XTB}" "${RUNDIR}"
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "landscape_values_check.py failed with status ${status}\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-help-values"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/landscape_values_check.py
+  -DXTB=${XTB-EXE}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-help-values
+  -P "${CMAKE_CURRENT_BINARY_DIR}/values_py.cmake")
+set_tests_properties(xtb/landscape-help-values PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1")
+
 # The man pages must not drift away from the implementation.  The build ships
 # the rendered roff pages (kept in step by `xtb/landscape-man-render`), and
 # `landscape_man_check.py` gates the **content** of the AsciiDoc sources:

@@ -49,6 +49,7 @@ reviewed here fails loudly instead of silently shipping a stale reference.
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -69,12 +70,28 @@ from landscape_help_check import (  # noqa: E402
 #: The counts the gate is built on (`landscape_help_check.py` prints the same
 #: numbers).  A record inserted or deleted in `src/xhelp.f90` must be
 #: reflected here, so an unreviewed change of the table fails the generator.
-EXPECTED_ENTRIES = 221
-EXPECTED_SPELLINGS = 245
+EXPECTED_ENTRIES = 222
+EXPECTED_SPELLINGS = 246
 EXPECTED_CATEGORIES = 17
 
 CAT_KEY_DECL = "cat_key(n_cat) = [character(len=16) ::"
 CAT_TITLE_DECL = "cat_title(n_cat) = [character(len=64) ::"
+#: One named legal-value array of the help table: `character(len=16),
+#: parameter :: v_name(n) = [character(len=16) :: "a", "b"]`.  The `values=`
+#: argument of a `call add` names one of these arrays.
+VALUE_ARRAY_DECL = (
+    r"character\(len=16\), parameter :: (v_[a-z]+)\(\d+\) = "
+    r"\[character\(len=16\) ::(.*?)\]"
+)
+VALUE_REF = re.compile(r"values=(v_[a-z]+)")
+
+
+def value_sets(source):
+    """The named legal-value arrays of the help table, name -> list of values."""
+    return {
+        name: re.findall(r'"([^"]*)"', body)
+        for name, body in re.findall(VALUE_ARRAY_DECL, source, re.S)
+    }
 
 
 def decode_string_array(source, decl):
@@ -86,18 +103,24 @@ def decode_string_array(source, decl):
 
 
 def parse_records(source):
-    """Split `src/xhelp.f90` at `call add(` and read the four fields.
+    """Split `src/xhelp.f90` at `call add(` and read the five fields.
 
     Uses the gate's `HELP_LINE` to pull the quoted strings, so the quoting rule
     is exactly the one `documented_flags` applies.  Source order is preserved.
+    The legal value set is named by the optional `values=v_...` argument and is
+    looked up in the named arrays by `value_sets`; a fix or a free value makes
+    the list empty.
     """
+    sets = value_sets(source)
     records = []
     for chunk in source.split("call add(")[1:]:
         strings = [m.group(1) for m in HELP_LINE.finditer(chunk)]
         spellings, category, summary = strings[0], strings[1], strings[2]
         detail = strings[3:]
         assert spellings.startswith("-"), spellings
-        records.append((spellings, category, summary, detail))
+        match = VALUE_REF.search(chunk)
+        values = sets[match.group(1)] if match else []
+        records.append((spellings, category, summary, detail, values))
     return records
 
 
@@ -115,11 +138,11 @@ def spelling_tokens(spellings):
     return out
 
 
-def render_entry(spellings, summary, detail, level=3):
-    """One option as Markdown: a heading of the spellings, the gloss and the
-    full text.  Only tokens that start with `-` are spellings; the argument
-    placeholders (`[LEVEL]`, `FILE`, `REAL`, ...) go on a separate Arguments
-    line so they never masquerade as options."""
+def render_entry(spellings, summary, detail, values, level=3):
+    """One option as Markdown: a heading of the spellings, the gloss, the
+    full text and the uniform `Values:` line.  Only tokens that start with `-`
+    are spellings; the argument placeholders (`[LEVEL]`, `FILE`, `REAL`, ...)
+    go on a separate Arguments line so they never masquerade as options."""
     tokens = SPLIT.split(spellings.strip())
     spellings_only = [t for t in tokens if t.startswith("-")]
     placeholders = [t for t in tokens if not t.startswith("-")]
@@ -132,6 +155,8 @@ def render_entry(spellings, summary, detail, level=3):
     out = heading + ["", summary, ""]
     for line in detail:
         out.append(line[4:] if line.startswith("    ") else line)
+    if values:
+        out.append("Values: " + ", ".join(values))
     out.append("")
     return "\n".join(out).rstrip() + "\n"
 
@@ -161,8 +186,8 @@ def build_outputs(source):
             "`oxtb --help %s` prints this group on the terminal." % key,
             "",
         ]
-        for spellings, _, summary, detail in entries:
-            body.append(render_entry(spellings, summary, detail))
+        for spellings, _, summary, detail, values in entries:
+            body.append(render_entry(spellings, summary, detail, values))
         outputs[key + ".md"] = "\n".join(body)
 
     # the chapter index
@@ -180,7 +205,7 @@ def build_outputs(source):
         index.append("- [%s](%s.md)  (%d options)" % (title, key, n))
     for key, title in zip(cat_keys, cat_titles):
         index += ["", "## " + title, ""]
-        for spellings, _, summary, _ in (r for r in records if r[1] == key):
+        for spellings, _, summary, _, _ in (r for r in records if r[1] == key):
             index.append("- [`%s`](%s.md) -- %s" % (spellings.strip(), key, summary))
     outputs["index.md"] = "\n".join(index) + "\n"
 
@@ -202,7 +227,9 @@ def self_check(source, records, cat_keys, outputs):
     documented spelling set - the generator and the gate share one rule, so a
     divergence is a defect here, not a difference of opinion.
     """
-    by_record = {t for spellings, _, _, _ in records for t in spelling_tokens(spellings)}
+    by_record = {
+        t for spellings, _, _, _, _ in records for t in spelling_tokens(spellings)
+    }
     by_gate = documented_flags(source, expand_no=True)
     drift = by_record ^ by_gate
     written = sum(

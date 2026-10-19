@@ -98,6 +98,16 @@ OPTIONS
 *--tblite* ::
     use tblite library as implementation for xTB
 
+*--help-values*::
+    print the legal value set of every documented option as a stable,
+    line-oriented table, one record per option in the order of `--help`: a
+    category key, the spelling line of `--help` (a token that starts with a
+    dash is an option spelling, any other token is its argument placeholder)
+    and the space separated legal value set, empty when the option has none,
+    separated by a TAB.  Lines starting with `#` are comments and fix the
+    format (format 1).  This is the table a shell completion generator codes
+    against; `--help <OPTION>` prints the same set as a `Values:` line.
+
 *--color* 'SCHEME'::
     colour scheme of the tblite output, one of auto (follow the build feature,
     default), always or never (tblite builds only)
@@ -301,8 +311,8 @@ NOTE: You can only select *one* runtyp, only the first runtyp will be used
 *-o, --opt* ['LEVEL']::
     run the landscape suite geometry optimization (pass `--method ancopt`
     for the native `ancopt(3)`),
-    levels from crude, sloppy, loose, normal (default), tight, verytight
-    to extreme can be chosen
+    levels from crude, sloppy, loose, lax, normal (default), tight, verytight,
+    vtight, extreme and the suite-only superloose can be chosen
 
 *--lopt*::
     minimise the geometry with the landscape task suite (`src/landscape`); the
