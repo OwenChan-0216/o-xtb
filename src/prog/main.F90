@@ -4915,6 +4915,7 @@ subroutine set_blas_threads(env, nthr)
          integer(c_int) :: status
       end function c_blas_get_threads
 
+#ifndef _WIN32
       !> `void *dlopen(const char *, int)`; `c_null_ptr` is the NULL the
       !> interface reserves for "the current process" (an empty string would
       !> try to open a file of that name).
@@ -4932,6 +4933,7 @@ subroutine set_blas_threads(env, nthr)
          character(kind=c_char), dimension(*), intent(in) :: symbol
          type(c_funptr) :: addr
       end function c_dlsym
+#endif
    end interface
 
    !> The two backends, numbered as `src/prog/blas_threads.c` numbers them
@@ -4963,7 +4965,12 @@ subroutine set_blas_threads(env, nthr)
    end if
 
    !> Route 2: the runtime symbol lookup, for a dynamically linked BLAS and for
-   !> any backend route 1 could not bind.
+   !> any backend route 1 could not bind.  `dlfcn.h` is POSIX; MinGW-w64 and
+   !> MSVC have neither it nor `dlsym`, so the whole route is compiled in only
+   !> where the dynamic loader exists (`_WIN32` is supplied by CMake, see the
+   !> Windows block of `CMakeLists.txt`).  There route 1 is the only route and
+   !> the flag reports the warning below rather than failing to link.
+#ifndef _WIN32
    handle = c_null_ptr
    if (backend == 0_c_int) then
       handle = c_dlopen(c_null_ptr, rtld_now)
@@ -4990,6 +4997,9 @@ subroutine set_blas_threads(env, nthr)
          end if
       end if
    end if
+#else
+   handle = c_null_ptr
+#endif
 
    if (backend == 0_c_int) then
       call env%warning("no OpenBLAS or MKL symbol found (not exported by a "// &
@@ -5003,6 +5013,7 @@ subroutine set_blas_threads(env, nthr)
    !> cannot be falsified, so the run says so instead of inventing a number.
    if (c_blas_get_threads(backend, effective) /= 0_c_int) then
       readable = .true.
+#ifndef _WIN32
    else if (c_associated(handle)) then
       if (backend == backend_openblas) then
          addr = c_dlsym(handle, 'openblas_get_num_threads'//c_null_char)
@@ -5014,6 +5025,7 @@ subroutine set_blas_threads(env, nthr)
          effective = get_threads()
          readable = .true.
       end if
+#endif
    end if
 
    if (backend == backend_openblas) then

@@ -103,6 +103,51 @@ add_subdirectory("symmetry")
 
 
 # CMake modules for third-party software
+
+# Windows (MinGW-w64) target: two things a Linux build never needs, both
+# confined to this block so the Linux configuration is untouched.
+if(WIN32)
+  # gfortran preprocesses the `.F90` sources but defines **no** target macros
+  # at all - not `_WIN32`, not `__MINGW32__`, not `_WIN64` - on either
+  # mingw-w64 thread model, although gcc defines all three.  The two source
+  # level `#ifdef _WIN32` branches of this tree (`src/mctc/systools.F90`: path
+  # separator `\` and path delimiter `;`; `src/prog/main.F90`: `--ceasefiles`
+  # writing `NUL`) are dead code without it, which costs the executable
+  # relative parameter directory of `xtb_type_environment` (the `bin\oxtb.exe`
+  # next to `share\o-xtb` lookup) and `--gfn 0` would need `XTBPATH` again.
+  add_compile_definitions(_WIN32)
+
+  # `-static` (see the executable rule) needs the static OpenMP runtime: the
+  # imported `OpenMP::OpenMP_Fortran` hands over `libgomp.dll.a` and
+  # `libpthread.dll.a`, which are import libraries, so the link then either
+  # fails on `GOMP_parallel` or leaves `libwinpthread-1.dll` in the import
+  # table.  Pointing find_package at the archives is the documented
+  # `-DOpenMP_gomp_LIBRARY=...` override (here for all three libraries
+  # `OpenMP_Fortran_LIB_NAMES` names), so the cross build needs no extra
+  # configure flag.
+  if(WITH_OpenMP AND CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+    foreach(omp_lib IN ITEMS gomp pthread mingwthrd)
+      execute_process(
+        COMMAND ${CMAKE_Fortran_COMPILER} -print-file-name=lib${omp_lib}.a
+        OUTPUT_VARIABLE xtb_omp_static
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+      )
+      if(IS_ABSOLUTE "${xtb_omp_static}" AND EXISTS "${xtb_omp_static}")
+        set(OpenMP_${omp_lib}_LIBRARY "${xtb_omp_static}" CACHE FILEPATH
+          "Static ${omp_lib} of the Fortran compiler, for a -static Windows link"
+          FORCE)
+      else()
+        message(WARNING "no static lib${omp_lib}.a found "
+          "(${xtb_omp_static}): a -static Windows link will not be "
+          "self-contained")
+      endif()
+    endforeach()
+    unset(omp_lib)
+    unset(xtb_omp_static)
+  endif()
+endif()
+
 if(NOT TARGET "OpenMP::OpenMP_Fortran" AND WITH_OpenMP)
   find_package("OpenMP" REQUIRED)
 endif()
@@ -285,6 +330,20 @@ set_target_properties(
   RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
   OUTPUT_NAME "${XTB_EXE_NAME}"
 )
+
+# A Windows build ships one self-contained executable: `-static` keeps the
+# libgfortran/libgomp/libquadmath/libwinpthread DLLs out of the import table
+# (KERNEL32 and msvcrt remain, both part of Windows), and the 16 MiB stack is
+# the conda-recipe value the upstream Windows build uses.  The OpenMP archive
+# comes from the `OpenMP_gomp_LIBRARY` override above.
+if(WIN32)
+  target_link_options(
+    ${XTB_EXE_NAME}
+    PRIVATE
+    "-static"
+    "-Wl,--stack=16777216"
+  )
+endif()
 
 target_include_directories(
    ${XTB_EXE_NAME}

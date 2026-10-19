@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+# Modified by the o-xtb landscape task suite, 2026.
+
 set(dir "${CMAKE_CURRENT_SOURCE_DIR}")
 
 list(APPEND srcs
@@ -47,5 +49,13 @@ list(APPEND srcs
   "${dir}/wsc.f90"
   "${dir}/vendordata.f90"
 )
+
+# `environment.f90` reaches the running image through POSIX `readlink(2)`
+# (`/proc/self/exe`); a Windows target has no such call and no preprocessed
+# `.f90` to guard it in, so the platform split lives in this C file
+# (`GetModuleFileNameA`), compiled only for a Windows target.
+if(WIN32)
+  list(APPEND srcs "${dir}/win32_readlink.c")
+endif()
 
 set(srcs ${srcs} PARENT_SCOPE)
