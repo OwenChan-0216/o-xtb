@@ -15,6 +15,8 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+! Modified by the o-xtb landscape task suite, 2026.
+
 module xtb_paramset
    use xtb_mctc_accuracy, only : wp
    use xtb_xtb_data
@@ -66,7 +68,6 @@ subroutine use_parameterset(name,globpar,xtbData,exist)
    exist = .false.
    select case(name)
    case('param_gfn0-xtb.txt')
-      return
       globpar = gfn0Globals
       call initGFN0(xtbData)
    case('param_gfn1-xtb.txt')

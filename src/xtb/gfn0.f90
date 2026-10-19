@@ -15,13 +15,21 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
-!> TODO: GFN0-xTB parametrisation data
+! Modified by the o-xtb landscape task suite, 2026.
+
+!> GFN0-xTB parametrisation data
+!>
+!> Compiled-in equivalent of `param_gfn0-xtb.txt`: the global parameters
+!> (`gfn0Globals`, the `$globpar` block), the dispersion damping parameters
+!> (`gfn0Disp`) and the per-element tables, plus the routines that assemble
+!> them into a `TxTBData` instance.
 module xtb_xtb_gfn0
    use xtb_mctc_accuracy, only : wp
    use xtb_param_atomicrad, only : atomicRad
-   use xtb_type_param, only : TxTBParameter
+   use xtb_type_param, only : TxTBParameter, dftd_parameter
    use xtb_xtb_data
    use xtb_xtb_gfn2, only : setGFN2ReferenceOcc
+   use xtb_disp_dftd4, only : newD4Model, p_refq_goedecker
    implicit none
    private
 
@@ -32,6 +40,7 @@ module xtb_xtb_gfn0
    interface initGFN0
       module procedure :: initData
       module procedure :: initRepulsion
+      module procedure :: initDispersion
       module procedure :: initCoulomb
       module procedure :: initHamiltonian
    end interface initGFN0
@@ -39,8 +48,12 @@ module xtb_xtb_gfn0
    real(wp), parameter :: enshell(4) = [0.6_wp, -0.1_wp, -0.2_wp, -0.2_wp]
    real(wp), parameter :: kshell(4) = [2.0000000_wp, 2.4868000_wp, 2.2700000_wp, 0.6000000_wp]
 
+   type(dftd_parameter), parameter :: gfn0Disp = dftd_parameter(&
+      s6=1.0_wp, s8=2.85_wp, a1=0.8_wp, a2=4.6_wp, s9=0.0_wp)
+
    type(TxTBParameter), parameter :: gfn0Globals = TxTBParameter( &
       kshell   = kshell, &
+      kdiff    = 1.1241000_wp, &
       kdiffa   = 0.0000000_wp, &
       kdiffb   =-0.1000000_wp, &
       enshell  = enshell, &
@@ -624,7 +637,7 @@ module xtb_xtb_gfn0
       & 3.5667425_wp, 2.6010762_wp, 1.9384224_wp],&
       & shape(slaterExponent))
 
-   real(wp), parameter :: kQShell(0:2, 1:maxElem) = reshape([&
+   real(wp), parameter :: kQShell(0:3, 1:maxElem) = reshape([&
       & 0.2591008_wp, 0.0000000_wp, 0.0000000_wp, 0.0000000_wp, &
       & 0.0526662_wp,-1.7836600_wp, 0.0000000_wp, 0.0000000_wp, &
       & 0.9636068_wp, 0.1933068_wp, 0.0000000_wp, 0.0000000_wp, &
@@ -743,12 +756,21 @@ subroutine initData(self)
    type(TxTBData), intent(out) :: self
 
    self%name = 'GFN0-xTB'
+   self%doi = '10.26434/chemrxiv.8326202.v1'
    self%level = 0
    self%nShell = nShell(:maxElem)
+   self%ipeashift = gfn0Globals%ipeashift * 0.1_wp
 
    call initGFN0(self%repulsion)
+   call initGFN0(self%dispersion)
    call initGFN0(self%coulomb, self%nShell)
    call initGFN0(self%hamiltonian, self%nShell)
+
+   allocate(self%srb)
+   self%srb%shift = gfn0Globals%zcnf
+   self%srb%prefactor = gfn0Globals%tscal
+   self%srb%steepness = gfn0Globals%kcn
+   self%srb%enScale = gfn0Globals%fpol
 
 end subroutine initData
 
@@ -758,10 +780,26 @@ subroutine initRepulsion(self)
    !> Data instance
    type(TRepulsionData), intent(out) :: self
 
-   call init(self, kExp, kExpLight, rExp, 0.0_wp, repAlpha, repZeff, &
-      & electronegativity)
+   call init(self, kExp, kExpLight, rExp, gfn0Globals%renscale, repAlpha, &
+      & repZeff, electronegativity)
 
 end subroutine initRepulsion
+
+
+!> Dispersion contribution of GFN0-xTB
+subroutine initDispersion(self)
+
+   !> Data instance
+   type(TDispersionData), intent(out) :: self
+
+   self%dpar = gfn0Disp
+   self%g_a = 3.0_wp
+   self%g_c = 2.0_wp
+   self%wf  = 6.0_wp
+
+   call newD4Model(self%dispm, self%g_a, self%g_c, p_refq_goedecker)
+
+end subroutine initDispersion
 
 
 subroutine initCoulomb(self, nShell)
@@ -794,6 +832,7 @@ subroutine initHamiltonian(self, nShell)
 
    mShell = maxval(nShell)
    self%angShell = angShell(:mShell, :maxElem)
+   self%wExp = 1.0_wp
 
    self%kScale = 0.5_wp*(spread(gfn0Globals%kShell,1,4)+spread(gfn0Globals%kShell,2,4))
    self%kDiff = gfn0Globals%kDiff

@@ -169,16 +169,20 @@ file(WRITE "${LANDSCAPE-H2O}"
 
 # The executable-relative `XTBPATH` fallback of `xtb_type_environment`.
 #
-# GFN0-xTB is the only method without a compiled-in parameter set
-# (`param_gfn0-xtb.txt` has no branch in `use_parameterset`), so `--gfn 0`
-# doubles as the falsifier: as long as the fallback is missing the run aborts
-# with "Parameter file param_gfn0-xtb.txt not found!".  The test assembles a
-# relocated install tree - a copy of the executable in `bin/` and the
-# parameters in `../share/o-xtb` - in a scratch directory, starts it there
-# with `XTBPATH` *removed* from the environment and requires the energy that
-# an explicit `XTBPATH` produces.  The copy is what makes the case a moved
-# install: the running binary is not the build tree executable, so the CMake
-# build-tree parameter copy cannot satisfy it.
+# GFN0-xTB used to be the falsifier of this case, because it was the only
+# method without a compiled-in parameter set (`param_gfn0-xtb.txt` returned
+# before its branch in `use_parameterset`): as long as the fallback was
+# missing, the run aborted with "Parameter file param_gfn0-xtb.txt not
+# found!".  Since the compiled-in set works (exception #11, report 188) the
+# energy alone can no longer tell a working fallback from a missing one, so
+# the check marks the fallback copy of the parameter file (a `doi` line) and
+# requires the marker in the printout.  The test assembles a relocated install
+# tree - a copy of the executable in `bin/` and the parameters in
+# `../share/o-xtb` - in a scratch directory, starts it there with `XTBPATH`
+# *removed* from the environment and requires the energy that an explicit
+# `XTBPATH` produces.  The copy is what makes the case a moved install: the
+# running binary is not the build tree executable, so the CMake build-tree
+# parameter copy cannot satisfy it.
 set(LANDSCAPE-XTBPATH-RUNDIR "${CMAKE_CURRENT_BINARY_DIR}/xtbpath-default")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/xtbpath_default_check.cmake" [=[
 file(REMOVE_RECURSE "${RUNDIR}")
@@ -189,6 +193,14 @@ foreach(param IN ITEMS param_gfn0-xtb.txt param_gfn1-xtb.txt
                           param_ipea-xtb.txt .param_gfnff.xtb)
   file(COPY "${SRCDIR}/${param}" DESTINATION "${RUNDIR}/share/o-xtb")
 endforeach()
+# the marker described above
+set(param "${RUNDIR}/share/o-xtb/param_gfn0-xtb.txt")
+file(READ "${param}" gfn0)
+string(REPLACE "doi 10.26434/chemrxiv.8326202.v1" "doi xtbpath-default-marker" gfn0 "${gfn0}")
+if(gfn0 MATCHES "10\\.26434/chemrxiv")
+  message(FATAL_ERROR "the DOI line of ${param} was not replaced")
+endif()
+file(WRITE "${param}" "${gfn0}")
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -E env --unset=XTBPATH
           "${RUNDIR}/bin/${NAME}" "${INPUT}" --gfn 0 --sp --norestart
@@ -204,6 +216,10 @@ endif()
 if(NOT output MATCHES "-4\\.366816412151")
   message(FATAL_ERROR
     "GFN0 energy without XTBPATH differs from the explicit XTBPATH value\n${output}")
+endif()
+if(NOT output MATCHES "xtbpath-default-marker")
+  message(FATAL_ERROR
+    "oxtb --gfn 0 did not read the parameter file found via the executable-relative XTBPATH\n${output}")
 endif()
 ]=])
 add_test("xtb/xtbpath-default"
@@ -268,6 +284,74 @@ add_test("xtb/landscape-opt"
   -DINPUT=${LANDSCAPE-H2O}
   -DRUNDIR=${LANDSCAPE-RUNDIR}
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_check.cmake")
+
+# GFN0-xTB has a compiled-in parameter set.
+#
+# `--gfn 0` was the one method that could only run from a file: `use_parameterset`
+# returned before `globpar = gfn0Globals` and `initGFN0`, so the compiled-in set
+# was unreachable (and, being unreachable, incomplete - no dispersion model, no
+# short-range basis correction).  This case runs in a directory without a
+# parameter file and points `XTBPATH` at an empty directory, which suppresses
+# both the file based path and the executable-relative fallback, and requires
+# the reference energy of the file based run bit for bit.  Restoring the `return`
+# turns it red (the run aborts in the charge model with
+# "Index '8' of dimension 1 of array 'dispm' outside of expected range"); so does
+# removing any part of the compiled-in initialisation.
+
+# the reference water of the GFN0-xTB single-point energies
+set(LANDSCAPE-GFN0-WATER "${CMAKE_CURRENT_BINARY_DIR}/landscape_gfn0_water.xyz")
+file(WRITE "${LANDSCAPE-GFN0-WATER}"
+  "3\nwater\n"
+  "O   0.00000000000000   0.00000000000000   0.00000000000000\n"
+  "H   0.75860200000000   0.00000000000000  -0.50428400000000\n"
+  "H  -0.75860200000000   0.00000000000000  -0.50428400000000\n")
+set(LANDSCAPE-GFN0-RUNDIR "${CMAKE_CURRENT_BINARY_DIR}/landscape-gfn0-compiled-in")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_gfn0_compiled_check.cmake" [=[
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}/compiled-in" "${RUNDIR}/from-file"
+                    "${RUNDIR}/without-parameters")
+# `XTBPATH` is set to an empty directory for the compiled-in run: that is a
+# non-empty value, so the executable-relative fallback stays off, and the
+# directory contains no parameter file.
+function(run_case variant xtbpath energy)
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "XTBPATH=${xtbpath}"
+            "${EXE}" "${INPUT}" --gfn 0 --sp --norestart --ljson
+    WORKING_DIRECTORY "${RUNDIR}/${variant}"
+    RESULT_VARIABLE status
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE output
+  )
+  if(NOT status EQUAL 0)
+    message(FATAL_ERROR
+      "oxtb --gfn 0 (${variant}) failed with status ${status}\n${output}")
+  endif()
+  file(READ "${RUNDIR}/${variant}/landscape_sp.json" document)
+  string(REGEX MATCH "\"energy\": *([-0-9.Ee+]+)" match "${document}")
+  if(CMAKE_MATCH_1 STREQUAL "")
+    message(FATAL_ERROR "no energy in ${RUNDIR}/${variant}/landscape_sp.json")
+  endif()
+  set(${energy} "${CMAKE_MATCH_1}" PARENT_SCOPE)
+endfunction()
+run_case("compiled-in" "${RUNDIR}/without-parameters" energy_compiled)
+run_case("from-file" "${SRCDIR}" energy_file)
+if(NOT energy_compiled STREQUAL energy_file)
+  message(FATAL_ERROR
+    "the compiled-in GFN0 parameter set differs from param_gfn0-xtb.txt\n"
+    "  compiled-in: ${energy_compiled}\n  file based:  ${energy_file}")
+endif()
+if(NOT energy_compiled MATCHES "^-4\\.3619869995")
+  message(FATAL_ERROR
+    "GFN0 energy without a parameter file is ${energy_compiled}, expected -4.3619869995...")
+endif()
+]=])
+add_test("xtb/landscape-gfn0-compiled-in"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-GFN0-WATER}
+  -DSRCDIR=${PROJECT_SOURCE_DIR}
+  -DRUNDIR=${LANDSCAPE-GFN0-RUNDIR}
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_gfn0_compiled_check.cmake")
 
 # Landscape suite: the file namespace of the `--lopt` geometry and trajectory
 # (defect N-1 of the final fix round).
