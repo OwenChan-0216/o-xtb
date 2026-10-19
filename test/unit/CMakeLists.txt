@@ -3774,6 +3774,21 @@ endif()
 ]=])
 set(LANDSCAPE-CLI-PY "${CMAKE_CURRENT_SOURCE_DIR}/landscape_cli_check.py")
 
+# `src/prog/argparser.f90` classified `--gfn=0` as *not* a flag - its `=` is
+# not a flag character - and the unknown-option reporter only sees flags, so
+# the token was dropped and the run silently used the GFN2 default.  `=` is
+# deliberately not a supported separator, so the token has to be reported
+# (lax) or fatal (`--strict`), exactly like `--zzzz`.  The check also pins the
+# opposite direction: a numeric option value, the discouraged `-gfn` spelling
+# and a dash-leading file name keep working.
+add_test("xtb/landscape-flag-value"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=flagvalue;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-flag-value"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-flag-value
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # The unified method selector `--method` (CLI redesign section 4) is the
 # canonical name of the four `--l*` method flags: `--method` aliases them, a
 # name of another task is refused with a pointer at that task's flag, two
@@ -4658,6 +4673,7 @@ set_tests_properties(
   "xtb/landscape-lirc-default-echo"
   "xtb/landscape-lts-escape-echo"
   "xtb/landscape-strict-unknown"
+  "xtb/landscape-flag-value"
   "xtb/landscape-color"
   "xtb/native-opt-lbfgs-symbols"
   "xtb/landscape-opt-alias-once"

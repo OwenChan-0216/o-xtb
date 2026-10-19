@@ -36,6 +36,7 @@ mode mirrors one CMake test one-to-one:
   enumcase <exe> <input> <rundir> <second>
                                      -> xtb/landscape-enum-case
   strictunknown <exe> <input> <rundir> -> xtb/landscape-strict-unknown
+  flagvalue <exe> <input> <rundir>    -> xtb/landscape-flag-value
   color  <exe> <input> <rundir>       -> xtb/landscape-color
   gfn    <exe> <input> <rundir>       -> xtb/landscape-gfn-value
   dockgfn <exe> <inputA> <rundir> <inputB>
@@ -683,6 +684,87 @@ def check_strict_unknown(exe, inp, rundir):
         fail("an unknown flag without --strict failed the run", output)
     if "Unknown option '--zzzz' provided" not in output:
         fail("the unknown flag warning disappeared", output)
+
+
+def check_flag_value(exe, inp, rundir):
+    """An option-looking token outside the flag character set is reported.
+
+    Mirrors `xtb/landscape-flag-value`.  `TArgument%isFlag` used to require
+    every character to be a flag character (`[A-Za-z0-9_-]`), so `--gfn=0`
+    carried a character the parser did not recognise as flag input, was
+    classified as *not* a flag and was never offered to the unknown-option
+    reporter: it vanished and the run silently computed the GFN2 default.
+    `=` is deliberately not supported, so the token is unknown-option input
+    and the check pins both directions of the lax/strict split.  The last
+    section pins what must **not** change: a numeric option value, the
+    discouraged `-gfn` spelling and a dash-leading file name.
+    """
+    os.makedirs(rundir, exist_ok=True)
+
+    def energy(args, label):
+        directory = os.path.join(rundir, label)
+        shutil.rmtree(directory, ignore_errors=True)
+        status, output = run(
+            exe, inp, args + ["--sp", "--norestart"], directory
+        )
+        if status != 0:
+            fail("'%s' failed with status %d" % (" ".join(args), status), output)
+        match = re.search(r"TOTAL ENERGY +(-?[0-9]+\.[0-9]+)", output)
+        if not match:
+            fail("no TOTAL ENERGY for '%s'" % " ".join(args), output)
+        return match.group(1), output
+
+    # (1) lax: every option-looking token is warned about and the run continues
+    for token in ("--gfn=0", "--gfn=zzz", "--gfn=", "--gfn:0"):
+        label = "lax" + re.sub(r"[^A-Za-z0-9]", "_", token)
+        _, output = energy([token], label)
+        if ("Unknown option '%s' provided" % token) not in output:
+            fail("the option '%s' was silently dropped" % token, output)
+
+    # (2) the dropped token was not applied: `--gfn=0` gives the GFN2 default
+    equals, output = energy(["--gfn=0"], "equals-zero")
+    default, _ = energy([], "default")
+    if "Unknown option '--gfn=0' provided" not in output:
+        fail("--gfn=0 was not reported", output)
+    if equals != default:
+        fail("--gfn=0 was applied (%s) instead of reported (default %s)"
+             % (equals, default), output)
+
+    # (3) strict: the same token becomes fatal
+    directory = os.path.join(rundir, "strict")
+    shutil.rmtree(directory, ignore_errors=True)
+    status, output = run(
+        exe, inp, ["--strict", "--gfn=zzz", "--sp", "--norestart"], directory
+    )
+    if status == 0:
+        fail("--strict --gfn=zzz was accepted", output)
+    if "Unknown option '--gfn=zzz' provided" not in output:
+        fail("--strict --gfn=zzz was not reported as an unknown option", output)
+
+    # (4) the inputs that work today must stay untouched
+    zero, output = energy(["--gfn", "0"], "gfn-zero")
+    if "Unknown option" in output:
+        fail("--gfn 0 was misreported as an unknown option", output)
+    short, output = energy(["-gfn", "0"], "gfn-short")
+    if short != zero:
+        fail("-gfn 0 (%s) differs from --gfn 0 (%s)" % (short, zero))
+    if "discouraged" not in output:
+        fail("-gfn was not reported as the discouraged spelling", output)
+    directory = os.path.join(rundir, "dash-file")
+    shutil.rmtree(directory, ignore_errors=True)
+    os.makedirs(directory, exist_ok=True)
+    with open(os.path.join(directory, "-dash.xyz"), "w") as handle:
+        handle.write("$sp\n")
+    status, output = run(
+        exe, inp,
+        ["--gfn", "2", "--input", "-dash.xyz", "--sp", "--norestart"],
+        directory,
+    )
+    if status != 0:
+        fail("a dash-leading input file name was treated as an option", output)
+    if "Unknown option" in output:
+        fail("a dash-leading input file name was reported as an option", output)
+    print("option-looking tokens reported, working inputs untouched")
 
 
 def check_color(exe, inp, rundir):
@@ -5765,6 +5847,8 @@ def main():
         check_enum_case(exe, inp, rundir, rest[0])
     elif mode == "strictunknown":
         check_strict_unknown(exe, inp, rundir)
+    elif mode == "flagvalue":
+        check_flag_value(exe, inp, rundir)
     elif mode == "color":
         check_color(exe, inp, rundir)
     elif mode == "gfn":

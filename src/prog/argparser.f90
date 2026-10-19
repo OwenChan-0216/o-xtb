@@ -15,6 +15,8 @@
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
+! Modified by the o-xtb landscape task suite, 2026.
+
 !> Implementation of the command line argument parser
 module xtb_prog_argparser
    use xtb_mctc_accuracy, only : wp
@@ -114,9 +116,15 @@ subroutine initArgument(self, iArg)
    call get_command_argument(iArg, self%raw)
 
    inquire(file=self%raw, exist=self%isFile)
+   ! A token is offered to the flag parser when it starts with a dash and is
+   ! neither a number (a numeric option value such as `-0.5`) nor an existing
+   ! file (a file name may legally start with a dash, e.g. `--input -foo.xyz`).
+   ! Tokens outside the flag character set - `--gfn=0`, whose `=` is not a flag
+   ! character - therefore stay reportable instead of being dropped: only an
+   ! existing file keeps the strict `flagchars` test.
    self%isFlag = index(self%raw, '-') == 1 &  ! starts with a dash
-      & .and. verify(self%raw, flagchars) == 0 &  ! looks like a flag
-      & .and. verify(self%raw, numbers) > 0  ! but not like a number
+      & .and. verify(self%raw, numbers) > 0 &  ! but not like a number
+      & .and. (verify(self%raw, flagchars) == 0 .or. .not.self%isFile)
 
 end subroutine initArgument
 
