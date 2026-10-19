@@ -160,6 +160,7 @@ contains
       type(landscape_result) :: lres
 !  store important names and stuff like that in FORTRAN strings
       character(len=:), allocatable :: fname    ! geometry input file
+      character(len=:), allocatable :: missfile ! positional file the parser did not classify
       character(len=:), allocatable :: xcontrol ! instruction file
       character(len=:), allocatable :: xrc      ! global instruction file
       character(len=:), allocatable :: fnv      ! parameter file
@@ -331,6 +332,17 @@ contains
             call env%warning("Input file '"//fname//"' will be ignored", source)
          end do
          call argParser%nextFile(fname)
+         ! A positional argument that is neither an option nor an existing file
+         ! - a mis-spelled or missing input file - used to be dropped without a
+         ! word while the run went ahead with whichever file the parser did
+         ! recognise.  Report it in the same voice as the ignored duplicate
+         ! above; like that one it stays a diagnostic, not a hard failure, and
+         ! the run keeps using the same input file it used before.
+         do
+            call argParser%nextMissingFile(missfile)
+            if (.not. allocated(missfile)) exit
+            call env%warning("Input file '"//missfile//"' will be ignored", source)
+         end do
       end select
 
       !> `argParser%nextFile` declares its output as `intent(out)`, so it

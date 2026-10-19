@@ -37,6 +37,7 @@ mode mirrors one CMake test one-to-one:
                                      -> xtb/landscape-enum-case
   strictunknown <exe> <input> <rundir> -> xtb/landscape-strict-unknown
   flagvalue <exe> <input> <rundir>    -> xtb/landscape-flag-value
+  positional <exe> <input> <rundir>   -> xtb/landscape-positional-file
   color  <exe> <input> <rundir>       -> xtb/landscape-color
   gfn    <exe> <input> <rundir>       -> xtb/landscape-gfn-value
   dockgfn <exe> <inputA> <rundir> <inputB>
@@ -765,6 +766,80 @@ def check_flag_value(exe, inp, rundir):
     if "Unknown option" in output:
         fail("a dash-leading input file name was reported as an option", output)
     print("option-looking tokens reported, working inputs untouched")
+
+
+def check_positional(exe, inp, rundir):
+    """A positional file the parser cannot use is reported, not dropped.
+
+    `TArgument%isFile` is `.true.` only for a path that exists, and both
+    `countFiles` and `nextFile` look at files alone, so `oxtb a.xyz nope.xyz`
+    counted one file, used `a.xyz` and never mentioned `nope.xyz`: the command
+    line asked for something the program silently ignored.  The new
+    `TArgParser%nextMissingFile` reports such a leftover positional in the
+    same voice as the existing ignored-duplicate warning, and the chosen input
+    file - and therefore the energy - is unchanged.
+    """
+    def do(label, args, extra=None):
+        directory = os.path.join(rundir, label)
+        shutil.rmtree(directory, ignore_errors=True)
+        os.makedirs(directory, exist_ok=True)
+        for name in extra or []:
+            shutil.copy(inp, os.path.join(directory, name))
+        proc = subprocess.run(
+            [exe] + args, cwd=directory, capture_output=True, text=False
+        )
+        return proc.returncode, decode(proc.stdout) + decode(proc.stderr)
+
+    def energy(label, args, extra=None):
+        status, output = do(label, args, extra)
+        if status != 0:
+            fail("'%s' failed with status %d" % (" ".join(args), status), output)
+        match = re.search(r"TOTAL ENERGY +(-?[0-9]+\.[0-9]+)", output)
+        if not match:
+            fail("no TOTAL ENERGY for '%s'" % " ".join(args), output)
+        return match.group(1), output
+
+    common = ["--gfn", "2", "--sp", "--norestart"]
+
+    # (1) a single existing file: the baseline, nothing is reported
+    single, output = energy("single", [inp] + common)
+    if "will be ignored" in output:
+        fail("a single input file was reported as ignored", output)
+
+    # (2) two existing files: the first is the one ignored, the second is used
+    duplicate, output = energy(
+        "duplicate", [inp, "second.xyz"] + common, extra=["second.xyz"]
+    )
+    if "Input file '%s' will be ignored" % inp not in output:
+        fail("the ignored first file was not named", output)
+    if duplicate != single:
+        fail("two existing files gave %s, one gave %s" % (duplicate, single))
+
+    # (3) an existing file and a missing second one: the missing one is
+    #     reported and the run still uses the existing file
+    missing_second, output = energy("missing-second", [inp, "nope.xyz"] + common)
+    if "Input file 'nope.xyz' will be ignored" not in output:
+        fail("the missing second file was silently dropped", output)
+    if missing_second != single:
+        fail("a missing second file changed the used input (%s != %s)"
+             % (missing_second, single))
+
+    # (4) a missing first file and an existing second one
+    missing_first, output = energy("missing-first", ["nope.xyz", inp] + common)
+    if "Input file 'nope.xyz' will be ignored" not in output:
+        fail("the missing first file was silently dropped", output)
+    if missing_first != single:
+        fail("a missing first file changed the used input (%s != %s)"
+             % (missing_first, single))
+
+    # (5) only a missing file: the existing hard error stays, nothing runs
+    status, output = do("only-missing", ["nope.xyz"] + common)
+    if status == 0:
+        fail("a run without an existing input file succeeded", output)
+    if "No input file given" not in output:
+        fail("only a missing file did not report the missing input", output)
+
+    print("positional files: missing and ignored inputs reported, run unchanged")
 
 
 def check_color(exe, inp, rundir):
@@ -5849,6 +5924,8 @@ def main():
         check_strict_unknown(exe, inp, rundir)
     elif mode == "flagvalue":
         check_flag_value(exe, inp, rundir)
+    elif mode == "positional":
+        check_positional(exe, inp, rundir)
     elif mode == "color":
         check_color(exe, inp, rundir)
     elif mode == "gfn":

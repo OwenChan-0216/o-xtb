@@ -3789,6 +3789,21 @@ add_test("xtb/landscape-flag-value"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-flag-value
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# A positional token that is neither an option nor an existing file (a
+# mis-spelled or missing input file) is not a `file` to the parser, so
+# `countFiles`/`nextFile` skipped it: `oxtb a.xyz nope.xyz` ran with `a.xyz`
+# and never mentioned `nope.xyz`.  It is now reported in the same voice as the
+# existing ignored-duplicate warning while the run keeps using the same input
+# file.  The check pins both directions and the unchanged single-file,
+# two-existing-file and no-existing-file cases.
+add_test("xtb/landscape-positional-file"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=positional;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-positional"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-positional
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # The unified method selector `--method` (CLI redesign section 4) is the
 # canonical name of the four `--l*` method flags: `--method` aliases them, a
 # name of another task is refused with a pointer at that task's flag, two

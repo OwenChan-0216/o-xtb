@@ -77,6 +77,8 @@ module xtb_prog_argparser
 
       procedure :: nextFile
 
+      procedure :: nextMissingFile
+
       procedure :: nextArg
 
       procedure :: reset
@@ -260,6 +262,35 @@ subroutine nextFile(self, file)
    end do
 
 end subroutine nextFile
+
+
+!> Return the next positional argument that is neither an option nor an
+!! existing file.
+!!
+!! Such a token (a mis-spelled or missing input file) is not a `file` to the
+!! parser, so `nextFile` skips it and the caller never learns it was there.
+!! The caller reports the returned names so an input the program cannot use is
+!! not dropped without a word.  Option values are already consumed by
+!! `nextArg` when this is called, so only genuine leftover positionals remain.
+subroutine nextMissingFile(self, file)
+
+   !> Instance of the parser
+   class(TArgParser), intent(inout) :: self
+
+   character(len=:), allocatable, intent(out) :: file
+
+   integer :: iArg
+
+   do iArg = 1, size(self%arg)
+      if (self%arg(iArg)%unused .and. .not.self%arg(iArg)%isFlag &
+          & .and. .not.self%arg(iArg)%isFile) then
+         file = self%arg(iArg)%raw
+         self%arg(iArg)%unused = .false.
+         exit
+      end if
+   end do
+
+end subroutine nextMissingFile
 
 
 !> Basic search of argument list
