@@ -1,0 +1,169 @@
+# Windows row: a native `oxtb.exe` build on `windows-latest` with MSYS2.
+#
+# It is a separate workflow instead of a job of
+# `.github/workflows/fortran-build.yml` because it needs a different runner, a
+# different shell (`msys2 {0}`) and a package manager step, and because the
+# push-path file of report 175 is deliberately kept free of rows that cannot
+# gate yet.
+#
+# UCRT64, not the MINGW64 that upstream's own Windows jobs use: MSYS2
+# deprecates MINGW64 (changelog 2026-03-15), UCRT64 has been the default
+# environment since 2022-10-29, and the UCRT is the C runtime of every
+# supported Windows.  Nothing may mix msvcrt and UCRT binaries, so this job
+# stays inside one environment.
+name: Windows
+on:
+   # push and pull_request, exactly like the Linux rows.  Deliberately no
+   # `schedule:`: a Windows build verifies a change, it is not a weekly probe
+   # (the scheduled channel is `.github/workflows/intel-ifx-weekly.yml`).
+   push:
+   pull_request:
+   # manual re-runs, so the row can be iterated on while it is being brought up
+   workflow_dispatch:
+env:
+   BUILD_DIR: _build
+jobs:
+   mingw-ucrt64-cmake-build:
+      # NOT A GATE YET.  Report 175's rule: a CI row that cannot be made green
+      # must not gate.  Nothing of this row could be executed anywhere but on a
+      # Windows runner - the tree's only Windows evidence is a mingw-w64
+      # cross-build run under wine (reports 180 and 184), and CMake-on-Windows
+      # is unproven even upstream (its Windows CI is meson).  So the first real
+      # run happens on the first push after this file lands, and it may need
+      # one iteration.
+      #
+      # Promotion to a gate (i.e. deleting this marker) needs: a green run on
+      # the gating branch, the bounded subset below widened to `-R landscape`,
+      # and a decision on the CRLF goldens (`test/unit/landscape_cli_check.py`
+      # compares output files of two runs of the same binary, which survives
+      # CRLF, but the `man`/completions/examples generators compare rendered
+      # text against files git has checked out with CRLF).
+      continue-on-error: true
+      runs-on: windows-latest
+      steps:
+         - name: Checkout code
+           uses: actions/checkout@v5
+         - name: Setup MSYS2
+           uses: msys2/setup-msys2@v2
+           with:
+            msystem: UCRT64
+            # `update: true` upgrades the installation before installing:
+            # adding packages to a stale MSYS2 base is the usual source of the
+            # "partially upgraded system" pacman failure.
+            update: true
+            # `openblas` carries BLAS *and* LAPACK (OpenBLAS is LAPACK
+            # complete), so the separate netlib `lapack` package would only
+            # add a second, slower implementation and make which one
+            # `find_package(LAPACK)` picks depend on search order.  It is also
+            # the single math package upstream's MSYS2 jobs install.
+            # `python` is not optional: `test/unit/CMakeLists.txt` calls
+            # `find_package(Python3 COMPONENTS Interpreter REQUIRED)`.
+            # `git` is what `FetchContent` clones `mctc-lib` (v0.5.1) and
+            # `test-drive` (v0.5.0) with - the `cmake | pkgconf | subproject |
+            # fetch` chain of `cmake/modules/Find*.cmake` falls through to
+            # `fetch`, because neither package is in MSYS2.
+            install: >-
+             git
+             mingw-w64-ucrt-x86_64-gcc-fortran
+             mingw-w64-ucrt-x86_64-openblas
+             mingw-w64-ucrt-x86_64-cmake
+             mingw-w64-ucrt-x86_64-ninja
+             mingw-w64-ucrt-x86_64-python
+         # The switches are the Linux rows' ones plus the two Windows decisions:
+         # `WITH_TBLITE`/`WITH_CPCMX` off is this checkout's supported
+         # configuration (they are also the two dependencies that do not exist
+         # for Windows), `WITH_OBJECT=OFF` drops the shared library and with it
+         # the C API - a `-static` executable cannot host `liboxtb.dll`, and no
+         # `__declspec(dllexport)` exists in the tree at all.
+         # `BLA_VENDOR=OpenBLAS` makes the math library lookup deterministic
+         # instead of "whichever vendor CMake tries first".
+         # Everything Windows-specific about the build itself already lives in
+         # the `if(WIN32)` blocks of `CMakeLists.txt` (`_WIN32`, the static
+         # OpenMP archives, `-static -Wl,--stack=16777216`), so nothing is
+         # duplicated here - in particular not `-D_WIN32`, which gfortran does
+         # not define itself.
+         # `-O2` is pinned for the same reason as in `gcc-cmake-build`.
+         # `TEST_DRIVE_BUILD_TESTING=OFF` keeps test-drive's own tests out.
+         - name: Configure build
+           shell: msys2 {0}
+           run: >
+            cmake -B "$BUILD_DIR" -G Ninja
+            -DWITH_TBLITE=OFF -DWITH_CPCMX=OFF -DWITH_OBJECT=OFF -DWITH_TESTS=ON
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG"
+            -DBLA_VENDOR=OpenBLAS
+            -DTEST_DRIVE_BUILD_TESTING=OFF
+         # A non-zero exit status of the build alone is not the gate: the log is
+         # also scanned for compiler diagnostics, as in the Linux rows.
+         - name: Build project
+           shell: msys2 {0}
+           run: |
+            set -eo pipefail
+            cmake --build "$BUILD_DIR" 2>&1 | tee build.log
+            if grep -qiE 'Error: |Fatal' build.log; then
+              echo "::error::the build log contains an 'Error:' or 'Fatal' line"
+              exit 1
+            fi
+         # A bounded subset, not `-R landscape`: the 163 landscape targets of
+         # the Linux rows include gates this platform cannot pass yet, and the
+         # row has never run.  The set is the CLI pages, `info`, the
+         # executable-relative `XTBPATH` fallback (`--gfn 0` from a relocated
+         # copy with `XTBPATH` unset - the check that fails when the `_WIN32`
+         # branch of `CMakeLists.txt` is lost), one whole `--lopt` task, the
+         # energy/JSON/argument gates of the suite, and two test-drive cases
+         # that prove the tester binary built and runs.
+         #
+         # Every exclusion, one line each:
+         #  o-xtb/docking        `dock_gfn2_eth_wat` is red on Linux too
+         #                       (pre-existing defect, report 180 section 5.6)
+         #                       and truncates a tester run on both platforms.
+         #  xtb/CAPI             no shared library: `WITH_OBJECT=OFF` is what a
+         #                       `-static` Windows link requires (AGENTS.md
+         #                       section 6: 11/11 regression, not 12/12).
+         #  mctc-lib/ncoord      ~156 s on Linux, and every existing row
+         #                       excludes it for the same reason.
+         # Out of the subset (added with the widening, not silently dropped):
+         # `xtb/landscape-man-render`, `-completions`, `-examples-index`
+         # compare generated text against files git checked out with CRLF on
+         # Windows; the band/IRC/scan tasks and the `--blas-threads` cases are
+         # the rest of the 163 and need their own pass first.
+         # Widening it to `-R landscape` is the promotion condition recorded on
+         # the job.
+         #
+         # The failing-test list goes to the job summary as well as to the log
+         # (reading the log needs an authenticated API call, the summary does
+         # not), and each failing test is emitted as a workflow command, which
+         # GitHub turns into a check-run annotation without a token.
+         - name: Run the bounded test subset
+           shell: msys2 {0}
+           run: |
+             # `$RUNNER_TEMP` and `$GITHUB_STEP_SUMMARY` are Windows paths
+             # (`D:\...`); MSYS2's bash would read the backslash as an escape.
+             log="$(cygpath -u "$RUNNER_TEMP")/ctest.log"
+             summary="$(cygpath -u "$GITHUB_STEP_SUMMARY")"
+             set +e
+             ctest --output-on-failure \
+               -R '^(o-xtb/gfn2|o-xtb/landscape-optimize-math|xtb/Argparser_print_(version|help|license)|xtb/Info|xtb/xtbpath-default|xtb/landscape-(opt|opt-energy|ljson-default|gfn-value))$' \
+               -E 'o-xtb/docking|xtb/CAPI|mctc-lib/ncoord' 2>&1 | tee "$log"
+             status=${PIPESTATUS[0]}
+             {
+               echo "### Unit tests: exit ${status}"
+               if [ "${status}" -ne 0 ]; then
+                 echo '```'
+                 sed -n '/The following tests FAILED/,$p' "$log" | head -40
+                 echo '```'
+               fi
+             } >> "$summary"
+             if [ "${status}" -ne 0 ]; then
+               sed -n '/The following tests FAILED/,$p' "$log" | head -40 | \
+                 while IFS= read -r line; do
+                   printf '::error::%s\n' "$line"
+                 done
+             fi
+             exit "${status}"
+           working-directory: ${{ env.BUILD_DIR }}
+           env:
+            # pinned for the determinism of the suite, as the local recipe does
+            # (a varying thread count moves the last bits of an OpenMP
+            # reduction); it is one thread on a shared, two-core runner anyway
+            OMP_NUM_THREADS: 1
