@@ -1,0 +1,116 @@
+# The Intel ifx row (oneAPI 2025.2 plus MKL, with `icx` as the C compiler) has
+# its own workflow because its trigger differs from the push build: it runs
+# weekly and on demand, never on push.  It cannot stay in
+# `.github/workflows/fortran-build.yml` behind a job-level `if:` either, because
+# adding `schedule:` to that file's shared `on:` would fire its gating rows
+# (x86 Release, x86 Debug, lightweight) once a week as well.
+#
+# Deliberately absent here: `continue-on-error`, which the push workflow still
+# carries for its informational rows.  There the marker exists so that red
+# non-gating checks cannot block a run; a schedule-only workflow blocks nothing,
+# so a red run is pure information - and being visible is the whole reason this
+# row was moved off the push path (report 175: losing "per-push detection" only
+# if the configuration is "found up to a week late").  A green-but-annotated run
+# would reproduce the "red check people learn to ignore" habit the restart was
+# meant to remove.  Do not restore the marker.
+name: Intel ifx (weekly)
+on:
+   # Monday 04:00 UTC (06:00 CET/CEST): the start of the working week for this
+   # project and off GitHub's peak scheduling window, so the run is not pushed
+   # back and its result is there before the day's first pushes.
+   schedule:
+      - cron: '0 4 * * 1'
+   workflow_dispatch:
+env:
+   BUILD_DIR: _build
+jobs:
+   intel-ifx-cmake-build:
+      runs-on: ${{ matrix.os }}
+      strategy:
+         fail-fast: false
+         matrix:
+            os: [ubuntu-latest]
+            build: [Release]
+            toolchain:
+# The two commented entries are kept as context for why 2025.2 is the pin
+# (2025.0 segfaulted in `disp/ncoord.f90`; 2025.1 worked as of Jul 2, 2025,
+# commit d3f212ba83287290efafee6580670d02d7b2f49d).  The `2024.1` entry this row
+# used to carry was dropped with the rest of the push-path rows: it does not
+# build the tree at all (report 175).
+#               - {compiler: intel, version: '2025.0'} SegFault in disp/ncoord.f90 near 'do concurrent(tx = -rep_cn(1):rep_cn(1), &'
+#               - {compiler: intel, version: '2025.1'} # Worked fine as of Jul 2, 2025; commit d3f212ba83287290efafee6580670d02d7b2f49d
+              - {compiler: intel, version: '2025.2'}
+      env:
+         APT_PACKAGES: >-
+            intel-oneapi-mkl-${{ matrix.toolchain.version }} intel-oneapi-mkl-devel-${{ matrix.toolchain.version }}
+      steps:
+         - name: Checkout code
+           uses: actions/checkout@v4
+         - name: Setup Fortran
+           uses: fortran-lang/setup-fortran@v1
+           with:
+            compiler: ${{ matrix.toolchain.compiler }}
+            version: ${{ matrix.toolchain.version }}
+         - name: Setup Python
+           uses: actions/setup-python@v5
+           with:
+            python-version: 3.x
+         - run: pip3 install cmake ninja --user
+         - name: Install Intel MKL
+           if: contains(matrix.os, 'ubuntu')
+           run: |
+            sudo apt-get install ${APT_PACKAGES}
+            source /opt/intel/oneapi/setvars.sh --force
+            printenv >> $GITHUB_ENV
+         # -O2 is pinned for the same reason as in `gcc-cmake-build`; ifx accepts
+         # both `-O2` and `-DNDEBUG`.
+         - name: Configure cmake build
+           run: >
+            cmake -B ${{ env.BUILD_DIR }} -G Ninja
+            -DCMAKE_BUILD_TYPE=${{ matrix.build }}
+            -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG"
+            -DCMAKE_C_COMPILER=icx
+            -DCMAKE_Fortran_COMPILER=ifx
+            -DBLA_VENDOR=Intel10_64lp
+            -DWITH_TBLITE=ON
+            -DWITH_CPCMX=ON
+            -DTEST_DRIVE_BUILD_TESTING=OFF
+         - name: Build project
+           run: |
+            set -eo pipefail
+            ninja -C ${{ env.BUILD_DIR }} 2>&1 | tee build.log
+            if grep -qiE 'Error: |Fatal' build.log; then
+              echo "::error::the build log contains an 'Error:' or 'Fatal' line"
+              exit 1
+            fi
+         - name: Run unit tests
+           # The failing-test list goes to the job summary as well as to the log:
+           # reading the log needs an authenticated API call, the summary does not.
+           # Each failing test is also emitted as a workflow command, which GitHub
+           # turns into a check-run annotation: that is the only failure detail
+           # readable through the public API without a token.  `s-dftd3/` and
+           # `tblite/` are the fetched dependencies' own test suites (this job
+           # builds them, unlike `gcc-cmake-build`); they are excluded for the
+           # reason recorded in that job's filter note.
+           run: |
+             set +e
+             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing|s-dftd3/|tblite/' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
+             status=${PIPESTATUS[0]}
+             {
+               echo "### Unit tests: exit ${status}"
+               if [ "${status}" -ne 0 ]; then
+                 echo '```'
+                 sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40
+                 echo '```'
+               fi
+             } >> "$GITHUB_STEP_SUMMARY"
+             if [ "${status}" -ne 0 ]; then
+               sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40 | \
+                 while IFS= read -r line; do
+                   printf '::error::%s\n' "$line"
+                 done
+             fi
+             exit "${status}"
+           working-directory: ${{ env.BUILD_DIR }}
+           env:
+            OMP_NUM_THREADS: 2,1

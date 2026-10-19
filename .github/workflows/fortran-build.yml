@@ -8,6 +8,12 @@ jobs:
    # MinGW / Intel builds) were removed together with it, and the
    # `continuous-delivery` release pipeline went with them (see the note at the
    # end of this file).
+   #
+   # The row set of this push path was narrowed when report 175 measured the
+   # informational rows: the aarch64 Release combination and the Intel ifx row
+   # are no longer here.  The remaining informational row is the aarch64 Debug
+   # build; the second Fortran front end moved to the weekly
+   # `.github/workflows/intel-ifx-weekly.yml`.
    gcc-cmake-build:
       # The aarch64 runner is informational: its failures could not be reproduced
       # on x86-64 with the same compiler, so it must not gate the build.
@@ -20,6 +26,15 @@ jobs:
             fc: [gfortran-14]
             cc: [gcc-14]
             build: [Release, Debug]
+            # The aarch64 Release combination was cancelled (report 175): it is
+            # 2.9 min of runner time per push and its failures include an
+            # inherited upstream test asserting an absolute 1e-8 tolerance,
+            # while the ISA stays covered by the cheap, green aarch64 Debug
+            # row.  The aarch64 `-O2` codegen residue is picked up by the
+            # weekly non-GNU run in `.github/workflows/intel-ifx-weekly.yml`.
+            exclude:
+              - os: ubuntu-24.04-arm
+                build: Release
       steps:
          - name: Checkout code
            uses: actions/checkout@v4
@@ -141,96 +156,6 @@ jobs:
            # API without a token.  The `s-dftd3/` and `tblite/` entries of the
            # filter are the fetched dependencies' own test suites, which this
            # job does not build (see the filter note in `gcc-cmake-build`).
-           run: |
-             set +e
-             ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing|s-dftd3/|tblite/' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
-             status=${PIPESTATUS[0]}
-             {
-               echo "### Unit tests: exit ${status}"
-               if [ "${status}" -ne 0 ]; then
-                 echo '```'
-                 sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40
-                 echo '```'
-               fi
-             } >> "$GITHUB_STEP_SUMMARY"
-             if [ "${status}" -ne 0 ]; then
-               sed -n '/The following tests FAILED/,$p' "$RUNNER_TEMP/ctest.log" | head -40 | \
-                 while IFS= read -r line; do
-                   printf '::error::%s\n' "$line"
-                 done
-             fi
-             exit "${status}"
-           working-directory: ${{ env.BUILD_DIR }}
-           env:
-            OMP_NUM_THREADS: 2,1
-
-   intel-ifx-cmake-build:
-      # The Intel toolchain is informational as well: it is not the supported
-      # compiler of this fork (see the README), and its failures are specific to
-      # that toolchain.
-      continue-on-error: true
-      runs-on: ${{ matrix.os }}
-      strategy:
-         fail-fast: false
-         matrix:
-            os: [ubuntu-latest]
-            build: [Release]
-            toolchain:
-              - {compiler: intel, version: '2024.1'}
-#               - {compiler: intel, version: '2025.0'} SegFault in disp/ncoord.f90 near 'do concurrent(tx = -rep_cn(1):rep_cn(1), &'
-#               - {compiler: intel, version: '2025.1'} # Worked fine as of Jul 2, 2025; commit d3f212ba83287290efafee6580670d02d7b2f49d
-              - {compiler: intel, version: '2025.2'}
-      env:
-         APT_PACKAGES: >-
-            intel-oneapi-mkl-${{ matrix.toolchain.version }} intel-oneapi-mkl-devel-${{ matrix.toolchain.version }}
-      steps:
-         - name: Checkout code
-           uses: actions/checkout@v4
-         - name: Setup Fortran
-           uses: fortran-lang/setup-fortran@v1
-           with:
-            compiler: ${{ matrix.toolchain.compiler }}
-            version: ${{ matrix.toolchain.version }}
-         - name: Setup Python
-           uses: actions/setup-python@v5
-           with:
-            python-version: 3.x
-         - run: pip3 install cmake ninja --user
-         - name: Install Intel MKL
-           if: contains(matrix.os, 'ubuntu')
-           run: |
-            sudo apt-get install ${APT_PACKAGES}
-            source /opt/intel/oneapi/setvars.sh --force
-            printenv >> $GITHUB_ENV
-         # -O2 is pinned for the same reason as in `gcc-cmake-build`; ifx accepts
-         # both `-O2` and `-DNDEBUG`.
-         - name: Configure cmake build
-           run: >
-            cmake -B ${{ env.BUILD_DIR }} -G Ninja
-            -DCMAKE_BUILD_TYPE=${{ matrix.build }}
-            -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG"
-            -DCMAKE_C_COMPILER=icx
-            -DCMAKE_Fortran_COMPILER=ifx
-            -DBLA_VENDOR=Intel10_64lp
-            -DWITH_TBLITE=ON
-            -DWITH_CPCMX=ON
-            -DTEST_DRIVE_BUILD_TESTING=OFF
-         - name: Build project
-           run: |
-            set -eo pipefail
-            ninja -C ${{ env.BUILD_DIR }} 2>&1 | tee build.log
-            if grep -qiE 'Error: |Fatal' build.log; then
-              echo "::error::the build log contains an 'Error:' or 'Fatal' line"
-              exit 1
-            fi
-         - name: Run unit tests
-           # The failing-test list goes to the job summary as well as to the log:
-           # reading the log needs an authenticated API call, the summary does not.
-           # Each failing test is also emitted as a workflow command, which GitHub
-           # turns into a check-run annotation: that is readable through the public
-           # API without a token.  `s-dftd3/` and `tblite/` are the fetched
-           # dependencies' own test suites (this job builds them); see the filter
-           # note in `gcc-cmake-build` for why they are excluded.
            run: |
              set +e
              ctest --parallel --output-on-failure -E 'mctc-lib/ncoord|xtb/landscape-blas-threads-timing|s-dftd3/|tblite/' 2>&1 | tee "$RUNNER_TEMP/ctest.log"
