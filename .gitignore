@@ -74,6 +74,22 @@ irc_*.xyz
 landscape_*.json
 xtbout.json
 
+# GFN-FF outputs a `--gfn ff` run leaves in the working directory (the
+# charges and the topology restart), plus the `--wrtopo` list dump.
+gfnff_charges
+gfnff_topo
+gfnff_lists.json
+# `--lts` saddle (`output_prefix` is `xtb` -> `xtbts.*`) and band search
+# (`path*.xyz`) outputs of `src/landscape/tasks/ts.f90`.  The `irc_*.xyz`
+# rule above already covers the `--lirc` files.
+xtbts.xyz
+xtbts.log
+path.xyz
+path_autoneb.xyz
+path_ts_list.xyz
+# `--enso` coupling dump of `src/main/property.F90`.
+xtb_enso.json
+
 
 # python build artefacts
 __pycache__/
