@@ -109,9 +109,16 @@ set_target_properties(
   Fortran_MODULE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/include"
 )
 
-# test-drive 
+# test-drive
+#
+# The `CMAKE_EXECUTABLE_SUFFIX` belongs in the name: Windows builds
+# `o-xtb-tester.exe`, and a bare `o-xtb-tester` is only found there because
+# CTest appends the platform executable extensions to a *bare* name - a
+# cross-built tree (Linux CTest, Windows binaries) reports "Could not find
+# executable o-xtb-tester" for every one of these tests without it.
 foreach(t IN LISTS tests)
-  add_test("${PROJECT_NAME}/${t}" "${PROJECT_NAME}-tester" "${t}")
+  add_test("${PROJECT_NAME}/${t}"
+    "${PROJECT_NAME}-tester${CMAKE_EXECUTABLE_SUFFIX}" "${t}")
   set_tests_properties(
     "${PROJECT_NAME}/${t}"
   PROPERTIES
@@ -127,15 +134,22 @@ set_tests_properties(
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )
 # add PTB explicitly since it is not part of the tests list
-add_test("${PROJECT_NAME}/ptb" "${PROJECT_NAME}-tester" "ptb")
+add_test("${PROJECT_NAME}/ptb"
+  "${PROJECT_NAME}-tester${CMAKE_EXECUTABLE_SUFFIX}" "ptb")
 set_tests_properties(
   "${PROJECT_NAME}/ptb"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR}"
 )
 
-# xtb (the command line program built by the top level project)
-set(XTB-EXE "${PROJECT_BINARY_DIR}/${XTB_EXE_NAME}")
+# xtb (the command line program built by the top level project).
+#
+# `CMAKE_EXECUTABLE_SUFFIX` is part of the path, not a convenience: the value is
+# also handed to the `cmake -P` and Python checks below, which run the binary
+# with `execute_process`/`subprocess` - neither appends the suffix, and the
+# `xtb/xtbpath-default` check even *copies* this path (`file(COPY)`), which
+# fails outright as long as it names `oxtb` instead of `oxtb.exe`.
+set(XTB-EXE "${PROJECT_BINARY_DIR}/${XTB_EXE_NAME}${CMAKE_EXECUTABLE_SUFFIX}")
 
 add_test("xtb/Argparser_print_version" ${XTB-EXE} --version)
 add_test("xtb/Argparser_print_help" ${XTB-EXE} --help)
@@ -187,6 +201,9 @@ set(LANDSCAPE-XTBPATH-RUNDIR "${CMAKE_CURRENT_BINARY_DIR}/xtbpath-default")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/xtbpath_default_check.cmake" [=[
 file(REMOVE_RECURSE "${RUNDIR}")
 file(MAKE_DIRECTORY "${RUNDIR}/bin" "${RUNDIR}/share/o-xtb")
+# derived from `EXE`, so the copied name and the invoked name cannot drift
+# apart (`EXE` ends in `.exe` on Windows)
+get_filename_component(EXE_NAME "${EXE}" NAME)
 file(COPY "${EXE}" DESTINATION "${RUNDIR}/bin")
 foreach(param IN ITEMS param_gfn0-xtb.txt param_gfn1-xtb.txt
                           param_gfn1-si-xtb.txt param_gfn2-xtb.txt
@@ -203,7 +220,7 @@ endif()
 file(WRITE "${param}" "${gfn0}")
 execute_process(
   COMMAND "${CMAKE_COMMAND}" -E env --unset=XTBPATH
-          "${RUNDIR}/bin/${NAME}" "${INPUT}" --gfn 0 --sp --norestart
+          "${RUNDIR}/bin/${EXE_NAME}" "${INPUT}" --gfn 0 --sp --norestart
           --namespace xtbpathdefault
   WORKING_DIRECTORY "${RUNDIR}"
   RESULT_VARIABLE status
@@ -225,7 +242,6 @@ endif()
 add_test("xtb/xtbpath-default"
   ${CMAKE_COMMAND}
   -DEXE=${XTB-EXE}
-  -DNAME=${XTB_EXE_NAME}
   -DINPUT=${LANDSCAPE-H2O}
   -DSRCDIR=${PROJECT_SOURCE_DIR}
   -DRUNDIR=${LANDSCAPE-XTBPATH-RUNDIR}
@@ -3634,8 +3650,10 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 set(LANDSCAPE-E2E-PY "${CMAKE_CURRENT_SOURCE_DIR}/landscape_e2e_check.py")
 set(LANDSCAPE-E2E-XTB "${XTB-EXE}")
 # the tester executable of this directory (a generator expression would not
-# be expanded inside the quoted -DARGS value)
-set(LANDSCAPE-E2E-TESTER "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-tester")
+# be expanded inside the quoted -DARGS value); the suffix is required because
+# `landscape_e2e_check.py` runs it with `subprocess`
+set(LANDSCAPE-E2E-TESTER
+  "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-tester${CMAKE_EXECUTABLE_SUFFIX}")
 
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake" [=[
 file(MAKE_DIRECTORY "${RUNDIR}")
