@@ -837,7 +837,7 @@ subroutine rdcontrol(fname,env,copy_file,from_input)
             ! `--opt`/`--ohess`/`--cycles` reach `set_opt` through the argument
             ! parser and therefore do not set this flag either.
             if (do_mark) set%xcontrol_supplied = .true.
-            call rdblock(env,set_opt,     line,id,copy,err,ncount)
+            call rdblock(env,set_opt_block,line,id,copy,err,ncount)
          case('hess'     ); call rdblock(env,set_hess,    line,id,copy,err,ncount)
          case('md'       ); call rdblock(env,set_md,      line,id,copy,err,ncount)
          case('siman'    ); call rdblock(env,set_siman,   line,id,copy,err,ncount)
@@ -2053,6 +2053,74 @@ function optlevel2int(level) result(ilvl)
 
 end function optlevel2int
 
+!> Keyword of the native optimization level table of `optlevel2int`.
+!>
+!> `optlevel2int` drops a keyword it does not know to `normal` (`case default`),
+!> so its integer return value cannot tell `normal` from a misspelling.  This
+!> predicate mirrors the `case` list of that function and is the rejection
+!> oracle of every caller that has to report an unknown keyword instead of
+!> silently running the default.  The comparison is case sensitive, exactly
+!> like the `select case` of `optlevel2int`.
+pure function optlevel_keyword_known(level) result(known)
+   implicit none
+   character(len=*),intent(in) :: level
+   logical :: known
+
+   select case(level)
+   case('crude','-3','sloppy','-2','loose','-1','lax','normal','0','tight','1',&
+      & 'verytight','vtight','2','extreme','3')
+      known = .true.
+   case default
+      known = .false.
+   end select
+
+end function optlevel_keyword_known
+
+!> Set the native optimization level of `set%optset` from a keyword.
+!>
+!> The `optlevel` key of `set_opt` uses `optlevel2int`, which maps an unknown
+!> keyword to `normal`; this wrapper reports the unknown keyword through
+!> `env%warning` first, so an unknown value is never silently replaced by the
+!> default.  Because `env%warning` carries `env%strict`, the report is fatal in
+!> a `--strict` run of the callers that already set `strict` (the legacy
+!> xcontrol route).  The command line parsers of `src/prog/main.F90` do not use
+!> it: their `--strict` switch is only known after the parsing loop, so they
+!> report an unknown keyword in the parser tail.
+subroutine set_opt_level(env, val, source)
+   implicit none
+   type(TEnvironment), intent(inout) :: env
+   character(len=*),intent(in) :: val
+   character(len=*),intent(in) :: source
+
+   if (.not. optlevel_keyword_known(val)) then
+      call env%warning("Unknown optimization level '"//trim(val)//"': the "//&
+         & "native levels are crude, sloppy, loose, lax, normal, tight, "//&
+         & "verytight and extreme (or their numeric aliases -3 to 3)", source)
+   end if
+   call set_opt(env, 'optlevel', val)
+
+end subroutine set_opt_level
+
+!> Handler of the `$opt` block for `rdblock`, with the `optlevel` report.
+!>
+!> The block used to route every key straight to `set_opt`, so its `optlevel`
+!> key reached `optlevel2int` and an unknown keyword was dropped to `normal`
+!> silently.  This dispatcher reports that one key through `set_opt_level`;
+!> every other key keeps its `set_opt` handling unchanged.
+subroutine set_opt_block(env, key, val)
+   implicit none
+   type(TEnvironment), intent(inout) :: env
+   character(len=*),intent(in) :: key
+   character(len=*),intent(in) :: val
+
+   if (trim(key) == 'optlevel') then
+      call set_opt_level(env, val, 'set_opt_block')
+   else
+      call set_opt(env, key, val)
+   end if
+
+end subroutine set_opt_block
+
 function int2optlevel(ilvl) result(level)
    implicit none
    character(len=:),allocatable :: level
@@ -2967,7 +3035,7 @@ subroutine set_legacy(env,key,val)
 !   case('scan');
    case('fit');         call set_fit
    case('optlev');      set%xcontrol_supplied = .true.
-                        call set_opt(env,'optlevel',val)
+                        call set_opt_level(env,val,source)
    case('gfnver');      call set_gfn(env,'method',val)
    case('ellips');      continue ! used later in read_userdata
                         maxwalls = maxwalls + 1

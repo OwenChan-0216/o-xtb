@@ -1830,6 +1830,14 @@ contains
       !> section 3.5, finding F3 of the stage 3a fix round)
       character(len=:), allocatable :: landscape_opt_level_name
 
+      !> Raw level keyword of the native `--bhess`/`--metaopt`, e.g. `tight`.
+      !> The run type flags are mutually exclusive, so one pair of variables
+      !> holds the keyword and the flag that supplied it; they are reported in
+      !> the parser tail, where the effect of `--strict` is known, because
+      !> `optlevel2int` maps an unknown keyword to `normal` silently
+      character(len=:), allocatable :: landscape_native_level_name
+      character(len=:), allocatable :: landscape_native_level_flag
+
       !> Effective suite convergence level the `--opt`/`--ohess` keyword maps
       !> to, printed on the banner of the redeployed run
       character(len=:), allocatable :: landscape_opt_conv_level
@@ -2610,6 +2618,10 @@ contains
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
+               ! The native `optlevel2int` maps an unknown keyword to `normal`,
+               ! so the keyword is reported in the parser tail (CLI section 3.5)
+               landscape_native_level_name = sec
+               landscape_native_level_flag = '--bhess'
             end if
 
          case ('--o1nh')
@@ -4513,6 +4525,9 @@ contains
             call args%nextArg(sec)
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
+               ! Same tail report as `--bhess`
+               landscape_native_level_name = sec
+               landscape_native_level_flag = '--metaopt'
             end if
 
          case ('--nat')
@@ -4561,6 +4576,28 @@ contains
             call env%error(message, source)
          else
             call env%warning(message, source)
+         end if
+      end if
+
+      ! The native level value of `--bhess`/`--metaopt` reaches
+      ! `set%optset%optlev` through the shared `optlevel2int`
+      ! (`src/set_module.f90`), which maps a keyword it does not know to
+      ! `normal` - upstream behaviour kept for the shared parser.  A value the
+      ! program does not know must be reported rather than silently replaced by
+      ! the default, so the rejected keyword is reported here - the same
+      ! lax/strict shape and the same position-independent decision as the
+      ! unknown option above.
+      if (allocated(landscape_native_level_name)) then
+         if (.not. optlevel_keyword_known(landscape_native_level_name)) then
+            message = "Unknown "//landscape_native_level_flag//" level '"//&
+               & landscape_native_level_name//"': the native levels are "//&
+               & "crude, sloppy, loose, lax, normal, tight, verytight and "//&
+               & "extreme (or their numeric aliases -3 to 3)"
+            if (strict) then
+               call env%error(message, source)
+            else
+               call env%warning(message, source)
+            end if
          end if
       end if
 
@@ -4715,6 +4752,25 @@ contains
          end if
          write(env%unit, '(a)') "[NOTICE] landscape convergence level: "// &
             & landscape_opt_conv_level
+      else if (set%runtyp == p_run_opt .or. set%runtyp == p_run_ohess) then
+         ! Native engine (`--opt`/`--ohess --method <engine>`): the level stays
+         ! on `set%optset%optlev` and reaches `optlevel2int`, which maps an
+         ! unknown keyword to `normal`.  Report it here, where the effect of
+         ! `--strict` is known; the suite branch above has its own, wider set
+         ! (it also knows `superloose`).
+         if (allocated(landscape_opt_level_name)) then
+            if (.not. optlevel_keyword_known(landscape_opt_level_name)) then
+               message = "Unknown --opt level '"//landscape_opt_level_name//&
+                  & "': the native levels are crude, sloppy, loose, lax, "//&
+                  & "normal, tight, verytight and extreme (or their "//&
+                  & "numeric aliases -3 to 3)"
+               if (strict) then
+                  call env%error(message, source)
+               else
+                  call env%warning(message, source)
+               end if
+            end if
+         end if
       end if
 
       ! T3: `--cycles N` is the step budget of the run type that owns one.  The

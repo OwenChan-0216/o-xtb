@@ -3789,6 +3789,23 @@ add_test("xtb/landscape-flag-value"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-flag-value
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# `--bhess`/`--metaopt` and the native `--opt`/`--ohess --method <engine>`
+# hand their level keyword to the upstream `optlevel2int`, whose
+# `case default` maps a keyword it does not know to `normal`.  The upstream
+# behaviour is kept for the shared parser, but an unknown keyword used to run
+# the default level without a message: `--bhess superloose` (a suite-only
+# level) and `--bhess zzqq` were silently `normal`.  The report is a warning
+# in a lax run and a fatal error with `--strict`, the same shape as the
+# unknown-option path; the xcontrol `$opt optlevel=` route is covered too,
+# because it reaches the same parser through a second dispatcher.
+add_test("xtb/landscape-native-level-value"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=nativelevel;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-native-level-value"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-native-level-value
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # A positional token that is neither an option nor an existing file (a
 # mis-spelled or missing input file) is not a `file` to the parser, so
 # `countFiles`/`nextFile` skipped it: `oxtb a.xyz nope.xyz` ran with `a.xyz`
@@ -4689,6 +4706,7 @@ set_tests_properties(
   "xtb/landscape-lts-escape-echo"
   "xtb/landscape-strict-unknown"
   "xtb/landscape-flag-value"
+  "xtb/landscape-native-level-value"
   "xtb/landscape-color"
   "xtb/native-opt-lbfgs-symbols"
   "xtb/landscape-opt-alias-once"

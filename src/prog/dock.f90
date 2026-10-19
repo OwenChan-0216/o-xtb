@@ -491,7 +491,7 @@ contains
             call set_runtyp('opt')
             call args%nextArg(sec)
             if (allocated(sec)) then
-               call set_opt(env, 'optlevel', sec)
+               call set_opt_level(env, sec, source)
             end if
 
          case ('--cycles')
@@ -951,7 +951,7 @@ contains
             case ('write'); call rdblock(env, set_write, line, id, copy, err, ncount)
             case ('gfn'); call rdblock(env, set_gfn, line, id, copy, err, ncount)
             case ('scc'); call rdblock(env, set_scc, line, id, copy, err, ncount)
-            case ('opt'); call rdblock(env, set_opt, line, id, copy, err, ncount)
+            case ('opt'); call rdblock(env, set_opt_block, line, id, copy, err, ncount)
             case ('gbsa'); call rdblock(env, set_gbsa, line, id, copy, err, ncount)
             case ('solvation'); call rdblock(env, set_gbsa, line, id, copy, err, ncount)
             case ('thermo'); call rdblock(env, set_thermo, line, id, copy, err, ncount)

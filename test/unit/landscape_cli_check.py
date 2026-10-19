@@ -37,6 +37,7 @@ mode mirrors one CMake test one-to-one:
                                      -> xtb/landscape-enum-case
   strictunknown <exe> <input> <rundir> -> xtb/landscape-strict-unknown
   flagvalue <exe> <input> <rundir>    -> xtb/landscape-flag-value
+  nativelevel <exe> <input> <rundir>  -> xtb/landscape-native-level-value
   positional <exe> <input> <rundir>   -> xtb/landscape-positional-file
   color  <exe> <input> <rundir>       -> xtb/landscape-color
   gfn    <exe> <input> <rundir>       -> xtb/landscape-gfn-value
@@ -685,6 +686,96 @@ def check_strict_unknown(exe, inp, rundir):
         fail("an unknown flag without --strict failed the run", output)
     if "Unknown option '--zzzz' provided" not in output:
         fail("the unknown flag warning disappeared", output)
+
+
+def check_native_level(exe, inp, rundir):
+    """An unknown native level keyword is reported, laxly and strictly.
+
+    Mirrors `xtb/landscape-native-level-value`.  `--bhess`/`--metaopt` and
+    the native `--opt`/`--ohess --method <engine>` hand their level to the
+    upstream `optlevel2int`, whose `case default` maps any keyword it does not
+    know to `normal`: `--bhess superloose` (a suite-only level) and
+    `--bhess zzqq` used to run the default level without a message.  The check
+    pins both directions of the lax/strict split of the parser tail: a
+    documented keyword stays silent, an unknown keyword is named in a warning,
+    and `--strict` turns the same keyword into a fatal error.  The xcontrol
+    `$opt` route is pinned too, because it reaches the same parser through a
+    second dispatcher.
+    """
+    os.makedirs(rundir, exist_ok=True)
+
+    def level(args, label):
+        directory = os.path.join(rundir, label)
+        shutil.rmtree(directory, ignore_errors=True)
+        return run(exe, inp, args + ["--norestart"], directory)
+
+    # (1) the documented native keywords run without a report
+    for flag in ("--bhess", "--metaopt"):
+        for value in ("normal", "tight", "verytight", "lax"):
+            status, output = level(["--gfn", "2", flag, value],
+                                   "%s-%s" % (flag[2:], value))
+            if status != 0:
+                fail("%s %s failed with status %d" % (flag, value, status),
+                     output)
+            if "Unknown %s level" % flag in output:
+                fail("%s %s was reported as unknown" % (flag, value), output)
+
+    # (2) a keyword the native table does not know is reported and the run
+    #     continues: the suite-only `superloose`, a misspelling, and
+    #     `TIGHT`, because the upstream table is case sensitive
+    for flag in ("--bhess", "--metaopt"):
+        for value in ("superloose", "zzqq", "TIGHT"):
+            status, output = level(["--gfn", "2", flag, value],
+                                   "%s-bad-%s" % (flag[2:], value))
+            if status != 0:
+                fail("lax %s %s failed with status %d" % (flag, value, status),
+                     output)
+            if ("Unknown %s level '" % flag) not in output:
+                fail("%s %s was not reported" % (flag, value), output)
+
+    # (3) the same keyword is fatal with --strict, in either flag position
+    for args, label in ((
+            ["--gfn", "2", "--bhess", "superloose", "--strict"],
+            "bhess-strict"), (
+            ["--metaopt", "zzqq", "--gfn", "2", "--strict"],
+            "metaopt-strict-before")):
+        status, output = level(args, label)
+        if status == 0:
+            fail("--strict accepted %r" % " ".join(args), output)
+        if "level '" not in output:
+            fail("--strict did not report %r" % " ".join(args), output)
+
+    # (4) the native `--opt`/`--ohess` keep the same oracle; the level has to
+    #     follow the flag directly, the parser reads the next token
+    for flag in ("--opt", "--ohess"):
+        status, output = level(["--gfn", "2", flag, "superloose",
+                                "--method", "ancopt"], "%s-native" % flag[2:])
+        if status != 0:
+            fail("%s superloose --method ancopt failed with status %d"
+                 % (flag, status), output)
+        if "Unknown --opt level 'superloose'" not in output:
+            fail("%s superloose --method ancopt was not reported" % flag,
+                 output)
+        status, output = level(["--gfn", "2", flag, "normal", "--method",
+                                "ancopt"], "%s-native-normal" % flag[2:])
+        if status != 0:
+            fail("%s normal --method ancopt failed with status %d"
+                 % (flag, status), output)
+        if "Unknown --opt level" in output:
+            fail("%s normal --method ancopt was reported" % flag, output)
+
+    # (5) the xcontrol `$opt` block reaches the same parser
+    control = os.path.join(rundir, "native-level.inp")
+    with open(control, "w") as handle:
+        handle.write("$opt\n   optlevel=superloose\n")
+    status, output = level(["--gfn", "2", "--opt", "--method", "ancopt",
+                            "--input", control], "xcontrol")
+    if status != 0:
+        fail("the xcontrol $opt optlevel=superloose run failed with status %d"
+             % status, output)
+    if "Unknown optimization level 'superloose'" not in output:
+        fail("the xcontrol $opt optlevel=superloose was not reported", output)
+    print("native level: unknown keywords reported on every native route")
 
 
 def check_flag_value(exe, inp, rundir):
@@ -5924,6 +6015,8 @@ def main():
         check_strict_unknown(exe, inp, rundir)
     elif mode == "flagvalue":
         check_flag_value(exe, inp, rundir)
+    elif mode == "nativelevel":
+        check_native_level(exe, inp, rundir)
     elif mode == "positional":
         check_positional(exe, inp, rundir)
     elif mode == "color":

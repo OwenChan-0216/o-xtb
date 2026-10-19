@@ -46,19 +46,16 @@ Three checks, all against the executable:
       rejection marker.  This is the falsifiable half - a wrong declared value
       turns the gate red.
 
-An option whose flag does not reject anything is reported as **unverified**
-instead of being asserted: ``--bhess``/``--metaopt`` feed the native
-``optlevel2int``, which maps an unknown keyword to ``normal`` silently, so
-there is no rejection to probe.  The list is pinned, so a flag that stops
-validating is a visible change and not a silent loss of coverage.
+An option whose flag does not reject anything is a failure: every option that
+declares a value set has to reject the sentinel, so the set is falsifiable.
 
 Usage:
 
     landscape_values_check.py <oxtb> [rundir]
 
 Exit status is non-zero when the dump is malformed, a ``Values:`` line
-disagrees, a declared value is rejected by the binary, or the set of
-unverified options changed.
+disagrees, a declared value is rejected by the binary, or a flag does not
+reject the sentinel at all.
 """
 
 import re
@@ -82,13 +79,6 @@ VALUES_LINE = re.compile(r"^Values: (.*)$", re.M)
 #: minimisation or native engine name and is accepted by `--opt`.
 SADDLE = {"prfo", "bprfo", "dimer", "neb", "cineb", "autoneb", "string", "gsm"}
 IRC = {"gs", "hpc", "lqa", "eulerpc"}
-
-#: The options whose flag does **not** reject a bogus value, with the measured
-#: reason.  These are reported and pinned, never asserted.
-NO_ORACLE = {
-    "--bhess": "the native optlevel2int maps an unknown keyword to normal",
-    "--metaopt": "the native optlevel2int maps an unknown keyword to normal",
-}
 
 #: Options whose rejection needs a real geometry before the value is used.
 #: `--gbsa`/`--alpb` read the solvent only inside a single point run.
@@ -215,7 +205,6 @@ def main(argv):
     print("PASS: %s" % header)
 
     failures = []
-    unverified = []
     checked = 0
     accepted_values = 0
 
@@ -246,13 +235,10 @@ def main(argv):
         marker = reject_marker(flag)
         _, _, out = run(binary, probe_argv(flag, SENTINEL, geometry), rundir)
         if marker not in out:
-            if flag in NO_ORACLE:
-                unverified.append(flag)
-            else:
-                failures.append(
-                    "%s: the flag does not reject the sentinel %r, so the value "
-                    "set cannot be verified" % (flag, SENTINEL)
-                )
+            failures.append(
+                "%s: the flag does not reject the sentinel %r, so the value "
+                "set cannot be verified" % (flag, SENTINEL)
+            )
             continue
         checked += 1
         for value in values:
@@ -267,15 +253,6 @@ def main(argv):
 
     print("acceptance: %d validating flags probed, %d declared values accepted" %
           (checked, accepted_values))
-
-    if sorted(unverified) != sorted(NO_ORACLE):
-        failures.append(
-            "unverified options %r, pinned set %r"
-            % (sorted(unverified), sorted(NO_ORACLE))
-        )
-    else:
-        print("PASS: unverified (no rejection oracle): %s" %
-              ", ".join("%s (%s)" % (f, NO_ORACLE[f]) for f in sorted(unverified)))
 
     if failures:
         for failure in failures:
