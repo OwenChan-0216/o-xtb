@@ -1408,7 +1408,13 @@ disables it
 .sp
 \fB\-P, \-\-parallel\fP \fIINT\fP
 .RS 4
-number of parallel processes
+number of OpenMP threads of the run, applied before the first parallel
+region so that it wins over \f(CROMP_NUM_THREADS\fP; \fIINT\fP must be a positive
+integer.  Any other value is reported and the run keeps the team it would
+have used without the flag (the OpenMP runtime maps a non\-positive value
+to a single thread), and it is fatal with \f(CR\-\-strict\fP.  A value above the
+processor count of the machine is reported as well, but the value is
+applied as given and never clamped
 .RE
 .sp
 \fB\-\-blas\-threads\fP \fIN\fP

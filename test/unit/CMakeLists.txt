@@ -3908,6 +3908,25 @@ add_test("xtb/landscape-native-level-value"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-native-level-value
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# `-P`/`--parallel` was passed straight to `omp_set_num_threads` without a
+# range check: `-P 0` and `-P -2` silently became one thread, `-P abc` the
+# default team, `-P` as the last argument was dropped, and `-P 1000` really
+# created a thousand threads on an eight processor machine (measured, report
+# 189).  The value is now validated in the same lax/strict shape as
+# `--bhess superloose`: reported with the old behaviour in a lax run, fatal
+# with `--strict`, decided in the parser tail so the position of `--strict`
+# does not matter.  A value above the processor count is reported and applied
+# as given, never clamped.  The accepted path is pinned unchanged: `-P 2` and
+# `--parallel 2` must still set a team of 2 silently and give the energy of a
+# run without the flag.
+add_test("xtb/landscape-parallel-value"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=parallel;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-parallel"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-parallel
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # A positional token that is neither an option nor an existing file (a
 # mis-spelled or missing input file) is not a `file` to the parser, so
 # `countFiles`/`nextFile` skipped it: `oxtb a.xyz nope.xyz` ran with `a.xyz`

@@ -38,6 +38,7 @@ mode mirrors one CMake test one-to-one:
   strictunknown <exe> <input> <rundir> -> xtb/landscape-strict-unknown
   flagvalue <exe> <input> <rundir>    -> xtb/landscape-flag-value
   nativelevel <exe> <input> <rundir>  -> xtb/landscape-native-level-value
+  parallel <exe> <input> <rundir>     -> xtb/landscape-parallel-value
   positional <exe> <input> <rundir>   -> xtb/landscape-positional-file
   color  <exe> <input> <rundir>       -> xtb/landscape-color
   gfn    <exe> <input> <rundir>       -> xtb/landscape-gfn-value
@@ -776,6 +777,137 @@ def check_native_level(exe, inp, rundir):
     if "Unknown optimization level 'superloose'" not in output:
         fail("the xcontrol $opt optlevel=superloose was not reported", output)
     print("native level: unknown keywords reported on every native route")
+
+
+def parallel_team(output):
+    """The OpenMP team size the run reported, as an integer."""
+    match = re.search(r"omp threads +: +([0-9]+)", output)
+    if not match:
+        fail("no 'omp threads' line in the output", output)
+    return int(match.group(1))
+
+
+def total_energy(output):
+    """The printed total energy in hartree, as the string of the output."""
+    match = re.search(r"TOTAL ENERGY +(-?[0-9]+\.[0-9]+)", output)
+    if not match:
+        fail("no TOTAL ENERGY in the output", output)
+    return match.group(1)
+
+
+def check_parallel(exe, inp, rundir):
+    """`-P`/`--parallel` validates its value instead of passing it through.
+
+    Mirrors `xtb/landscape-parallel-value`.  The flag is one
+    `omp_set_num_threads` call with no range check: `-P 0` and `-P -2` became
+    one thread and `-P abc` the default team, both silently, `-P` as the last
+    argument was consumed and dropped, and `-P 1000` really created a thousand
+    threads on an eight processor machine (measured, report 189).  The check
+    pins the project's lax/strict shape: a value that is not a positive integer
+    is reported and the run keeps the old behaviour, or is fatal with
+    `--strict`, decided in the parser tail so that the position of `--strict`
+    on the command line does not matter.  A value above the processor count is
+    a third case: it is reported too, but the value is applied as given and
+    never clamped - a silent clamp would be the defect class being fixed.
+
+    The accepted path has to stay unchanged: `-P 2` must still set the team to
+    2, print nothing about the flag and give the same energy as a run without
+    it.  The `-P 1000` half uses GFN-FF, whose shorter run keeps the 1000
+    thread team cheap while still creating it.
+    """
+    os.makedirs(rundir, exist_ok=True)
+
+    def single_point(args, label):
+        directory = os.path.join(rundir, label)
+        shutil.rmtree(directory, ignore_errors=True)
+        return run(exe, inp, args, directory)
+
+    # (1) the accepted path: `-P 2` and `--parallel 2` are one flag, they set
+    #     the team, they are silent and they do not move the energy
+    energies = {}
+    teams = {}
+    for label, args in (
+            ("no-flag", ["--gfn", "2", "--sp", "--norestart"]),
+            ("short", ["-P", "2", "--gfn", "2", "--sp", "--norestart"]),
+            ("long", ["--parallel", "2", "--gfn", "2", "--sp",
+                       "--norestart"])):
+        status, output = single_point(args, label)
+        if status != 0:
+            fail("the %s run failed with status %d" % (label, status), output)
+        if "-P/--parallel" in output:
+            fail("the valid value of the %s run was reported" % label, output)
+        energies[label] = total_energy(output)
+        teams[label] = parallel_team(output)
+    for label in ("short", "long"):
+        if teams[label] != 2:
+            fail("-P 2 did not set the OpenMP team: the %s run reports %d"
+                 % (label, teams[label]))
+        if energies[label] != energies["no-flag"]:
+            fail("-P 2 moved the total energy: %s vs %s without the flag"
+                 % (energies[label], energies["no-flag"]))
+    print("parallel: -P 2 and --parallel 2 set a team of 2, silently")
+
+    # (2) a value that is not a positive integer is reported and the run keeps
+    #     the behaviour the flag had before the validation: a non-positive
+    #     value reaches the runtime, which maps it to a single thread
+    for value, label, expected_team in (("0", "zero", 1),
+                                        ("-2", "negative", None),
+                                        ("abc", "text", None)):
+        status, output = single_point(
+            ["-P", value, "--gfn", "2", "--sp", "--norestart"], label)
+        if status != 0:
+            fail("the lax run -P %s failed with status %d" % (value, status),
+                 output)
+        if ("-P/--parallel needs a positive integer, not '%s'" % value) \
+                not in output:
+            fail("lax -P %s was not reported" % value, output)
+        if expected_team is not None and parallel_team(output) != expected_team:
+            fail("lax -P %s did not keep the old single thread team" % value,
+                 output)
+    print("parallel: 0, -2 and abc are reported, the run continues")
+
+    # (3) `-P` as the last argument used to be consumed and ignored
+    status, output = single_point(
+        ["--gfn", "2", "--sp", "--norestart", "-P"], "missing")
+    if status != 0:
+        fail("'-P' as the last argument failed with status %d" % status, output)
+    if "-P/--parallel needs a positive integer, but no value was given" \
+            not in output:
+        fail("'-P' as the last argument was not reported", output)
+    print("parallel: a missing value is reported instead of guessed")
+
+    # (4) `--strict` turns the report into a fatal error, in either flag
+    #     position, and covers the non-positive value as well
+    for label, args in (
+            ("strict-before", ["--strict", "-P", "abc", "--gfn", "2",
+                                "--sp", "--norestart"]),
+            ("strict-after", ["-P", "abc", "--strict", "--gfn", "2",
+                               "--sp", "--norestart"]),
+            ("strict-zero", ["--strict", "-P", "0", "--gfn", "2", "--sp",
+                              "--norestart"])):
+        status, output = single_point(args, label)
+        if status == 0:
+            fail("--strict accepted the %s command line" % label, output)
+        if "-P/--parallel needs a positive integer" not in output:
+            fail("--strict did not report the %s value" % label, output)
+    print("parallel: --strict makes the report fatal, in either position")
+
+    # (5) more threads than the machine has processors: reported, applied as
+    #     given, and only a warning with `--strict` as well, because nothing
+    #     was ignored
+    for label, flags in (("oversubscribed", []),
+                         ("oversubscribed-strict", ["--strict"])):
+        status, output = single_point(
+            flags + ["-P", "1000", "--gfn", "ff", "--sp", "--norestart"],
+            label)
+        if status != 0:
+            fail("the %s run failed with status %d" % (label, status), output)
+        if "-P/--parallel 1000 exceeds the" not in output:
+            fail("the %s run did not report the thread count" % label, output)
+        if parallel_team(output) != 1000:
+            fail("the %s run clamped the value to %d"
+                 % (label, parallel_team(output)), output)
+    print("parallel: a value above the processor count warns, unclamped")
 
 
 def check_flag_value(exe, inp, rundir):
@@ -5723,7 +5855,7 @@ HELP_TOPIC_SAMPLES = (
     ("--pop", "--pop", "Mulliken population analysis"),
     ("--json", "--json", "write xtbout.json file"),
     ("--input", "-I, --input FILE", "input source for xcontrol(7) instructions"),
-    ("--parallel", "-P, --parallel INT", "number of parallel processes"),
+    ("--parallel", "-P, --parallel INT", "number of OpenMP threads of the run"),
 )
 
 
@@ -6017,6 +6149,8 @@ def main():
         check_flag_value(exe, inp, rundir)
     elif mode == "nativelevel":
         check_native_level(exe, inp, rundir)
+    elif mode == "parallel":
+        check_parallel(exe, inp, rundir)
     elif mode == "positional":
         check_positional(exe, inp, rundir)
     elif mode == "color":

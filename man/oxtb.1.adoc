@@ -1011,7 +1011,13 @@ GENERAL
      disables it
 
 *-P, --parallel* 'INT'::
-     number of parallel processes
+     number of OpenMP threads of the run, applied before the first parallel
+     region so that it wins over `OMP_NUM_THREADS`; 'INT' must be a positive
+     integer.  Any other value is reported and the run keeps the team it would
+     have used without the flag (the OpenMP runtime maps a non-positive value
+     to a single thread), and it is fatal with `--strict`.  A value above the
+     processor count of the machine is reported as well, but the value is
+     applied as given and never clamped
 
 *--blas-threads* 'N'::
      set the number of threads used by the linear algebra backend (OpenBLAS or

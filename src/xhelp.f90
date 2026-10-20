@@ -1277,8 +1277,13 @@ subroutine help(iunit, topic, status, values_only)
       "    do not optimise the lattice of a periodic system, the cell is kept", &
       "    fixed (default: the cell is optimised)"])
    call add("-P, --parallel INT", "performance", &
-      "number of parallel processes", &
-      [character(len=160) :: "    number of parallel processes"])
+      "number of OpenMP threads of the run", &
+      [character(len=160) :: &
+      "    number of OpenMP threads of the run, applied before the first", &
+      "    parallel region so that it wins over OMP_NUM_THREADS; INT must be a", &
+      "    positive integer - any other value is reported (and fatal with", &
+      "    --strict) - and a value above the processor count is reported as", &
+      "    well; the value itself is applied as given, never clamped"])
    call add("--blas-threads N", "performance", &
       "thread count of the linear algebra backend", &
       [character(len=160) :: &

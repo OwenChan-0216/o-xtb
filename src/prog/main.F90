@@ -1808,7 +1808,7 @@ contains
       !> process (C API) starts clean.
       logical, intent(out) :: acc_was_set
 
-!$    integer :: omp_get_num_threads, nproc
+!$    integer :: omp_get_num_procs
       integer :: nFlags
       integer :: idum, ndum
       logical :: ldum
@@ -1865,9 +1865,34 @@ contains
       integer, intent(out) :: landscape_native_engine
 
       !> Unknown flags, blank separated; they are reported after the parsing
-      !> loop, where the effect of `--strict` is known (section 17.5 5a)
+      !> loop, where the effect of `--strict` is known (section 17.5 5a).
+      !> `message` is the report text of that block and of the `-P`/`--parallel`
+      !> value report below
       character(len=:), allocatable :: unknown_flags, message
       integer :: unknown_count
+
+      !> Raw value of a `-P`/`--parallel` argument that is not a positive
+      !> integer (`0`, `-2`, `abc`); allocated and empty when the flag was
+      !> given without a value, unallocated when the value is valid or the flag
+      !> is absent.  The report happens in the parser tail, where the effect of
+      !> `--strict` is known - the same lax/strict shape as the unknown option
+      !> and the unknown native level there
+      character(len=:), allocatable :: landscape_parallel_value
+
+      !> Team size the `-P`/`--parallel` flag asked for, 0 when the flag is
+      !> absent or its value was rejected; a value above the processor count is
+      !> reported in the parser tail, where `nproc` is known
+      integer :: landscape_parallel_team
+
+      !> Report text of the `-P` over-subscription warning (the internal write
+      !> needs a fixed length buffer; `message` is allocatable and cannot be
+      !> written to before it is allocated)
+      character(len=128) :: parallel_note
+
+      !> Processor count of this machine, filled by the `-P`/`--parallel` case;
+      !> 0 in a build without OpenMP, which therefore never reports an
+      !> over-subscription
+      integer :: nproc
 
       !> Exit status of the `--help` page: 0 for a page, 1 for an unknown
       !> topic (the topic lookup is in `src/xhelp.f90`)
@@ -1921,6 +1946,8 @@ contains
       lts_max_steps_given = .false.
       lirc_max_steps_given = .false.
       acc_was_set = .false.
+      landscape_parallel_team = 0
+      nproc = 0
 
       nFlags = args%countFlags()
       call args%nextFlag(flag)
@@ -1991,15 +2018,33 @@ contains
 !$          end if
             ! Always remove next argument to keep argument parsing consistent
             call args%nextArg(sec)
-!$          if (allocated(sec)) then
-!$             if (getValue(env, sec, idum)) then
-!$                nproc = omp_get_num_threads()
-!$                call omp_set_num_threads(idum)
+            if (.not. allocated(sec)) then
+               ! `-P` as the last argument used to be consumed and ignored: the
+               ! missing value is reported in the tail instead of guessed
+               landscape_parallel_value = ''
+            else if (getValue(env, sec, idum)) then
+               ! A parsed integer still reaches the OpenMP runtime, including a
+               ! non-positive one, which the runtime maps to a single thread
+               ! (measured, report 189 section 5).  Keeping the call keeps the
+               ! accepted path byte identical and the value applied as given;
+               ! only the report of a value that is not a positive integer is
+               ! new, and it is a warning in a lax run and fatal with
+               ! `--strict` (parser tail)
+!$             nproc = omp_get_num_procs()
+!$             call omp_set_num_threads(idum)
 #ifdef WITH_MKL
-!$                call mkl_set_num_threads(idum)
+!$             call mkl_set_num_threads(idum)
 #endif
-!$             end if
-!$          end if
+               if (idum < 1) then
+                  landscape_parallel_value = sec
+               else
+                  landscape_parallel_team = idum
+               end if
+            else
+               ! `getValue` reported the unparsable field itself; the flag and
+               ! its accepted range are named in the tail
+               landscape_parallel_value = sec
+            end if
 
          case ('--blas-threads')
             !> Machine setting, not a run type selector: it deliberately does
@@ -4577,6 +4622,35 @@ contains
          else
             call env%warning(message, source)
          end if
+      end if
+
+      ! The value of `-P`/`--parallel`.  A value that is not a positive integer
+      ! used to run silently on one thread (`0`, `-2`, clamped by the OpenMP
+      ! runtime) or on the default team (`abc`), and `-P` as the last argument
+      ! was dropped without a word.  It is reported here for the same reason as
+      ! the unknown option above: the decision needs the effect of `--strict`,
+      ! which may stand after the flag.  A request above the processor count is
+      ! the third silent case; it is only reported, and it stays a warning with
+      ! `--strict` as well, because the value is applied as given rather than
+      ! clamped - clamping it silently would be the defect class being fixed.
+      if (allocated(landscape_parallel_value)) then
+         if (len(landscape_parallel_value) == 0) then
+            message = "-P/--parallel needs a positive integer, but no value "//&
+               & "was given"
+         else
+            message = "-P/--parallel needs a positive integer, not '"//&
+               & landscape_parallel_value//"'"
+         end if
+         if (strict) then
+            call env%error(message, source)
+         else
+            call env%warning(message, source)
+         end if
+      else if (nproc > 0 .and. landscape_parallel_team > nproc) then
+         write(parallel_note, '(a,i0,a,i0,a)') "-P/--parallel ", &
+            & landscape_parallel_team, " exceeds the ", nproc, &
+            & " processors of this machine"
+         call env%warning(trim(parallel_note), source)
       end if
 
       ! The native level value of `--bhess`/`--metaopt` reaches

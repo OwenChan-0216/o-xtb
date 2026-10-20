@@ -252,8 +252,8 @@ _oxtb()
         '--norestart[restart from xtbrestart]'
         '--define[check the input and terminate]'
         '--nocellopt[keep a periodic cell fixed]'
-        '-P[number of parallel processes]:argument:'
-        '--parallel[number of parallel processes]:argument:'
+        '-P[number of OpenMP threads of the run]:argument:'
+        '--parallel[number of OpenMP threads of the run]:argument:'
         '--blas-threads[thread count of the linear algebra backend]:argument:'
     )
     _arguments -s -S "${_oxtb_specs[@]}" '*:file:_files'
