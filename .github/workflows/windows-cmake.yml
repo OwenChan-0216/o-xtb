@@ -2,9 +2,8 @@
 #
 # It is a separate workflow instead of a job of
 # `.github/workflows/fortran-build.yml` because it needs a different runner, a
-# different shell (`msys2 {0}`) and a package manager step, and because the
-# push-path file of report 175 is deliberately kept free of rows that cannot
-# gate yet.
+# different shell (`msys2 {0}`), a package manager step and a bounded test
+# subset, none of which belongs in the push-path row set of report 175.
 #
 # UCRT64, not the MINGW64 that upstream's own Windows jobs use: MSYS2
 # deprecates MINGW64 (changelog 2026-03-15), UCRT64 has been the default
@@ -24,21 +23,28 @@ env:
    BUILD_DIR: _build
 jobs:
    mingw-ucrt64-cmake-build:
-      # NOT A GATE YET.  Report 175's rule: a CI row that cannot be made green
-      # must not gate.  Nothing of this row could be executed anywhere but on a
-      # Windows runner - the tree's only Windows evidence is a mingw-w64
-      # cross-build run under wine (reports 180 and 184), and CMake-on-Windows
-      # is unproven even upstream (its Windows CI is meson).  So the first real
-      # run happens on the first push after this file lands, and it may need
-      # one iteration.
+      # A GATE since 2026-10-20 (no `continue-on-error`).  The row was born
+      # non-gating because report 175's rule is that a row which cannot be
+      # made green must not gate, and nothing of it could be certified from a
+      # Linux workstation - the tree's only Windows evidence was a mingw-w64
+      # cross-build (reports 180, 184).
       #
-      # Promotion to a gate (i.e. deleting this marker) needs: a green run on
-      # the gating branch, the bounded subset below widened to `-R landscape`,
-      # and a decision on the CRLF goldens (`test/unit/landscape_cli_check.py`
-      # compares output files of two runs of the same binary, which survives
-      # CRLF, but the `man`/completions/examples generators compare rendered
-      # text against files git has checked out with CRLF).
-      continue-on-error: true
+      # It can be certified now.  The first real run (39272958526) was red for
+      # exactly one reason: the test registrations named the built binaries
+      # `oxtb` and `o-xtb-tester` without the platform suffix, so
+      # `xtb/xtbpath-default` died at its `file(COPY)` and CTest could not find
+      # the tester at all.  `de46b60` derives both names from
+      # `CMAKE_EXECUTABLE_SUFFIX`, and on the cross-built tree - a real
+      # `oxtb.exe`, started by the Windows kernel through WSL interop - that
+      # check went 2/2 red before the fix and the bounded subset below is
+      # 11/11 after it (reports 190, 192).
+      #
+      # Still not claimed: the subset stays bounded (widening it to
+      # `-R landscape` needs its own pass - the `man`/completions/examples gates
+      # compare rendered text against files git checks out with CRLF here), and
+      # the cross tree links netlib BLAS where this job links MSYS2 OpenBLAS, so
+      # the first gating run is also the first cross-BLAS-vendor check of the
+      # 12-decimal energy assertion of `xtb/xtbpath-default`.
       runs-on: windows-latest
       steps:
          - name: Checkout code
@@ -127,8 +133,8 @@ jobs:
          # compare generated text against files git checked out with CRLF on
          # Windows; the band/IRC/scan tasks and the `--blas-threads` cases are
          # the rest of the 163 and need their own pass first.
-         # Widening it to `-R landscape` is the promotion condition recorded on
-         # the job.
+         # Widening it to `-R landscape` remains open; it is not a condition of
+         # the gating state described on the job.
          #
          # The failing-test list goes to the job summary as well as to the log
          # (reading the log needs an authenticated API call, the summary does
