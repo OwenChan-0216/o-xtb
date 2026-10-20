@@ -160,16 +160,21 @@ subroutine banner_line(iunit,line,width,indent)
 
 end subroutine banner_line
 
+!> Licence notice printed at startup, by `--license` and by `oxtb dock`.
+!>
+!> The standard LGPL wording, reproduced verbatim except for the program name:
+!> the notice names the program the user runs (`oxtb`), not the engine, so
+!> `oxtb` is the only word that may differ from the licence text.
 subroutine disclaimer(iunit)
 integer,intent(in) :: iunit
 write(iunit,'(3x,a)') &
    !< < < < < < < < < < < < < < < > > > > > > > > > > > > > > > >!
-   "xtb is free software: you can redistribute it and/or modify it under", &
+   "oxtb is free software: you can redistribute it and/or modify it under", &
    "the terms of the GNU Lesser General Public License as published by", &
    "the Free Software Foundation, either version 3 of the License, or", &
    "(at your option) any later version.", &
    "", &
-   "xtb is distributed in the hope that it will be useful,", &
+   "oxtb is distributed in the hope that it will be useful,", &
    "but WITHOUT ANY WARRANTY; without even the implied warranty of", &
    "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the", &
    "GNU Lesser General Public License for more details.", &

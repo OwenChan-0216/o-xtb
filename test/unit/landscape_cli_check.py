@@ -5754,6 +5754,25 @@ def check_banner(exe, inp, rundir):
     if "GNU Lesser General Public License" not in output:
         fail("the disclaimer is no longer printed at startup", output)
 
+    # The licence notice names the program, not the engine: it said `xtb`
+    # while the line above it said `see 'oxtb --license'`.  Only the two
+    # records that begin with the name are pinned, not the notice as a whole,
+    # and the old spelling is matched as a whole line because `xtb is free
+    # software:` is a substring of `oxtb is free software:`.
+    licence = [line.strip() for line in normal]
+    for text in ("oxtb is free software: you can redistribute it and/or "
+                 "modify it under",
+                 "oxtb is distributed in the hope that it will be useful,"):
+        if text not in licence:
+            fail("the licence notice does not name the program `oxtb`: %r is "
+                 "missing" % text, output)
+    for text in ("xtb is free software: you can redistribute it and/or "
+                 "modify it under",
+                 "xtb is distributed in the hope that it will be useful,"):
+        if text in licence:
+            fail("the licence notice still names the engine `xtb`: %r" % text,
+                 output)
+
     # The build date line carries the commit hash of the build.  The same
     # binary reports the hash in the `provenance` block of its `--ljson`
     # document, so the check compares the two instead of trusting the format;
