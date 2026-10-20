@@ -353,21 +353,28 @@ contains
       case (1:)
          do iFile = 1, nFiles - 1
             call argParser%nextFile(fname)
-            call env%warning("Input file '"//fname//"' will be ignored", source)
+            call positional_argument_error(env, fname, set%runtyp, .true., source)
          end do
          call argParser%nextFile(fname)
          ! A positional argument that is neither an option nor an existing file
-         ! - a mis-spelled or missing input file - used to be dropped without a
-         ! word while the run went ahead with whichever file the parser did
-         ! recognise.  Report it in the same voice as the ignored duplicate
-         ! above; like that one it stays a diagnostic, not a hard failure, and
-         ! the run keeps using the same input file it used before.
+         ! is reported as well.  Both cases are **errors**, not warnings (owner
+         ! ruling, `docs/_simplify-recon/197`): the run used to go ahead with
+         ! whichever file the parser recognised, so `oxtb a.xyz b.xyz` silently
+         ! read `b.xyz` and `oxtb water.xyz --lvib normal` - a forgotten level
+         ! keyword - exited 0 and computed the frequencies of the *unrelaxed*
+         ! input geometry.  A command line the program cannot honour stops the
+         ! run instead of producing a result nobody asked for; the message names
+         ! the token and, when it is a convergence level, the flag that takes it.
          do
             call argParser%nextMissingFile(missfile)
             if (.not. allocated(missfile)) exit
-            call env%warning("Input file '"//missfile//"' will be ignored", source)
+            call positional_argument_error(env, missfile, set%runtyp, .false., source)
          end do
       end select
+
+      ! The accumulated positional errors abort here, before anything is read:
+      ! a run with an unusable command line must not spend a single evaluation.
+      call env%checkpoint("Unusable positional argument on the command line")
 
       !> `argParser%nextFile` declares its output as `intent(out)`, so it
       !> deallocates the argument and only allocates it again when it finds a
@@ -5600,6 +5607,81 @@ subroutine landscape_engine_banner(iunit, runtyp, native_engine, &
    call generic_header(iunit, label//": "//name//" ("//origin//")", 49, 10)
 
 end subroutine landscape_engine_banner
+
+!> Report a positional command line argument the run cannot use.
+!>
+!> Two shapes: an additional **existing** input file (a run reads one input
+!> file, the last positional one) and a token that is neither an option nor an
+!> existing file (`normal`, `nope.xyz`).  Both were warnings until the owner
+!> ruling recorded in `docs/_simplify-recon/197`, and the warning was not
+!> harmless: `oxtb water.xyz --lvib normal` - a level keyword passed as a
+!> positional argument - exited 0 and computed the frequencies of the
+!> *unrelaxed* input geometry, because the token was dropped and the run went
+!> ahead.  The caller raises the errors in the loop that walks the arguments
+!> and aborts with `env%checkpoint` right after it, before anything is read.
+!>
+!> The message names the token, and a token that is a convergence level of the
+!> run type also names the flag that takes it: `normal` is a legal value of
+!> `--lopt-level`, and a user who passed it wants a level, not a file.
+subroutine positional_argument_error(env, token, runtyp, duplicate, source)
+   !> Computational environment for the error report
+   type(TEnvironment), intent(inout) :: env
+   !> The positional argument
+   character(len=*), intent(in) :: token
+   !> Run type of the process, for the level-keyword hint
+   integer, intent(in) :: runtyp
+   !> TRUE for an additional existing input file, FALSE for an unusable token
+   logical, intent(in) :: duplicate
+   !> Name of error producer
+   character(len=*), intent(in) :: source
+
+   !> Error text, and the level flag of the run type (empty when it has none)
+   character(len=:), allocatable :: message, flag
+
+   if (duplicate) then
+      message = "Input file '"//token//"' is not used: a run reads one "// &
+         & "input file, the last positional file of the command line"
+   else
+      message = "Input file '"//token//"' is neither an option nor an "// &
+         & "existing file, so the run cannot use it"
+      flag = landscape_level_flag(runtyp)
+      if (len(flag) > 0 .and. landscape_conv_level_known(token)) then
+         message = message//" (did you mean "//flag//" "// &
+            & landscape_lowercase(token)//"?)"
+      end if
+   end if
+   call env%error(message, source)
+
+end subroutine positional_argument_error
+
+!> Flag that takes the convergence level of a suite run type.
+!>
+!> Empty when the run type has no level keyword, which is why the hint of
+!> `positional_argument_error` stays silent for them: `--lvib` has no level
+!> flag at all, and `--opt`/`--ohess` take their level as **their own**
+!> argument (`--opt tight`), so naming a separate flag for them would point at
+!> a different run type.  Every other suite run type writes its level through
+!> the flag returned here (`src/prog/main.F90`, the `--l*-level` branches).
+pure function landscape_level_flag(runtyp) result(flag)
+   !> Run type of the process
+   integer, intent(in) :: runtyp
+   !> Spelling of the level flag, empty when the run type has none
+   character(len=:), allocatable :: flag
+
+   select case (runtyp)
+   case (p_run_lopt)
+      flag = '--lopt-level'
+   case (p_run_lscan)
+      flag = '--lscan-level'
+   case (p_run_lts)
+      flag = '--lts-level'
+   case (p_run_lirc)
+      flag = '--lirc-level'
+   case default
+      flag = ''
+   end select
+
+end function landscape_level_flag
 
 !> TRUE if the **native** numerical Hessian and frequency path of this run
 !> executes.

@@ -63,6 +63,11 @@ the set-block as present in version 5.8.2 and earlier. This implementation of
 xcontrol file or the 'FILE' used to specify the geometry and the global
 configuration file found in the `XTBPATH`.
 
+The geometry comes from exactly one positional 'FILE'. A second positional
+file, and a positional argument that is neither an option nor an existing
+file, abort the run: they used to be warned about and dropped, so a command
+line the program did not honour still produced a result (a forgotten level
+keyword, for example, left a frequency run on the unrelaxed geometry).
 OPTIONS
 -------
 

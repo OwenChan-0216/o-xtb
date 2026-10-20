@@ -68,6 +68,12 @@ the set\-block as present in version 5.8.2 and earlier. This implementation of
 \f(CRoxtb(1)\fP reads the \f(CRxcontrol(7)\fP from two of three possible sources, the local
 xcontrol file or the \fIFILE\fP used to specify the geometry and the global
 configuration file found in the \f(CRXTBPATH\fP.
+.sp
+The geometry comes from exactly one positional \fIFILE\fP. A second positional
+file, and a positional argument that is neither an option nor an existing
+file, abort the run: they used to be warned about and dropped, so a command
+line the program did not honour still produced a result (a forgotten level
+keyword, for example, left a frequency run on the unrelaxed geometry).
 .SH "OPTIONS"
 .sp
 \fB\-c, \-\-chrg, \-\-charge\fP \fIINT\fP

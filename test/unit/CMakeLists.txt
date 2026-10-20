@@ -3927,13 +3927,16 @@ add_test("xtb/landscape-parallel-value"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-parallel
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
-# A positional token that is neither an option nor an existing file (a
-# mis-spelled or missing input file) is not a `file` to the parser, so
-# `countFiles`/`nextFile` skipped it: `oxtb a.xyz nope.xyz` ran with `a.xyz`
-# and never mentioned `nope.xyz`.  It is now reported in the same voice as the
-# existing ignored-duplicate warning while the run keeps using the same input
-# file.  The check pins both directions and the unchanged single-file,
-# two-existing-file and no-existing-file cases.
+# A positional argument the program cannot use aborts the run: a token that is
+# neither an option nor an existing file (`nope.xyz`, or a level keyword like
+# `normal`) and a second existing input file.  The parser classified only
+# existing paths as files (`countFiles`/`nextFile`), so `oxtb a.xyz b.xyz` read
+# `b.xyz` and `oxtb water.xyz --lvib normal` dropped `normal` - both silently,
+# and the second one exited 0 having computed the frequencies of the unrelaxed
+# geometry.  They were warnings for one round (report 196) and are errors since
+# the owner ruling of report 197: the check pins the non-zero exit, the named
+# token, the absent result, the level-keyword hint and the single-file command
+# line that still works.
 add_test("xtb/landscape-positional-file"
   ${CMAKE_COMMAND}
   -DPYTHON=${Python3_EXECUTABLE}

@@ -993,15 +993,21 @@ def check_flag_value(exe, inp, rundir):
 
 
 def check_positional(exe, inp, rundir):
-    """A positional file the parser cannot use is reported, not dropped.
+    """A positional argument the program cannot use aborts the run.
 
     `TArgument%isFile` is `.true.` only for a path that exists, and both
-    `countFiles` and `nextFile` look at files alone, so `oxtb a.xyz nope.xyz`
-    counted one file, used `a.xyz` and never mentioned `nope.xyz`: the command
-    line asked for something the program silently ignored.  The new
-    `TArgParser%nextMissingFile` reports such a leftover positional in the
-    same voice as the existing ignored-duplicate warning, and the chosen input
-    file - and therefore the energy - is unchanged.
+    `countFiles` and `nextFile` look at files alone, so `oxtb a.xyz b.xyz`
+    counted one file and silently read `b.xyz`, and `oxtb water.xyz --lvib
+    normal` dropped `normal`.  Both were a warning (`TArgParser%nextMissingFile`
+    reports the second shape) until the owner ruling recorded in
+    `docs/_simplify-recon/197`: the warning let a run continue with a command
+    line the program had not honoured, and `--lvib normal` exited 0 having
+    computed the frequencies of the **unrelaxed** geometry.
+
+    Every case below therefore asserts the non-zero exit, the message that
+    names the offending token, and that no result was produced at all; the
+    single-file command line keeps working and a token that is a convergence
+    level of the run type gets the flag that takes it as a hint.
     """
     def do(label, args, extra=None):
         directory = os.path.join(rundir, label)
@@ -1023,47 +1029,64 @@ def check_positional(exe, inp, rundir):
             fail("no TOTAL ENERGY for '%s'" % " ".join(args), output)
         return match.group(1), output
 
+    def rejected(label, args, token, extra=None, hint=None):
+        status, output = do(label, args, extra)
+        if status == 0:
+            fail("'%s' succeeded although the run could not honour it"
+                 % " ".join(args), output)
+        if "Input file '%s'" % token not in output:
+            fail("'%s' does not name the unusable token %r"
+                 % (" ".join(args), token), output)
+        if "TOTAL ENERGY" in output:
+            fail("'%s' reported a total energy although it aborted"
+                 % " ".join(args), output)
+        if hint is not None and hint not in output:
+            fail("'%s' does not offer the actionable hint %r"
+                 % (" ".join(args), hint), output)
+        if hint is None and "did you mean" in output:
+            fail("'%s' offers a hint for a token that is not a level"
+                 % " ".join(args), output)
+        return output
+
     common = ["--gfn", "2", "--sp", "--norestart"]
 
     # (1) a single existing file: the baseline, nothing is reported
     single, output = energy("single", [inp] + common)
-    if "will be ignored" in output:
-        fail("a single input file was reported as ignored", output)
+    if "Input file '" in output:
+        fail("a single input file was reported as unusable", output)
 
-    # (2) two existing files: the first is the one ignored, the second is used
-    duplicate, output = energy(
-        "duplicate", [inp, "second.xyz"] + common, extra=["second.xyz"]
-    )
-    if "Input file '%s' will be ignored" % inp not in output:
-        fail("the ignored first file was not named", output)
-    if duplicate != single:
-        fail("two existing files gave %s, one gave %s" % (duplicate, single))
+    # (2) two existing files: the run reads one, so the first is an error and
+    #     the second is not read either - nothing is computed
+    rejected("duplicate", [inp, "second.xyz"] + common, inp,
+             extra=["second.xyz"])
 
-    # (3) an existing file and a missing second one: the missing one is
-    #     reported and the run still uses the existing file
-    missing_second, output = energy("missing-second", [inp, "nope.xyz"] + common)
-    if "Input file 'nope.xyz' will be ignored" not in output:
-        fail("the missing second file was silently dropped", output)
-    if missing_second != single:
-        fail("a missing second file changed the used input (%s != %s)"
-             % (missing_second, single))
+    # (3) an existing file and a missing second one
+    rejected("missing-second", [inp, "nope.xyz"] + common, "nope.xyz")
 
     # (4) a missing first file and an existing second one
-    missing_first, output = energy("missing-first", ["nope.xyz", inp] + common)
-    if "Input file 'nope.xyz' will be ignored" not in output:
-        fail("the missing first file was silently dropped", output)
-    if missing_first != single:
-        fail("a missing first file changed the used input (%s != %s)"
-             % (missing_first, single))
+    rejected("missing-first", ["nope.xyz", inp] + common, "nope.xyz")
 
-    # (5) only a missing file: the existing hard error stays, nothing runs
+    # (5) only a missing file: the input-file error stays, nothing runs
     status, output = do("only-missing", ["nope.xyz"] + common)
     if status == 0:
         fail("a run without an existing input file succeeded", output)
     if "No input file given" not in output:
         fail("only a missing file did not report the missing input", output)
 
-    print("positional files: missing and ignored inputs reported, run unchanged")
+    # (6) the dangerous case of the review: a level keyword passed as a
+    #     positional argument used to exit 0 and compute the frequencies of
+    #     the unrelaxed input geometry (`rejected` also pins that no result
+    #     was reported at all)
+    rejected("vib-level", [inp, "--gfn", "2", "--lvib", "normal",
+                            "--norestart"], "normal")
+
+    # (7) the hint: `normal` is a legal value of the level flag of `--lopt`
+    rejected("lopt-level", [inp, "--gfn", "2", "--lopt", "normal",
+                             "--norestart"], "normal",
+             hint="did you mean --lopt-level normal?")
+
+    print("positional arguments: an unusable one aborts the run (exit non "
+          "zero, token named, no result), the level keyword gets its flag")
 
 
 def check_color(exe, inp, rundir):
