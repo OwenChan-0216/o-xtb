@@ -128,6 +128,20 @@ module xtb_prog_main
 
    public :: xtbMain
 
+#ifdef _WIN32
+   !> Switches the attached console to UTF-8 output, see
+   !> `src/type/win32_console.c`: the labels below are UTF-8 (`·`, `²`, `α`,
+   !> `⁻¹`), but a Windows console decodes them with its own code page, which
+   !> misreads them on a GBK/CP936 system.  `_WIN32` is supplied by CMake's
+   !> Windows block (gfortran's Fortran preprocessor defines no target macro),
+   !> so on every other target no `xtb_console_utf8` symbol is referenced, and
+   !> `win32_console.c` is not compiled either.
+   interface
+      subroutine c_console_utf8() bind(c, name='xtb_console_utf8')
+      end subroutine c_console_utf8
+   end interface
+#endif
+
 contains
 
    subroutine xtbMain(env, argParser)
@@ -271,6 +285,16 @@ contains
       integer :: nproc
 
       type(TPrintTopo) :: printTopo ! gfnff topology printout list
+
+      ! A Windows console decodes this program's UTF-8 labels with its own
+      ! output code page (GBK/CP936 on a Chinese-locale system, which turns
+      ! `·` into 路); set it to UTF-8 before anything is printed.  The call is
+      ! absent on every other target, and its result is ignored: a console
+      ! nicety must never fail a run.  See
+      ! `docs/_simplify-recon/194-windows-encoding.md`.
+#ifdef _WIN32
+      call c_console_utf8()
+#endif
 
       xenv%home = env%xtbhome
       xenv%path = env%xtbpath

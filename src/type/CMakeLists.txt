@@ -56,6 +56,12 @@ list(APPEND srcs
 # (`GetModuleFileNameA`), compiled only for a Windows target.
 if(WIN32)
   list(APPEND srcs "${dir}/win32_readlink.c")
+  # The UTF-8 labels this program prints need the console output code page
+  # to say so (`SetConsoleOutputCP(CP_UTF8)`).  The caller is
+  # `src/prog/main.F90`, guarded by the `_WIN32` that the Windows block of
+  # the top-level `CMakeLists.txt` supplies, so nothing outside a Windows
+  # target references this symbol.
+  list(APPEND srcs "${dir}/win32_console.c")
 endif()
 
 set(srcs ${srcs} PARENT_SCOPE)
