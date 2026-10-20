@@ -234,7 +234,8 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
    ctrl%etemp = settings%etemp
    call new_landscape_engine(engine, ctrl)
    call new_landscape_hessian_provider(env, settings%hessian_source, hp, &
-      & sccacc=settings%engine%hess_acc, filename=settings%hessian_file)
+      & sccacc=settings%engine%hess_acc, filename=settings%hessian_file, &
+      & printlevel=settings%printlevel)
    if (.not. allocated(hp)) then
       result%message = "IRC failed"
       call engine%destroy()

@@ -527,6 +527,13 @@ module xtb_landscape_settings
       !> evaluate 6N+1 single points on **every** RFO macro step.  With the
       !> cheap `model` source a smaller value would be affordable, but the
       !> default (`numerical`) must stay tractable.
+      !>
+      !> Set from the command line by `--lopt-recalc N` (`0` disables the
+      !> rebuild, an interval above the step budget simply never fires, a
+      !> negative value is reported and behaves like 0); the saddle search and
+      !> the reaction path carry the same knob as `--lts-recalc` and
+      !> `--lirc-recalc` on their own settings objects, which have their own
+      !> defaults (1 and -1) because their cost per step differs.
       integer :: recalc = 5
       !> Trust radius shrink factor for rejected steps
       real(wp) :: eta_shrink = 0.75_wp

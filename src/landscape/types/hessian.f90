@@ -116,6 +116,14 @@ module xtb_landscape_hessian
       !> (0 for providers that do not displace the geometry); the engine adds
       !> it to its cost counter so the reported cost is not underestimated.
       integer :: n_eval = 0
+      !> Print level of the progress lines of the provider: 0 silences them,
+      !> anything above prints one line **before** an expensive differentiation
+      !> starts.  It is set from the task settings by
+      !> `new_landscape_hessian_provider`, so the same gate that echoes the
+      !> steps of a run also explains the pause of a Hessian build (the first
+      !> one and every periodic rebuild).  Providers that cost no evaluation
+      !> (`model`, `file`) print nothing at all.
+      integer :: printlevel = 0
    contains
       !> Compute a dense, symmetric Hessian (hartree/bohr^2)
       procedure(hessian_compute), deferred :: compute
@@ -157,6 +165,11 @@ module xtb_landscape_hessian
    type, extends(landscape_hessian_provider) :: landscape_numerical_hessian_provider
       !> SCC accuracy used while building the Hessian (explicit parameter)
       real(wp) :: sccacc = 0.3_wp
+      !> Number of builds this provider instance has started; the progress
+      !> line uses it to say `computing` for the first build and `rebuilding`
+      !> for the periodic rebuild of the optimiser, the saddle search and the
+      !> reaction path.
+      integer :: n_builds = 0
    contains
       !> Central difference Hessian
       procedure :: compute => numerical_hessian_compute
@@ -216,7 +229,8 @@ end function landscape_hessian_source_known
 !> (there is no default provider on this path, a silent fallback would make
 !> the configured `hessian_source` a lie).  The name is matched case
 !> insensitively, like `landscape_hessian_source_known`.
-subroutine new_landscape_hessian_provider(env, source, provider, sccacc, filename)
+subroutine new_landscape_hessian_provider(env, source, provider, sccacc, filename, &
+   & printlevel)
    character(len=*), parameter :: source_name = 'new_landscape_hessian_provider'
    !> Computational environment
    type(TEnvironment), intent(inout) :: env
@@ -228,6 +242,8 @@ subroutine new_landscape_hessian_provider(env, source, provider, sccacc, filenam
    real(wp), intent(in), optional :: sccacc
    !> File of the `file` source; required for that source, unused otherwise
    character(len=*), intent(in), optional :: filename
+   !> Print level of the provider progress lines, 0 (silent) when absent
+   integer, intent(in), optional :: printlevel
 
    real(wp) :: scc_accuracy
 
@@ -267,6 +283,10 @@ subroutine new_landscape_hessian_provider(env, source, provider, sccacc, filenam
    case default
       call env%error("unknown hessian source: "//trim(source), source_name)
    end select
+
+   if (present(printlevel) .and. allocated(provider)) then
+      provider%printlevel = printlevel
+   end if
 
 end subroutine new_landscape_hessian_provider
 
@@ -330,6 +350,24 @@ subroutine numerical_hessian_compute(self, env, mol, chk, calc, hess, step, odlr
    calc%accuracy = self%sccacc
    egap = 0.0_wp
    sigma = 0.0_wp
+
+   ! Announce the pause before it starts: the loop below is 2 displaced single
+   ! points per Cartesian component, i.e. 6N evaluations, all of them at
+   ! `displacement_printlevel` and therefore silent.  The number is the exact
+   ! cost of this implementation, not a guessed constant, and the periodic
+   ! rebuild of a caller announces itself the same way (`n_builds > 0`).
+   if (self%printlevel > 0) then
+      if (self%n_builds == 0) then
+         write(env%unit, '(1x,a,a,a,i0,a,es9.2,a)') "computing the ", &
+            & self%name, " Hessian: ", 6*n, &
+            & " displaced single points (6N, step ", step, " bohr)"
+      else
+         write(env%unit, '(1x,a,a,a,i0,a,es9.2,a)') "rebuilding the ", &
+            & self%name, " Hessian: ", 6*n, &
+            & " displaced single points (6N, step ", step, " bohr)"
+      end if
+   end if
+   self%n_builds = self%n_builds + 1
 
    do iat = 1, n
       do ic = 1, 3

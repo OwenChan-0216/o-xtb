@@ -4102,6 +4102,192 @@ def check_scan_knobs(exe, inp, rundir):
             fail("--lscan-%s did not change the scan" % label)
 
 
+#: The progress line the numerical Hessian provider prints before it starts
+#: its displaced single points (`src/landscape/types/hessian.f90`).
+HESS_PROGRESS_LINE = re.compile(
+    r"^ (computing|rebuilding) the numerical Hessian: (\d+) displaced "
+    r"single points \(6N, step +5[.]00E-03 bohr\)$")
+#: One row of the live per-step table of a minimisation
+#: (`landscape_print_step`, `src/landscape/types/results.f90`): iteration
+#: number, the 12-decimal energy and the 4-decimal dE column.  The
+#: `convergence history` table printed after the loop has a `es15.6` gnorm in
+#: that column instead, so the two tables cannot be confused.
+HESS_STEP_LINE = re.compile(r"^ +(\d{1,6}) +-?\d+[.]\d{12} +-?\d+[.]\d{4} ")
+
+
+def hess_events(output):
+    """The Hessian progress lines and the macro steps of a minimisation.
+
+    Returns the events between the settings block and the `converged:`
+    summary in output order, as `("build", "computing"|"rebuilding")` and
+    `("step", n)`.  The cut at the summary drops the post-loop
+    `convergence history` table, which repeats the step numbers.
+    """
+    stop = re.search(r"(?m)^ converged:", output)
+    text = output[:stop.start()] if stop else output
+    events = []
+    for line in text.splitlines():
+        build = HESS_PROGRESS_LINE.match(line)
+        if build is not None:
+            events.append(("build", build.group(1)))
+            continue
+        step = HESS_STEP_LINE.match(line)
+        if step is not None:
+            events.append(("step", int(step.group(1))))
+    return events
+
+
+def hess_builds(output):
+    """The progress lines of a run, in order, as `(verb, n_eval)` pairs."""
+    return [(match.group(1), int(match.group(2)))
+            for match in (HESS_PROGRESS_LINE.match(line)
+                          for line in output.splitlines())
+            if match is not None]
+
+
+def check_hess_progress(exe, inp, rundir, stretch):
+    """The Hessian build explains its pause before the pause happens.
+
+    Mirrors `xtb/landscape-hess-progress`.  The numerical provider is 6N
+    displaced single points at `printlevel = -1`, so the run used to go quiet
+    for the whole build (`docs/_simplify-recon/201`); the line names the
+    source and the exact number of evaluations the provider will make, it is
+    printed **before** the first step row, and a periodic rebuild announces
+    itself the same way.  A `model` Hessian costs no evaluation and therefore
+    prints nothing at all.
+    """
+    common = ["--gfn", "2", "--norestart", "--lopt", "--lopt-engine", "rfo"]
+    status, output, _ = knobs_run(exe, stretch, common, rundir,
+                                  "hessprogress-default")
+    if status != 0:
+        fail("the default RFO minimisation failed with status %d" % status,
+             output)
+    builds = hess_builds(output)
+    if [verb for verb, _ in builds] != ["computing", "rebuilding"]:
+        fail("the run did not announce its Hessian builds (%r)" % (builds,),
+             output)
+    if any(n_eval != 18 for _, n_eval in builds):
+        fail("the progress line does not name the 6N = 18 evaluations the "
+             "provider makes (%r)" % (builds,), output)
+    events = hess_events(output)
+    if events[:1] != [("build", "computing")]:
+        fail("the progress line is not the first event after the settings "
+             "block (%r)" % (events[:3],), output)
+    try:
+        rebuild = events.index(("build", "rebuilding"))
+    except ValueError:
+        fail("the rebuild announced no progress line (%r)" % (events,), output)
+    before = [event for event in events[:rebuild] if event[0] == "step"]
+    after = [event for event in events[rebuild + 1:] if event[0] == "step"]
+    if not before or not after:
+        fail("the run has no step rows around the rebuild (%r)" % (events,),
+             output)
+    if before[-1] != ("step", 5) or after[0] != ("step", 6):
+        fail("the rebuild line does not sit between step 5 and step 6 (%r)"
+             % (events,), output)
+
+    status, output, _ = knobs_run(
+        exe, stretch, common + ["--lopt-hessian", "model"], rundir,
+        "hessprogress-model")
+    if status != 0:
+        fail("the model Hessian run failed with status %d" % status, output)
+    if hess_builds(output):
+        fail("a model Hessian (0 evaluations) printed a progress line",
+             output)
+
+
+def check_opt_recalc(exe, inp, rundir, stretch):
+    """`--lopt-recalc` sets the Hessian rebuild interval of the RFO step.
+
+    Mirrors `xtb/landscape-opt-recalc`.  The field was fixed at 5 with no
+    flag reaching it (`src/landscape/types/settings.f90`); the check pins the
+    semantics: 0 disables the rebuild (one Hessian, the step-6 pause is
+    gone), 2 rebuilds four times, the explicit 5 is the default (byte
+    identical geometry), and a value that is not a non-negative integer is
+    reported (fatal with `--strict`).
+    """
+    common = ["--gfn", "2", "--norestart", "--lopt", "--lopt-engine", "rfo"]
+
+    def interval(value):
+        label = "optrecalc-%s" % value if value else "optrecalc-default"
+        extra = ["--lopt-recalc", value] if value else []
+        status, output, workdir = knobs_run(exe, stretch, common + extra,
+                                           rundir, label)
+        if status != 0:
+            fail("--lopt-recalc %s failed with status %d"
+                 % (value or "(default)", status), output)
+        if not re.search(r"Hessian rebuild interval: +%s steps"
+                         % (value if value else "5"), output):
+            fail("--lopt-recalc %s did not reach the minimisation"
+                 % (value or "(default)"), output)
+        return output, workdir
+
+    # Measured on the stretched water: interval 0 converges in 12 steps after
+    # one Hessian, the default interval 5 in 10 steps after two (the rebuild
+    # at step 6), interval 2 in 5 steps after three (rebuilds at steps 2 and
+    # 4).  The shorter trajectory of the tighter interval is the reason the
+    # counts are not simply `steps / interval + 1`.
+    for value, expected_builds, expected_hessians in (("0", 1, 1),
+                                                      ("5", 2, 2),
+                                                      ("2", 3, 3)):
+        output, workdir = interval(value)
+        verbs = [verb for verb, _ in hess_builds(output)]
+        if len(verbs) != expected_builds:
+            fail("--lopt-recalc %s announced %d builds, expected %d (%r)"
+                 % (value, len(verbs), expected_builds, verbs), output)
+        reported = re.search(r"landscape engine: Hessians +(\d+)\s*$",
+                             output, re.M)
+        if reported is None or int(reported.group(1)) != expected_hessians:
+            fail("--lopt-recalc %s reported %r Hessian builds, expected %d"
+                 % (value, reported.group(1) if reported else None,
+                    expected_hessians), output)
+        if value == "0":
+            if not re.search(r"(?m)^ steps: +12\s*$", output):
+                fail("--lopt-recalc 0 did not change the trajectory", output)
+            if "rebuilding the numerical Hessian" in output:
+                fail("--lopt-recalc 0 still rebuilt the Hessian", output)
+        elif value == "5":
+            if not re.search(r"(?m)^ steps: +10\s*$", output):
+                fail("the default interval (5) does not stop after 10 steps",
+                     output)
+            if "rebuilding the numerical Hessian" not in output:
+                fail("--lopt-recalc 5 did not rebuild the Hessian", output)
+
+    # An explicit 5 is the default: the same number of builds and the same
+    # geometry.  The two runs are compared by file, because stdout carries
+    # machine dependent timing lines.
+    _, default_dir = interval("")
+    _, five_dir = interval("5")
+    if knobs_file(default_dir, "xtbopt.xyz") != knobs_file(five_dir,
+                                                           "xtbopt.xyz"):
+        fail("--lopt-recalc 5 is not the default interval")
+
+    status, output, _ = knobs_run(
+        exe, stretch, common + ["--lopt-recalc", "x"], rundir,
+        "optrecalc-invalid")
+    if status == 0:
+        fail("--lopt-recalc x was accepted", output)
+    if "The --lopt-recalc flag requires an integer" not in output:
+        fail("the unparsable value was not reported", output)
+
+    negative = common + ["--lopt-recalc", "-3"]
+    status, output, _ = knobs_run(exe, stretch, negative, rundir,
+                                  "optrecalc-negative")
+    if status != 0:
+        fail("--lopt-recalc -3 aborted without --strict (status %d)" % status,
+             output)
+    if "[WARNING]" not in output:
+        fail("--lopt-recalc -3 was not reported in lax mode", output)
+    if "--lopt-recalc needs 0 (no rebuild)" not in output:
+        fail("the lax report does not name the flag", output)
+    status, output, _ = knobs_run(exe, stretch, negative + ["--strict"],
+                                  rundir, "optrecalc-negative-strict")
+    if status == 0:
+        fail("--lopt-recalc -3 did not abort with --strict", output)
+    if "--lopt-recalc needs 0 (no rebuild)" not in output:
+        fail("the --strict report does not name the flag", output)
+
+
 def check_hess_step_alias(exe, inp, rundir, second):
     """The canonical `--l*-hess-step` names and their older spellings.
 
@@ -6122,8 +6308,8 @@ def check_help_topic(exe, inp, rundir, main_src):
 
     with open(main_src) as handle:
         implemented = implemented_flags(handle.read())
-    if len(implemented) != 248:
-        fail("the parser implements %d spellings, expected 248"
+    if len(implemented) != 249:
+        fail("the parser implements %d spellings, expected 249"
              % len(implemented))
     # `--siman` and `--gmd` are parsed but are not registered run types; they
     # are deliberately absent from the help table (see the allowlist in
@@ -6394,6 +6580,14 @@ def main():
         check_native_opt_symbols(exe, inp, rundir)
     elif mode == "optknobs":
         check_opt_knobs(exe, inp, rundir)
+    elif mode == "hessprogress":
+        if len(rest) < 1:
+            fail("the hessprogress mode needs the stretched water fixture")
+        check_hess_progress(exe, inp, rundir, rest[0])
+    elif mode == "optrecalc":
+        if len(rest) < 1:
+            fail("the optrecalc mode needs the stretched water fixture")
+        check_opt_recalc(exe, inp, rundir, rest[0])
     elif mode == "scanknobs":
         check_scan_knobs(exe, inp, rundir)
     elif mode == "hessstepalias":

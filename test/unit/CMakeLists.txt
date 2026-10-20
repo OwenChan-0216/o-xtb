@@ -4029,6 +4029,34 @@ add_test("xtb/landscape-opt-knobs"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-opt-knobs
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# `xtb/landscape-hess-progress`: the numerical Hessian is 6N displaced single
+# points at `printlevel = -1`, so a run used to go quiet for the whole build
+# (`docs/_simplify-recon/201`).  The provider now prints one line **before**
+# the displacements start, naming the source and the exact number of
+# evaluations it will make; a periodic rebuild announces itself the same way
+# and a model Hessian (0 evaluations) prints nothing.  The stretched water
+# needs 10 RFO steps with the default interval, so one rebuild is in the run.
+add_test("xtb/landscape-hess-progress"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=hessprogress;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-hess-progress;${LANDSCAPE-H2O-STRETCH}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-hess-progress
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# `xtb/landscape-opt-recalc`: `--lopt-recalc` is the flag of the Hessian
+# rebuild interval the field did not have (it was fixed at 5).  0 disables the
+# rebuild (one Hessian, the step-6 pause is gone), 2 rebuilds four times, an
+# explicit 5 is byte identical to the default, and a value that is not a
+# non-negative integer is reported - fatal with `--strict`.
+add_test("xtb/landscape-opt-recalc"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=optrecalc;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-opt-recalc;${LANDSCAPE-H2O-STRETCH}"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-opt-recalc
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # `xtb/landscape-scan-knobs`: `--lscan-hess-step` and `--lscan-sccacc` change
 # the byte image of `xtbscan.log` of an RFO relaxation.
 add_test("xtb/landscape-scan-knobs"
@@ -4840,6 +4868,8 @@ set_tests_properties(
   "xtb/landscape-method-native"
   "xtb/landscape-method-table"
   "xtb/landscape-opt-knobs"
+  "xtb/landscape-hess-progress"
+  "xtb/landscape-opt-recalc"
   "xtb/landscape-scan-knobs"
   "xtb/landscape-hess-step-alias"
   "xtb/landscape-restart-knobs"

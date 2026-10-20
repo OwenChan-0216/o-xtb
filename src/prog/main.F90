@@ -1923,6 +1923,17 @@ contains
       !> reported in the parser tail, where `nproc` is known
       integer :: landscape_parallel_team
 
+      !> `--lopt-recalc N` was given, and the value it carried.  The report of a
+      !> negative value happens in the parser tail, where the effect of
+      !> `--strict` is known - the same lax/strict shape as the `-P` value
+      !> above - so the value has to survive the flag loop.
+      logical :: lopt_recalc_given
+      integer :: lopt_recalc_value
+
+      !> Report text of the `--lopt-recalc` value diagnostic (the internal
+      !> write needs a fixed length buffer, like `parallel_note`)
+      character(len=128) :: recalc_note
+
       !> Report text of the `-P` over-subscription warning (the internal write
       !> needs a fixed length buffer; `message` is allocatable and cannot be
       !> written to before it is allocated)
@@ -1985,6 +1996,8 @@ contains
       lts_max_steps_given = .false.
       lirc_max_steps_given = .false.
       acc_was_set = .false.
+      lopt_recalc_given = .false.
+      lopt_recalc_value = 0
       landscape_parallel_team = 0
       nproc = 0
 
@@ -2859,6 +2872,29 @@ contains
                end if
             else
                call env%error("The --lopt-max-steps flag requires an integer", source)
+            end if
+
+         case ('--lopt-recalc')
+            ! Hessian rebuild interval of the RFO step.  The field existed
+            ! with a fixed default of 5 and no flag reached it; the saddle
+            ! (`--lts-recalc`) and reaction path (`--lirc-recalc`) spellings
+            ! are the same knob of their own settings object.  `0` disables
+            ! the rebuild and an interval above the step budget simply never
+            ! fires; a negative value is reported in the tail, where the
+            ! effect of `--strict` is known.
+            call select_runtyp(env, 'lopt', '--lopt-recalc', selected_runtyp, selected_runtyp_flag)
+            call args%nextArg(sec)
+            if (allocated(sec)) then
+               read(sec, *, iostat=idum) idum2
+               if (idum == 0) then
+                  lset%recalc = idum2
+                  lopt_recalc_value = idum2
+                  lopt_recalc_given = .true.
+               else
+                  call env%error("The --lopt-recalc flag requires an integer", source)
+               end if
+            else
+               call env%error("The --lopt-recalc flag requires an integer", source)
             end if
 
          case ('--lopt-hess-step')
@@ -4690,6 +4726,24 @@ contains
             & landscape_parallel_team, " exceeds the ", nproc, &
             & " processors of this machine"
          call env%warning(trim(parallel_note), source)
+      end if
+
+      ! `--lopt-recalc N` rebuilds the exact Hessian every N RFO steps, `0`
+      ! disables the rebuild.  A negative value would not be a second spelling
+      ! of "never": the step loop tests `recalc >= 1`, so it would degrade to 0
+      ! without a word.  It is reported here - the decision needs the effect of
+      ! `--strict`, which may stand after the flag - and the value is applied as
+      ! given (the run rebuilds no Hessian), exactly like the `-P` value above
+      ! rather than being silently clamped.
+      if (lopt_recalc_given .and. lopt_recalc_value < 0) then
+         write(recalc_note, '(a,i0,a)') "--lopt-recalc needs 0 (no rebuild) "//&
+            & "or a positive number of steps, not ", lopt_recalc_value, &
+            & "; the run rebuilds no Hessian"
+         if (strict) then
+            call env%error(trim(recalc_note), source)
+         else
+            call env%warning(trim(recalc_note), source)
+         end if
       end if
 
       ! The native level value of `--bhess`/`--metaopt` reaches
