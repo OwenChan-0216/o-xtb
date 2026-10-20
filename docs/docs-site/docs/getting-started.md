@@ -31,6 +31,63 @@ cmake --build build -j
 
 The executable is `build/oxtb`.
 
+### Windows (MSYS2)
+
+`install.sh` is a Unix shell script, so a Windows build is configured directly.
+The supported environment is **MSYS2 UCRT64** (MSYS2 documents MINGW64 as
+deprecated), and its shell provides the whole toolchain as packages:
+
+```bash
+pacman -S mingw-w64-ucrt-x86_64-gcc-fortran mingw-w64-ucrt-x86_64-openblas \
+          mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja \
+          mingw-w64-ucrt-x86_64-git mingw-w64-ucrt-x86_64-python
+```
+
+OpenBLAS is LAPACK complete, so the separate `lapack` package is not needed and
+the math library lookup does not depend on search order.  `python` is part of
+the line because `WITH_TESTS` defaults to `ON` and the test target needs a
+Python 3 interpreter; `git` is what fetches `mctc-lib` and `test-drive`, which
+MSYS2 does not package.
+
+From the repository root, in the same shell:
+
+```bash
+cmake -S . -B build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG" \
+      -DWITH_TBLITE=OFF -DWITH_CPCMX=OFF -DWITH_OBJECT=OFF
+cmake --build build -j
+```
+
+The executable is `build/oxtb.exe`.
+
+!!! note "The Windows flags are in the build system, not on the command line"
+    Do not pass the Windows specifics by hand.  The `if(WIN32)` blocks of
+    `CMakeLists.txt` already supply `_WIN32` (gfortran's preprocessor defines no
+    target macro at all), the static OpenMP archives, `-static` and the larger
+    stack.  The `windows-latest` CI job runs exactly this flow; it additionally
+    passes `-DBLA_VENDOR=OpenBLAS` and `-DWITH_TESTS=ON
+    -DTEST_DRIVE_BUILD_TESTING=OFF` to build and run a bounded test subset.
+
+What a Windows build does differently:
+
+- `WITH_OBJECT=OFF` is required: a `-static` executable cannot host the shared
+  library, so the build has no C API and no `liboxtb.dll`; upstream's Windows
+  build has the same limitation.
+- No parameter files are needed: GFN1-xTB, GFN2-xTB, GFN-FF and, since 0.3.0,
+  GFN0-xTB are compiled into the binary.
+- The program sets its own console output code page to UTF-8 at startup, so a
+  Chinese-locale console shows `·`, `²`, `Δ` and `⁻¹` correctly without `chcp`.
+  Redirected output is not translated and keeps the raw UTF-8 bytes, and the
+  console window stays on UTF-8 after the run.
+- `--blas-threads` is inert in a static build and says so; use
+  `OPENBLAS_NUM_THREADS` instead.
+- The man pages and the shell completions are Unix install steps and do not
+  apply.
+- Status: this is the path CI builds on `windows-latest` with MSYS2/UCRT64, and
+  a cross-built `oxtb.exe` was smoke-tested on a real Windows machine (the four
+  `--gfn` methods, `--hess` and `--lopt`).  Nothing beyond that is claimed.
+
 ## One-command static release
 
 The supported install is the idempotent `install.sh`, which runs the whole
