@@ -142,17 +142,12 @@ subroutine landscape_optimize(env, mol, chk, calc, settings, result)
       if (len(unused_hess) > 0) then
          write(env%unit, '(1x,a,a,a)') "(not used: ", unused_hess, ")"
       end if
-      ! D3 of the CLI redesign section 8.3: the native `--opt` runs ANCopt,
-      ! this task defaults to lbfgs, so the active engine is echoed.  The
-      ! notice is printed only when the engine was not named on the command
-      ! line (`--lopt-engine`), which is what `algorithm_was_set` records.
-      if (.not. settings%algorithm_was_set) then
-         write(env%unit, '(a,a,a)') "[NOTICE] --lopt-engine default ", &
-            & trim(landscape_opt_algorithm_name(settings%algorithm)), &
-            & " (the native --opt runs ANCopt)"
-         write(env%unit, '(a)') &
-            & "         pass --lopt-engine <name> to choose another minimiser"
-      end if
+      ! D3 of the CLI redesign section 8.3 asked for the active engine to be
+      ! echoed because the native `--opt` runs ANCopt while this task defaults
+      ! to lbfgs.  That echo is the startup engine banner now
+      ! (`xtb_prog_main::landscape_engine_banner`): it prints before the first
+      ! geometry is evaluated, covers every engine-bearing run type and says
+      ! `(default)`/`(explicit)` instead of only speaking up for the default.
    end if
 
    ! The convergence sentinels of a previous run are removed at task open,

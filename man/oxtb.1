@@ -609,8 +609,10 @@ case insensitively.
 .RS 4
 minimisation algorithm of the suite, one of \f(CRsd\fP, \f(CRcg\fP, \f(CRlbfgs\fP (default),
 \f(CRbfgs\fP, \f(CRdiis\fP or \f(CRrfo\fP. Alias of \f(CR\-\-method\fP; the name is not
-case\-sensitive. Because the native \f(CR\-\-opt\fP runs \f(CRancopt(3)\fP, the active
-default engine is echoed as a notice unless the flag is given.
+case\-sensitive. Because the native \f(CR\-\-opt\fP runs \f(CRancopt(3)\fP, the engine of
+the run is announced in one boxed line before the first geometry is
+evaluated, marked \f(CR(default)\fP for the builtin default and \f(CR(explicit)\fP for
+a name given on the command line.
 .RE
 .sp
 \fB\-\-lopt\-level\fP \fILEVEL\fP
@@ -1116,8 +1118,8 @@ also honoured by the \f(CRgsm\fP task name.
 integration method, one of \f(CRhpc\fP (Hessian based predictor\-corrector,
 default), \f(CRlqa\fP (Page\-McIver analytic quadratic propagation, the cheapest),
 \f(CReulerpc\fP (Euler predictor\-corrector) or \f(CRgs\fP (Gonzalez\-Schlegel sphere
-relaxation). Alias of \f(CR\-\-method\fP; not case\-sensitive. The active default is
-echoed as a notice unless the flag is given.
+relaxation). Alias of \f(CR\-\-method\fP; not case\-sensitive. The integrator is
+announced in the startup boxed line, marked \f(CR(default)\fP or \f(CR(explicit)\fP.
 .RE
 .sp
 \fB\-\-lirc\-step\fP \fIVALUE\fP

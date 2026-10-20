@@ -200,17 +200,12 @@ subroutine landscape_irc(env, mol, chk, calc, settings, result)
       end if
       write(env%unit, '(1x,a,f12.3,a)') "electronic temperature:   ", &
          & settings%etemp, " K (frozen for the whole run)"
-      ! D2 of the CLI redesign section 8.3: the default integrator is `hpc`,
-      ! not the `gs` of the older documentation (behaviour change of the M6
-      ! validation round), so the active default is echoed.  The notice is
-      ! suppressed when `--lirc-method` named the integrator.
-      if (.not. settings%method_was_set) then
-         write(env%unit, '(a,a,a)') "[NOTICE] --lirc-method default ", &
-            & trim(landscape_irc_method_name(settings%method)), &
-            & " (the M6 validation round changed it from gs)"
-         write(env%unit, '(a)') &
-            & "         pass --lirc-method <name> to choose another integrator"
-      end if
+      ! D2 of the CLI redesign section 8.3 asked for the active default
+      ! integrator to be echoed, because `hpc` is not the `gs` of the older
+      ! documentation (behaviour change of the M6 validation round).  That echo
+      ! is the startup engine banner now
+      ! (`xtb_prog_main::landscape_engine_banner`): it names the integrator of
+      ! every reaction path run and says `(default)`/`(explicit)`.
    end if
 
    ! `$fix` is not implemented for the reaction path: the path advance happens

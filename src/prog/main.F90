@@ -668,6 +668,14 @@ contains
       ltset%input_file = fname
       lircset%input_file = fname
 
+      ! Announce the engine that will drive the run.  It has to happen here:
+      ! after every flag was parsed (so a default and an explicit engine are
+      ! known) and before the first geometry is evaluated - the 2D => 3D
+      ! converter below is already one, and the always-done single point is
+      ! another.  The per-task echo this replaces ran after that single point.
+      call landscape_engine_banner(env%unit, set%runtyp, &
+         & landscape_native_engine, lset, lsset, ltset, lircset)
+
       ! ------------------------------------------------------------------------
       ! 2D => 3D STRUCTURE CONVERTER
       ! ------------------------------------------------------------------------
@@ -5252,6 +5260,37 @@ pure function landscape_native_engine_from_name(name) result(engine)
 
 end function landscape_native_engine_from_name
 
+!> Lower case name of a native optimizer engine identifier.
+!>
+!> The spelling is one of the `--method` names `landscape_native_engine_from_name`
+!> accepts (`ancopt`/`rf`, `lancopt`/`l-ancopt`, `fire`/`inertial`,
+!> `pbc_lbfgs`), so the engine the banner announces is an engine the user can
+!> ask for.  `ancopt` is the canonical spelling of `p_engine_rf`, `lancopt` of
+!> `p_engine_lbfgs`: the bare `lbfgs` belongs to the suite minimiser.
+!>
+!> An identifier outside `p_engine_*` yields `unknown`; the only caller passes
+!> the value `--method` resolved.
+pure function landscape_native_engine_name(engine) result(name)
+   !> Native engine identifier
+   integer, intent(in) :: engine
+   !> Lower case engine name
+   character(len=:), allocatable :: name
+
+   select case (engine)
+   case (p_engine_rf)
+      name = 'ancopt'
+   case (p_engine_lbfgs)
+      name = 'lancopt'
+   case (p_engine_inertial)
+      name = 'fire'
+   case (p_engine_pbc_lbfgs)
+      name = 'pbc_lbfgs'
+   case default
+      name = 'unknown'
+   end select
+
+end function landscape_native_engine_name
+
 !> Suite convergence level an upstream `--opt <LEVEL>` keyword maps to.
 !>
 !> The upstream ANCopt level and the suite level are the same axis with eight
@@ -5466,6 +5505,101 @@ pure function landscape_ohess_chain(runtyp, native_engine) result(yes)
    yes = runtyp == p_run_ohess .and. native_engine == 0
 
 end function landscape_ohess_chain
+
+!> Announce the engine of the run in one framed box, before any geometry is
+!> evaluated.
+!>
+!> The engine used to be echoed by each task's print block, which runs after
+!> the always-done single point: the run was already evaluating the surface
+!> under an engine the user had not seen named, and two of the four echoes
+!> (`--lopt-engine`, `--lirc-method`) only existed as `[NOTICE]` lines for the
+!> **builtin default**, so an explicitly named engine was silent.  This is the
+!> single announcement instead: one box, printed for every run type that has an
+!> engine, whether the engine is the builtin default or was named on the
+!> command line - the trailing `(default)`/`(explicit)` says which, so the two
+!> cases are never confused.
+!>
+!> The label names the choice the run really makes: the minimisation engine of
+!> `--lopt`/`--opt`/`--ohess` and of the relaxed scan's inner loop, the saddle
+!> search of `--lts`, the integrator of `--lirc`, and the native `--method`
+!> engine of `--opt`/`--ohess`.  A run type with no engine prints nothing: a
+!> single point, a Hessian, MD (`--sp`, `--hess`, `--md`, ...), `--lvib` (it
+!> has a Hessian backend, not an engine) and a rigid scan (it constructs the
+!> geometry instead of minimising it).
+!>
+!> The box goes to `iunit`, which is the standard output of the run: the two
+!> existing wordings are forbidden in a native run (no `landscape: ` in
+!> `xtb/landscape-method-native`, no `[NOTICE]` in
+!> `xtb/landscape-opt-native-exit`), and `generic_header` contains neither.
+subroutine landscape_engine_banner(iunit, runtyp, native_engine, &
+      & optset, scanset, tsset, ircset)
+   !> I/O unit
+   integer, intent(in) :: iunit
+   !> Run type of the process
+   integer, intent(in) :: runtyp
+   !> Native ANCopt engine selected by `--method`, 0 when the suite runs
+   integer, intent(in) :: native_engine
+   !> Settings of the minimisation task (the redeployed `--opt`/`--ohess` too)
+   type(landscape_opt_settings), intent(in) :: optset
+   !> Settings of the scan task
+   type(landscape_scan_settings), intent(in) :: scanset
+   !> Settings of the saddle search task
+   type(landscape_ts_settings), intent(in) :: tsset
+   !> Settings of the reaction path task
+   type(landscape_irc_settings), intent(in) :: ircset
+
+   !> Box label and engine name of the line, and whether the engine was named
+   !> on the command line or is the builtin default
+   character(len=:), allocatable :: label, name, origin
+
+   if (native_engine /= 0) then
+      label = "Engine"
+      name = landscape_native_engine_name(native_engine)
+      origin = "explicit"
+   else
+      select case (runtyp)
+      case (p_run_lopt, p_run_opt, p_run_ohess)
+         label = "Engine"
+         name = landscape_opt_algorithm_name(optset%algorithm)
+         if (optset%algorithm_was_set) then
+            origin = "explicit"
+         else
+            origin = "default"
+         end if
+      case (p_run_lscan)
+         if (landscape_lowercase(scanset%mode) /= "relaxed") return
+         label = "Engine"
+         name = trim(scanset%method)
+         if (allocated(scanset%method_source)) then
+            origin = "explicit"
+         else
+            origin = "default"
+         end if
+      case (p_run_lts)
+         label = "Saddle search"
+         name = landscape_ts_method_name(tsset%method)
+         if (allocated(tsset%method_source)) then
+            origin = "explicit"
+         else
+            origin = "default"
+         end if
+      case (p_run_lirc)
+         label = "IRC integrator"
+         name = landscape_irc_method_name(ircset%method)
+         if (allocated(ircset%method_source)) then
+            origin = "explicit"
+         else
+            origin = "default"
+         end if
+      case default
+         return
+      end select
+   end if
+
+   write(iunit, '(a)')
+   call generic_header(iunit, label//": "//name//" ("//origin//")", 49, 10)
+
+end subroutine landscape_engine_banner
 
 !> TRUE if the **native** numerical Hessian and frequency path of this run
 !> executes.

@@ -74,6 +74,7 @@ mode mirrors one CMake test one-to-one:
   blasthreads <exe> <input> <rundir>  -> xtb/landscape-blas-threads
   blasthreads-timing <exe> <input> <rundir> -> xtb/landscape-blas-threads-timing
   banner <exe> <input> <rundir>       -> xtb/landscape-banner
+  enginebanner <exe> <input> <rundir> -> xtb/landscape-engine-banner
   programname <exe> <input> <rundir>  -> xtb/landscape-program-name
   helptopic <exe> <input> <rundir> <main.F90>
                                      -> xtb/landscape-help-topic
@@ -3139,8 +3140,8 @@ def check_method(exe, inp, rundir, hcn, nh3, nh3down):
         inp, "landscape: lbfgs minimisation",
     )
     identical("auto-lopt", "xtbopt.xyz", plain, "xtbopt.xyz", auto)
-    if "[NOTICE] --lopt-engine default" not in auto_output:
-        fail("`auto` suppressed the builtin default notice", auto_output)
+    if "Engine: lbfgs (default)" not in auto_output:
+        fail("`auto` did not report the builtin default engine", auto_output)
     explicit, _ = expect_milestone(
         "auto-explicit",
         ["--gfn", "2", "--lopt", "--lopt-engine", "bfgs", "--norestart"],
@@ -3153,7 +3154,7 @@ def check_method(exe, inp, rundir, hcn, nh3, nh3down):
         inp, "landscape: bfgs minimisation",
     )
     identical("auto-explicit", "xtbopt.xyz", explicit, "xtbopt.xyz", auto_explicit)
-    if "[NOTICE] --lopt-engine default" in auto_explicit_output:
+    if "Engine: bfgs (explicit)" not in auto_explicit_output:
         fail("`auto` overrode the explicit engine", auto_explicit_output)
     ts_auto, _ = expect_milestone(
         "auto-ts", ["--gfn", "2", "--lts", "--method", "auto",
@@ -3573,8 +3574,8 @@ def check_method_table(exe, inp, rundir, hcn, nh3, nh3product):
             ["--gfn", "2", "--lopt", "--method", name, "--norestart"],
             "landscape: %s minimisation" % name,
         )
-        # the DEFAULT engine notice is suppressed only when a name was given
-        if "[NOTICE] --lopt-engine default" in output:
+        # the engine banner says `(explicit)` only when a name was given
+        if "Engine: %s (explicit)" % name not in output:
             misses.append("table-opt-%s: the name did not count as an explicit engine" % name)
 
     # --- the eight saddle searches -----------------------------------------
@@ -3794,8 +3795,8 @@ ECHO_CASES = {
         ],
     },
     "lopt": {
-        "banner": "[NOTICE] --lopt-engine default lbfgs (",
-        "absent": "[NOTICE] --lopt-engine default",
+        "banner": "Engine: lbfgs (default)",
+        "absent": "Engine: lbfgs (",
         "runs": [
             {
                 "label": "default",
@@ -3816,8 +3817,8 @@ ECHO_CASES = {
         ],
     },
     "lirc": {
-        "banner": "[NOTICE] --lirc-method default hpc (",
-        "absent": "[NOTICE] --lirc-method default",
+        "banner": "IRC integrator: hpc (default)",
+        "absent": "IRC integrator: hpc (",
         "runs": [
             {
                 "label": "default",
@@ -3880,6 +3881,11 @@ def check_echo(exe, inp, rundir, case):
     The `--ljson` routes parse the document as well: the notice goes to
     stdout, the structured result is a file, and the check pins that the two
     do not interfere.
+
+    The two engine cases (`lopt`, `lirc`) no longer read a `[NOTICE]` line:
+    their default/explicit announcement is the startup engine banner
+    (`xtb_prog_main::landscape_engine_banner`), so the route asserts the box
+    text instead.
 
     A route may add `require`: patterns that have to appear in the output of
     that route.  The `lirc` case uses it for the effective Hessian source
@@ -5795,8 +5801,171 @@ def check_banner(exe, inp, rundir):
         fail("--license no longer prints the warranty disclaimer", output)
     if "GNU Lesser General Public License" not in output:
         fail("--license no longer prints the licence", output)
+    if "oxtb is free software:" not in output:
+        fail("--license still names the program `xtb`", output)
     print("banner also printed by a normal run, disclaimer and --license "
           "intact")
+
+
+# The box lines of the startup engine banner.  Every run that has an engine
+# prints exactly one of them and a run without an engine prints none.
+ENGINE_BANNER_LABELS = ("Engine: ", "Saddle search: ", "IRC integrator: ")
+
+# (label, arguments, the box line the run has to print): every engine name of
+# every selector, the builtin default of each task, and the native engines.
+# The runs are deliberately cut short (`--l*max-steps 1`) where the fixture is
+# not a real minimum/saddle: the banner is printed before the first geometry is
+# evaluated, which is the property under test, so the outcome of the run is not
+# asserted here.
+ENGINE_BANNER_CASES = (
+    ("lopt-default", ["--lopt"], "Engine: lbfgs (default)"),
+    ("lopt-sd", ["--lopt", "--lopt-engine", "sd"], "Engine: sd (explicit)"),
+    ("lopt-cg", ["--lopt", "--lopt-engine", "cg"], "Engine: cg (explicit)"),
+    ("lopt-lbfgs", ["--lopt", "--lopt-engine", "lbfgs"],
+     "Engine: lbfgs (explicit)"),
+    ("lopt-bfgs", ["--lopt", "--lopt-engine", "bfgs"],
+     "Engine: bfgs (explicit)"),
+    ("lopt-diis", ["--lopt", "--lopt-engine", "diis"],
+     "Engine: diis (explicit)"),
+    ("lopt-rfo", ["--lopt", "--lopt-engine", "rfo", "--lopt-max-steps", "1"],
+     "Engine: rfo (explicit)"),
+    ("scan-default", ["--lscan", "--lscan-coord", "distance", "--lscan-atoms",
+                       "1,2", "--lscan-step", "0.1", "--lscan-nstep", "1"],
+     "Engine: lbfgs (default)"),
+    ("scan-cg", ["--lscan", "--lscan-method", "cg", "--lscan-coord",
+                  "distance", "--lscan-atoms", "1,2", "--lscan-step", "0.1",
+                  "--lscan-nstep", "1"], "Engine: cg (explicit)"),
+    ("ts-default", ["--lts", "--lts-max-steps", "1"],
+     "Saddle search: prfo (default)"),
+    ("ts-prfo", ["--lts", "--lts-method", "prfo", "--lts-max-steps", "1"],
+     "Saddle search: prfo (explicit)"),
+    ("ts-bprfo", ["--lts", "--lts-method", "bprfo", "--lts-max-steps", "1"],
+     "Saddle search: bprfo (explicit)"),
+    ("ts-dimer", ["--lts", "--lts-method", "dimer", "--lts-max-steps", "1"],
+     "Saddle search: dimer (explicit)"),
+    ("ts-neb", ["--lts", "--lts-method", "neb", "--lts-max-steps", "1"],
+     "Saddle search: neb (explicit)"),
+    ("ts-cineb", ["--lts", "--lts-method", "cineb", "--lts-max-steps", "1"],
+     "Saddle search: cineb (explicit)"),
+    ("ts-autoneb", ["--lts", "--lts-method", "autoneb", "--lts-max-steps",
+                     "1"], "Saddle search: autoneb (explicit)"),
+    ("ts-string", ["--lts", "--lts-method", "string", "--lts-max-steps",
+                    "1"], "Saddle search: string (explicit)"),
+    ("ts-gsm", ["--lts", "--lts-method", "gsm", "--lts-max-steps", "1"],
+     "Saddle search: gsm (explicit)"),
+    ("irc-default", ["--lirc", "--lirc-max-steps", "1"],
+     "IRC integrator: hpc (default)"),
+    ("irc-gs", ["--lirc", "--lirc-method", "gs", "--lirc-max-steps", "1"],
+     "IRC integrator: gs (explicit)"),
+    ("irc-hpc", ["--lirc", "--lirc-method", "hpc", "--lirc-max-steps", "1"],
+     "IRC integrator: hpc (explicit)"),
+    ("irc-lqa", ["--lirc", "--lirc-method", "lqa", "--lirc-max-steps", "1"],
+     "IRC integrator: lqa (explicit)"),
+    ("irc-eulerpc", ["--lirc", "--lirc-method", "eulerpc",
+                      "--lirc-max-steps", "1"],
+     "IRC integrator: eulerpc (explicit)"),
+    ("native-ancopt", ["--opt", "--method", "ancopt", "--norestart"],
+     "Engine: ancopt (explicit)"),
+    ("native-lancopt", ["--opt", "--method", "lancopt", "--norestart"],
+     "Engine: lancopt (explicit)"),
+    ("native-fire", ["--opt", "--method", "fire", "--norestart"],
+     "Engine: fire (explicit)"),
+    ("native-pbc-lbfgs", ["--opt", "--method", "pbc_lbfgs", "--norestart"],
+     "Engine: pbc_lbfgs (explicit)"),
+    ("native-ohess", ["--ohess", "--method", "fire", "--norestart"],
+     "Engine: fire (explicit)"),
+)
+
+# Run types with no engine at all: they must print no box line.
+ENGINE_FREE_CASES = (
+    ("sp", ["--sp"]),
+    ("hess", ["--hess"]),
+    ("lvib", ["--lvib"]),
+    ("rigid-scan", ["--lscan", "--lscan-mode", "rigid", "--lscan-coord",
+                    "distance", "--lscan-atoms", "1,2", "--lscan-step",
+                    "0.1", "--lscan-nstep", "1"]),
+)
+
+
+def check_engine_banner(exe, inp, rundir):
+    """One engine announcement per run, for every engine, early and unique.
+
+    The engine used to be echoed by each task's print block, after the
+    always-done single point, and only as a `[NOTICE]` for the builtin
+    default - an explicitly named engine was never announced and `--lts-method`
+    had no echo at all.  The startup banner replaces that: this check pins
+
+    (1) every name of the three selectors and every native `--method` engine,
+        with `(explicit)` when the command line named it and `(default)` when
+        the builtin default runs - so a name that stops reaching the banner,
+        and a run that stops distinguishing the two, both turn it red;
+    (2) exactly one box line per run, so the announcement cannot be doubled
+        again (the retired `[NOTICE] --lopt-engine`/`--lirc-method` lines are
+        asserted absent as well);
+    (3) nothing at all for a run with no engine (`--sp`, `--hess`, `--lvib`,
+        rigid scan);
+    (4) the position: the box is printed before the first geometry is
+        evaluated, i.e. before the `SETUP` block and the first `TOTAL ENERGY`
+        of the run.
+    """
+    for label, args, expected in ENGINE_BANNER_CASES:
+        workdir = os.path.join(rundir, label)
+        shutil.rmtree(workdir, ignore_errors=True)
+        # the cut-short searches are allowed to fail: the banner is printed
+        # before any geometry is evaluated
+        _, output = run(exe, inp, args + ["--gfn", "2"], workdir)
+        if expected not in output:
+            fail("%s: the engine banner does not say %r" % (label, expected),
+                 output)
+        lines = [line for line in output.split("\n")
+                 if any(text in line for text in ENGINE_BANNER_LABELS)]
+        if len(lines) != 1:
+            fail("%s: %d engine banner lines, expected one\n%r"
+                 % (label, len(lines), lines), output)
+        for retired in ("[NOTICE] --lopt-engine default",
+                        "[NOTICE] --lirc-method default"):
+            if retired in output:
+                fail("%s: the retired engine notice is back (%r)"
+                     % (label, retired), output)
+
+    for label, args in ENGINE_FREE_CASES:
+        workdir = os.path.join(rundir, label)
+        shutil.rmtree(workdir, ignore_errors=True)
+        status, output = run(exe, inp, args + ["--gfn", "2", "--norestart"],
+                             workdir)
+        if status != 0:
+            fail("%s terminated with status %d" % (label, status), output)
+        for text in ENGINE_BANNER_LABELS:
+            if text in output:
+                fail("%s has no engine but announces one (%r)"
+                     % (label, text), output)
+
+    # The banner has to precede the first evaluated geometry.  A `--lopt` run
+    # is the case that used to print its echo 16 lines below the first SCC
+    # summary: the box must be above both the `SETUP` block and the first
+    # `TOTAL ENERGY` of that run.
+    workdir = os.path.join(rundir, "early")
+    shutil.rmtree(workdir, ignore_errors=True)
+    status, output = run(exe, inp, ["--gfn", "2", "--lopt", "--norestart"],
+                         workdir)
+    if status != 0:
+        fail("the early-position probe terminated with status %d" % status,
+             output)
+    lines = output.split("\n")
+    banner = [i for i, line in enumerate(lines) if "Engine: " in line]
+    setup = [i for i, line in enumerate(lines) if "SETUP" in line]
+    energy = [i for i, line in enumerate(lines) if "TOTAL ENERGY" in line]
+    if len(banner) != 1 or not setup or not energy:
+        fail("the early-position probe printed %d banners, %d SETUP and %d "
+             "energy lines" % (len(banner), len(setup), len(energy)), output)
+    if not banner[0] < min(setup[0], energy[0]):
+        fail("the engine banner is printed after the first geometry "
+             "evaluation (banner %d, SETUP %d, energy %d)"
+             % (banner[0], setup[0], energy[0]), output)
+
+    print("engine banner: %d engine cases, %d engine-free cases, announced "
+          "before the first geometry"
+          % (len(ENGINE_BANNER_CASES), len(ENGINE_FREE_CASES)))
 
 
 def check_programname(exe, inp, rundir):
@@ -6172,6 +6341,8 @@ def main():
         check_parallel(exe, inp, rundir)
     elif mode == "positional":
         check_positional(exe, inp, rundir)
+    elif mode == "enginebanner":
+        check_engine_banner(exe, inp, rundir)
     elif mode == "color":
         check_color(exe, inp, rundir)
     elif mode == "gfn":

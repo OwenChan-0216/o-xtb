@@ -4732,6 +4732,26 @@ add_test("xtb/landscape-banner"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-banner
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# The engine of the run is announced once, in the `generic_header` box the
+# rest of the output uses, **before** the first geometry is evaluated.
+#
+# Before this the engine was echoed by each task's print block, which runs
+# after the always-done single point, and only for the builtin default (a
+# `[NOTICE]` line) - an explicitly named engine was silent and `--lts-method`
+# had no echo at all, so the run's most consequential choice was announced
+# late, one-sided and incompletely.  The check pins every name of the three
+# selectors, every native `--method` engine, the `(default)`/`(explicit)`
+# distinction, exactly one box line per run, no box for a run with no engine
+# (`--sp`, `--hess`, `--lvib`, rigid scan) and the position relative to the
+# `SETUP` block and the first `TOTAL ENERGY`.
+add_test("xtb/landscape-engine-banner"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=enginebanner;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-engine-banner"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-engine-banner
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # The runtime termination messages name the program: `src/prog/primary.f90`
 # hands `mctc_init` the name that `src/mctc/error.f90` prints as
 # `normal termination of ...` / `abnormal termination of ...` on stderr.  Both

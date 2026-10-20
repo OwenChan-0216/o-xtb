@@ -457,8 +457,10 @@ MINIMISATION OPTIONS (--lopt)
 *--lopt-engine* 'NAME'::
     minimisation algorithm of the suite, one of `sd`, `cg`, `lbfgs` (default),
     `bfgs`, `diis` or `rfo`. Alias of `--method`; the name is not
-    case-sensitive. Because the native `--opt` runs `ancopt(3)`, the active
-    default engine is echoed as a notice unless the flag is given.
+    case-sensitive. Because the native `--opt` runs `ancopt(3)`, the engine of
+    the run is announced in one boxed line before the first geometry is
+    evaluated, marked `(default)` for the builtin default and `(explicit)` for
+    a name given on the command line.
 
 *--lopt-level* 'LEVEL'::
     convergence level, one of `superloose`, `loose`, `normal` (default), `tight`
@@ -808,8 +810,8 @@ INTRINSIC REACTION COORDINATE OPTIONS (--lirc)
     integration method, one of `hpc` (Hessian based predictor-corrector,
     default), `lqa` (Page-McIver analytic quadratic propagation, the cheapest),
     `eulerpc` (Euler predictor-corrector) or `gs` (Gonzalez-Schlegel sphere
-    relaxation). Alias of `--method`; not case-sensitive. The active default is
-    echoed as a notice unless the flag is given.
+    relaxation). Alias of `--method`; not case-sensitive. The integrator is
+    announced in the startup boxed line, marked `(default)` or `(explicit)`.
 
 *--lirc-step* 'VALUE'::
     step length of one macro step in `bohr*amu^1/2` (mass weighted arc length,
