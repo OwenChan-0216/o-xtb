@@ -18,6 +18,7 @@
 ! Modified by the o-xtb landscape task suite, 2026.
 
 module xtb_prog_main
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
    use xtb_mctc_accuracy, only: wp
    use xtb_mctc_constants, only: pi
    use xtb_mctc_io, only: stderr
@@ -1923,6 +1924,14 @@ contains
       !> reported in the parser tail, where `nproc` is known
       integer :: landscape_parallel_team
 
+      !> Raw value of an `-a`/`--acc` argument that is not a finite number
+      !> (`nan`, `inf`); unallocated when the value is usable.  It is reported
+      !> in the parser tail, where the effect of `--strict` is known - the same
+      !> lax/strict shape as the `-P` value below - and the value is **not**
+      !> applied, because an SCC accuracy of NaN turns every energy of the run
+      !> into NaN instead of failing.
+      character(len=:), allocatable :: landscape_acc_value
+
       !> `--lopt-recalc N` was given, and the value it carried.  The report of a
       !> negative value happens in the parser tail, where the effect of
       !> `--strict` is known - the same lax/strict shape as the `-P` value
@@ -2162,7 +2171,14 @@ contains
             call args%nextArg(sec)
             if (allocated(sec)) then
                if (getValue(env, sec, ddum)) then
-                  if (ddum < 1.e-4_wp) then
+                  if (.not. ieee_is_finite(ddum)) then
+                     ! `read(sec,*,iostat=)` parses `nan`/`inf`; a NaN
+                     ! accuracy used to be stored and every SCC energy of the
+                     ! run silently became NaN.  Reported in the parser tail
+                     ! (below) and not applied, so the default of the level or
+                     ! of `set%acc` stays in force.
+                     landscape_acc_value = sec
+                  else if (ddum < 1.e-4_wp) then
                      call env%warning("We cannot provide this level of accuracy, "//&
                         & "resetted accuracy to 0.0001", source)
                      set%acc = 1.e-4_wp
@@ -2173,10 +2189,11 @@ contains
                   else
                      set%acc = ddum
                   end if
-                  ! The value was named on the command line, so it wins over
-                  ! the one a landscape convergence level derives for the
-                  ! engine of the suite run (CLI redesign section 3.5, R5).
-                  acc_was_set = .true.
+                  ! A rejected value does not count as "named on the command
+                  ! line", so the accuracy derived from the convergence level
+                  ! stays in force; an accepted one wins over it (CLI redesign
+                  ! section 3.5, R5).
+                  if (.not. allocated(landscape_acc_value)) acc_was_set = .true.
                end if
                tblite%accuracy = set%acc
             else
@@ -4746,6 +4763,24 @@ contains
          end if
       end if
 
+      ! The value of `-a`/`--acc`.  `read(sec,*,iostat=)` accepts `nan` and
+      ! `inf`, and the range check of the flag compares against both limits,
+      ! so a non-finite value used to be stored as the SCC accuracy: every
+      ! energy of the run became NaN without a diagnostic and the process
+      ! still exited 0.  The value is reported here - the decision needs the
+      ! effect of `--strict`, which may stand after the flag - and it is not
+      ! applied, so the run continues with the default (or the level derived)
+      ! accuracy.
+      if (allocated(landscape_acc_value)) then
+         message = "-a/--acc needs a finite accuracy, not '"//&
+            & landscape_acc_value//"'; the value is ignored"
+         if (strict) then
+            call env%error(message, source)
+         else
+            call env%warning(message, source)
+         end if
+      end if
+
       ! The native level value of `--bhess`/`--metaopt` reaches
       ! `set%optset%optlev` through the shared `optlevel2int`
       ! (`src/set_module.f90`), which maps a keyword it does not know to
@@ -6177,7 +6212,7 @@ end subroutine set_landscape_hess_step
       type(TEnvironment), intent(inout) :: env
 
       call env%error("PTB not available without 'tblite'. Compiled without support for 'tblite' library.")
-      call env%error("Please recompile without '-Dtblite=disabled' option or change meson setup.")
+      call env%error("Rebuild with the CMake option -DWITH_TBLITE=ON to use it.")
    end subroutine ptb_feature_not_implemented
 
    !>  make some post processing afterward, show some timings and stuff

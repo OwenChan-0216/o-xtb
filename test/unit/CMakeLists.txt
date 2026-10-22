@@ -4798,6 +4798,33 @@ add_test("xtb/landscape-program-name"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-program-name
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# A non-finite value for a numeric flag used to be computed with.  The `read`
+# parsers accept `nan`/`inf`, `<`/`>` are false against NaN, and in a release
+# build `--lvib-temp nan` printed a complete table of NaN (`H(0)-H(T)`, `T*S`,
+# `G(T)`) with exit status 0 - a silent wrong answer - while `--acc nan` stored a
+# NaN SCC accuracy.  The five landscape flags are refused where the merged
+# setting is consumed (the xcontrol block merges after the parser, so a
+# parse-site check would miss `$thermo temp=nan`); `--acc` keeps the default.
+add_test("xtb/landscape-nonfinite-value"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=nonfinite;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-nonfinite"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-nonfinite
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
+# The `ir` subcommand's fatal paths exited with status 0: `oxtb ir water.xyz`
+# used an unallocated `intent(out)` file name and `irmod.f90` aborted a corrupted
+# dipole derivative file with a bare `stop`.  Both are reported through the
+# environment now and `--born` has the documented default `born.out`.
+add_test("xtb/landscape-ir-fatal-status"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=irfatal;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ir-fatal"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ir-fatal
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # `--help` is a grouped index now (`docs/_simplify-recon/123-help-restructure.md`)
 # and `--help <topic>` prints one option, one category or an error.  Nothing
 # covered the dispatch before: `xtb/Argparser_print_help` only ran `--help` and
@@ -4909,6 +4936,8 @@ set_tests_properties(
   "xtb/landscape-banner"
   "xtb/landscape-help-topic"
   "xtb/landscape-help-colour"
+  "xtb/landscape-nonfinite-value"
+  "xtb/landscape-ir-fatal-status"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

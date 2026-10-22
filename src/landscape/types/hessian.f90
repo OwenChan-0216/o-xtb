@@ -59,6 +59,7 @@
 !> and Hessian matrix elements in hartree/bohr^2.  The returned Hessian is
 !> dense and exactly symmetric.
 module xtb_landscape_hessian
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
    use xtb_mctc_accuracy, only : wp
    use xtb_type_environment, only : TEnvironment
    use xtb_type_molecule, only : TMolecule
@@ -325,6 +326,7 @@ subroutine numerical_hessian_compute(self, env, mol, chk, calc, hess, step, odlr
    real(wp) :: accuracy, egap, energy_plus, energy_minus
    real(wp) :: sigma(3, 3)
    integer :: iat, ic, icol, n, nlog
+   character(len=160) :: buffer
 
    final_err = 0.0_wp
    self%n_eval = 0
@@ -334,6 +336,15 @@ subroutine numerical_hessian_compute(self, env, mol, chk, calc, hess, step, odlr
    if (odlr) then
       call env%error("the numerical Hessian provider always builds the full "//&
          & "dense Hessian and does not support the ODLR approximation", source)
+      return
+   end if
+   ! A non-finite step passes the comparison below (`nan <= 0` is false) and
+   ! reaches the displaced single points: the CLI parser accepts `nan`/`inf`
+   ! for the Hessian step flags, so the value is named and refused here.
+   if (.not. ieee_is_finite(step)) then
+      write(buffer, '(a,es15.6,a)') "the finite difference step of the "//&
+         & "numerical Hessian (--l*-hess-step) is ", step, ", not a finite number"
+      call env%error(trim(buffer), source)
       return
    end if
    if (step <= 0.0_wp) then

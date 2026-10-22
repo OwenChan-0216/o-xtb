@@ -51,6 +51,7 @@
 !> 1-based.  Flattened vectors follow the `x1, y1, z1, x2, ...` convention of
 !> `xtb_landscape_coords`.
 module xtb_landscape_scan_relax
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_constants, only : pi
    use xtb_mctc_param, only : covalent_radius_2009
@@ -473,7 +474,7 @@ function landscape_scan_check(env, settings, nat) result(ok)
    logical :: ok
 
    integer :: i, j, natoms, iatom
-   character(len=32) :: buffer
+   character(len=160) :: buffer
    character(len=8) :: step_unit
    character(len=:), allocatable :: cname, flag_suffix, atom_list
 
@@ -501,6 +502,17 @@ function landscape_scan_check(env, settings, nat) result(ok)
       if (landscape_opt_algorithm_from_name(settings%method) == 0) then
          call env%error("unknown inner minimiser '"//trim(settings%method)//&
             & "' for a relaxed scan", source)
+         ok = .false.
+         return
+      end if
+      ! A non-finite value reaches this comparison unchecked (`nan <= 0` is
+      ! false), and it then poisons every biased energy of the scan: the CLI
+      ! parser accepts `nan`/`inf` for `--lscan-fc`, so the guard has to name
+      ! the value instead of letting the run produce a NaN profile.
+      if (.not. ieee_is_finite(settings%constraint_fc)) then
+         write(buffer, '(a,es15.6,a)') "--lscan-fc ", settings%constraint_fc, &
+            & " is not a finite force constant"
+         call env%error(trim(buffer), source)
          ok = .false.
          return
       end if
