@@ -81,7 +81,7 @@ module xtb_landscape_tasks_ts
    use xtb_landscape_settings, only : landscape_ts_settings, landscape_vib_settings, &
       & landscape_opt_settings, landscape_engine_control, landscape_restart_name, &
       & landscape_ts_method_name, p_landscape_ts_prfo, p_landscape_ts_bprfo, &
-      & p_landscape_ts_dimer, p_landscape_ts_neb, &
+      & p_landscape_ts_dimer, &
       & p_landscape_ts_cineb, p_landscape_ts_autoneb, landscape_ts_method_is_band, &
       & landscape_ts_method_is_string, landscape_log_failed, landscape_lowercase
    use xtb_landscape_results, only : landscape_result, landscape_vib_result

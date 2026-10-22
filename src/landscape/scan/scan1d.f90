@@ -55,7 +55,6 @@ module xtb_landscape_scan1d
    use xtb_type_environment, only : TEnvironment
    use xtb_landscape_settings, only : landscape_scan_settings, &
       & landscape_scan_coord_settings, &
-      & p_landscape_scan_coord_angle, p_landscape_scan_coord_dihedral, &
       & p_landscape_scan_coord_distance, landscape_missing_value, &
       & landscape_lowercase
    use xtb_landscape_engine, only : landscape_energy_model

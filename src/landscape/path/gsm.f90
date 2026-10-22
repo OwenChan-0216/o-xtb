@@ -1091,26 +1091,6 @@ subroutine landscape_string_report(env, string)
 
 end subroutine landscape_string_report
 
-!> Arc length of the node chain `first .. last` (bohr).
-pure function chain_arc_length(nodes, first, last) result(length)
-   !> String nodes `(3, nat, n_nodes)`
-   real(wp), intent(in) :: nodes(:, :, :)
-   !> First node of the chain
-   integer, intent(in) :: first
-   !> Last node of the chain
-   integer, intent(in) :: last
-   !> Length of the chain (bohr)
-   real(wp) :: length
-
-   integer :: k
-
-   length = 0.0_wp
-   do k = first + 1, last
-      length = length + sqrt(sum((nodes(:, :, k) - nodes(:, :, k - 1))**2))
-   end do
-
-end function chain_arc_length
-
 !> Decimal representation of a real for a message.
 pure function number_string(value) result(text)
    !> Value

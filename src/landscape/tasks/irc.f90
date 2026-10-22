@@ -62,7 +62,6 @@
 !> hartree/bohr, `etemp` in kelvin.
 module xtb_landscape_tasks_irc
    use xtb_mctc_accuracy, only : wp
-   use xtb_mctc_convert, only : autokcal
    use xtb_mctc_symbols, only : toSymbol
    use xtb_mctc_filetypes, only : fileType
    use xtb_io_writer, only : writeMolecule

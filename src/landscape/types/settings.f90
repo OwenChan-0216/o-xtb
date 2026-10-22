@@ -75,7 +75,6 @@ module xtb_landscape_settings
    public :: p_landscape_irc_gs, p_landscape_irc_hpc, p_landscape_irc_lqa
    public :: p_landscape_irc_eulerpc
    public :: landscape_irc_method_name, landscape_irc_method_from_name
-   public :: landscape_irc_method_known
    public :: landscape_lowercase
 
    !> Minimisation algorithm identifiers (`landscape_opt_settings%algorithm`)
@@ -478,11 +477,10 @@ module xtb_landscape_settings
       integer :: algorithm = p_landscape_opt_lbfgs
       !> True when `--lopt-engine` was given.
       !>
-      !> The task echoes the builtin default `lbfgs` as a `[NOTICE]` line (CLI
-      !> redesign section 8.3, item D3): the native `--opt` runs ANCopt, so the
-      !> default engine of this task is not obvious to a user who knows the
-      !> native flag.  The notice is suppressed when the algorithm was named on
-      !> the command line, which is what this flag records.
+      !> The engine banner of `xtb_prog_main` marks the announcement as
+      !> `(explicit)` when this flag is set and as `(default)` otherwise: the
+      !> native `--opt` runs ANCopt, so the default engine of this task is not
+      !> obvious to a user who knows the native flag.
       logical :: algorithm_was_set = .false.
       !> Flag that selected `algorithm`, empty until one was named on the
       !> command line.
@@ -612,9 +610,6 @@ module xtb_landscape_settings
       type(landscape_scan_coord_settings) :: coord(2)
       !> Scan the grid forwards and backwards and report the hysteresis
       logical :: bidirectional = .true.
-      !> Sequential semantics for `ndim = 1`; `ndim = 2` always uses the
-      !> Cartesian product grid
-      logical :: sequential = .true.
       !> Warm start every point from the geometry of the previous point
       !> (only the geometry is reused, the wavefunction policy stays with the
       !> engine restart mode, see `landscape_engine_control%restart_mode`)
@@ -936,14 +931,6 @@ module xtb_landscape_settings
       !> M6 validation round measured it more accurate *and* 8.5x cheaper than
       !> `gs` (report 44 section 3.3), see the type comment above
       integer :: method = p_landscape_irc_hpc
-      !> True when `--lirc-method` was given.
-      !>
-      !> The default method is `hpc`, not the `gs` of the older documentation
-      !> (behaviour change of the M6 validation round), so the task echoes the
-      !> active default as a `[NOTICE]` line (CLI redesign section 8.3, item
-      !> D2); naming the flag on the command line suppresses the notice
-      !> (recorded here).
-      logical :: method_was_set = .false.
       !> Flag that selected `method`, empty until one was named on the command
       !> line; the state of the alias conflict check of
       !> `xtb_prog_main::set_landscape_irc_algorithm` (CLI redesign section 4.3,
@@ -1493,17 +1480,6 @@ function landscape_irc_method_from_name(name) result(method)
    end select
 
 end function landscape_irc_method_from_name
-
-!> True if `name` names one of the supported IRC integration methods.
-function landscape_irc_method_known(name) result(known)
-   !> Method name
-   character(len=*), intent(in) :: name
-   !> True if the name resolves to a method identifier
-   logical :: known
-
-   known = landscape_irc_method_from_name(name) /= 0
-
-end function landscape_irc_method_known
 
 !> Human readable name of a transition state search method identifier
 pure function landscape_ts_method_name(method) result(name)

@@ -5978,7 +5978,6 @@ subroutine set_landscape_irc_algorithm(env, settings, name, owner, source)
    end if
    settings%method = method
    settings%method_source = owner
-   settings%method_was_set = .true.
 
 end subroutine set_landscape_irc_algorithm
 
