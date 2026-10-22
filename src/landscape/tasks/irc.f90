@@ -74,7 +74,7 @@ module xtb_landscape_tasks_irc
       & landscape_opt_settings, landscape_engine_control, landscape_irc_method_name, &
       & landscape_restart_name, landscape_hessian_update_name, landscape_lowercase, &
       & p_landscape_irc_gs, p_landscape_irc_lqa, p_landscape_irc_hpc, &
-      & p_landscape_irc_eulerpc, landscape_log_failed
+      & p_landscape_irc_eulerpc, landscape_log_failed, landscape_int_to_string
    use xtb_landscape_results, only : landscape_result, landscape_irc_result, &
       & landscape_vib_result, p_landscape_irc_term_grad, &
       & p_landscape_irc_term_energy_rise, p_landscape_irc_term_limit_cycle, &
@@ -655,7 +655,7 @@ subroutine confirm_ts(env, mol, hess, settings, result)
             & "not a transition state"
       else
          result%message = "the input geometry is a higher order saddle ("//&
-            & trim(int_to_string(vib%n_imag))//" imaginary modes), not a "//&
+            & trim(landscape_int_to_string(vib%n_imag))//" imaginary modes), not a "//&
             & "first order saddle point"
       end if
       call env%error(trim(result%message), source)
@@ -1188,20 +1188,6 @@ pure function arc_length_definition(method) result(text)
    end select
 
 end function arc_length_definition
-
-!> Decimal representation of an integer for a message.
-pure function int_to_string(value) result(string)
-   !> Value to convert
-   integer, intent(in) :: value
-   !> Decimal string
-   character(len=:), allocatable :: string
-
-   character(len=16) :: buffer
-
-   write(buffer, '(i0)') value
-   string = trim(buffer)
-
-end function int_to_string
 
 !> Why the finite difference parameters of the numerical Hessian are not used.
 !>

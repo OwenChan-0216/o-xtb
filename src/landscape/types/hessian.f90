@@ -71,7 +71,8 @@ module xtb_landscape_hessian
    use xtb_modelhessian_lindh, only : newLindhD2ModelHessian
    use xtb_lin, only : lin
    use xtb_setparam, only : get_namespace
-   use xtb_landscape_settings, only : landscape_log_failed, landscape_value_present
+   use xtb_landscape_settings, only : landscape_log_failed, landscape_value_present, &
+      & landscape_int_to_string, landscape_real_to_string
    use xtb_landscape_settings, only : landscape_lowercase
    implicit none(type, external)
    private
@@ -619,7 +620,7 @@ subroutine landscape_read_hessian_file(env, filename, hess, ok)
       if (ios < 0) exit
       if (ios > 0) then
          close(unit)
-         call env%error("cannot read record "//trim(int_to_string(irec + 2))//&
+         call env%error("cannot read record "//trim(landscape_int_to_string(irec + 2))//&
             & " of the Hessian file '"//trim(filename)//"' ("//trim(iomsg)//")", &
             & source)
          return
@@ -648,16 +649,16 @@ subroutine landscape_read_hessian_file(env, filename, hess, ok)
          ntoken = ntoken + 1
          if (ntoken > hessian_max_record) then
             close(unit)
-            call env%error("record "//trim(int_to_string(irec + 1))//" of the "//&
+            call env%error("record "//trim(landscape_int_to_string(irec + 1))//" of the "//&
                & "Hessian file '"//trim(filename)//"' holds more than "//&
-               & trim(int_to_string(hessian_max_record))//" values", source)
+               & trim(landscape_int_to_string(hessian_max_record))//" values", source)
             return
          end if
          token = line(istart:iend)
          read(token, *, iostat=ios) values(ntoken)
          if (ios /= 0) then
             close(unit)
-            call env%error("record "//trim(int_to_string(irec + 1))//" of the "//&
+            call env%error("record "//trim(landscape_int_to_string(irec + 1))//" of the "//&
                & "Hessian file '"//trim(filename)//"' holds the token '"//&
                & trim(token)//"', which is not a number", source)
             return
@@ -677,15 +678,15 @@ subroutine landscape_read_hessian_file(env, filename, hess, ok)
 
    if (terminator .and. nvals < n3*n3) then
       call env%error("the Hessian file '"//trim(filename)//"' ends after "//&
-         & trim(int_to_string(nvals))//" values, but the matrix of 3N = "//&
-         & trim(int_to_string(n3))//" needs "//trim(int_to_string(n3*n3)), &
+         & trim(landscape_int_to_string(nvals))//" values, but the matrix of 3N = "//&
+         & trim(landscape_int_to_string(n3))//" needs "//trim(landscape_int_to_string(n3*n3)), &
          & source)
       return
    end if
    if (nvals /= n3*n3) then
       call env%error("the Hessian file '"//trim(filename)//"' holds "//&
-         & trim(int_to_string(nvals))//" values, but the matrix of 3N = "//&
-         & trim(int_to_string(n3))//" needs "//trim(int_to_string(n3*n3))//&
+         & trim(landscape_int_to_string(nvals))//" values, but the matrix of 3N = "//&
+         & trim(landscape_int_to_string(n3))//" needs "//trim(landscape_int_to_string(n3*n3))//&
          & "; the file describes a different molecule", source)
       return
    end if
@@ -694,8 +695,8 @@ subroutine landscape_read_hessian_file(env, filename, hess, ok)
       do icol = 1, n3
          if (.not. landscape_value_present(work(icol, irow))) then
             call env%error("the Hessian file '"//trim(filename)//"' holds a "//&
-               & "non-finite matrix element at row "//trim(int_to_string(irow))//&
-               & ", column "//trim(int_to_string(icol)), source)
+               & "non-finite matrix element at row "//trim(landscape_int_to_string(irow))//&
+               & ", column "//trim(landscape_int_to_string(icol)), source)
             return
          end if
       end do
@@ -705,8 +706,8 @@ subroutine landscape_read_hessian_file(env, filename, hess, ok)
    scale = max(1.0_wp, maxval(abs(work)))
    if (asym > hessian_symmetry_tol*scale) then
       call env%error("the Hessian read from '"//trim(filename)//"' is not "//&
-         & "symmetric: max |h(i,j) - h(j,i)| = "//trim(real_to_string(asym))//&
-         & " Eh/bohr^2", source)
+         & "symmetric: max |h(i,j) - h(j,i)| = "//&
+         & trim(landscape_real_to_string(asym, '(es16.8)'))//" Eh/bohr^2", source)
       return
    end if
 
@@ -774,7 +775,7 @@ subroutine landscape_write_hessian_file(env, filename, hess, ok)
             & (packed(lin(i, j)), j=mincol, maxcol)
          if (ios /= 0) then
             close(unit)
-            call env%error("cannot write record "//trim(int_to_string(i))//&
+            call env%error("cannot write record "//trim(landscape_int_to_string(i))//&
                & " of the Hessian file '"//trim(filename)//"' ("//&
                & trim(iomsg)//")", source)
             return
@@ -854,33 +855,5 @@ pure function is_separator(char) result(separator)
       & char == achar(13)
 
 end function is_separator
-
-!> Decimal representation of an integer for an error message.
-pure function int_to_string(value) result(string)
-   !> Value to convert
-   integer, intent(in) :: value
-   !> Decimal string
-   character(len=:), allocatable :: string
-
-   character(len=16) :: buffer
-
-   write(buffer, '(i0)') value
-   string = trim(buffer)
-
-end function int_to_string
-
-!> Scientific representation of a real for an error message.
-pure function real_to_string(value) result(string)
-   !> Value to convert
-   real(wp), intent(in) :: value
-   !> Scientific string
-   character(len=:), allocatable :: string
-
-   character(len=32) :: buffer
-
-   write(buffer, '(es16.8)') value
-   string = trim(buffer)
-
-end function real_to_string
 
 end module xtb_landscape_hessian

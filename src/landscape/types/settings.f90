@@ -76,6 +76,10 @@ module xtb_landscape_settings
    public :: p_landscape_irc_eulerpc
    public :: landscape_irc_method_name, landscape_irc_method_from_name
    public :: landscape_lowercase
+   public :: landscape_int_to_string, landscape_real_to_string
+   public :: landscape_real_is_finite
+   public :: landscape_conv_level_count, landscape_conv_level_names
+   public :: landscape_conv_level_index
 
    !> Minimisation algorithm identifiers (`landscape_opt_settings%algorithm`)
    integer, parameter :: p_landscape_opt_sd = 1
@@ -91,6 +95,23 @@ module xtb_landscape_settings
    integer, parameter :: p_landscape_hess_update_sr1 = 2
    integer, parameter :: p_landscape_hess_update_bofill = 3
    integer, parameter :: p_landscape_hess_update_powell = 4
+
+   !> Number of convergence levels of the suite, i.e. the length of
+   !> `landscape_conv_level_names` and of the threshold rows of
+   !> `landscape_settings_set_conv_level`.
+   integer, parameter :: landscape_conv_level_count = 5
+   !> Names of the convergence levels, **the** single source of the set.
+   !>
+   !> `landscape_conv_level_index`/`landscape_conv_level_known` look the name up
+   !> here and `landscape_settings_set_conv_level` dispatches on the index, so
+   !> the two cannot list different levels; the threshold tables of that routine
+   !> are declared with `landscape_conv_level_count`, so a name added here
+   !> without a threshold row does not compile.  `src/xhelp.f90` keeps its own
+   !> `v_level` table (it is a pre-existing file and may not `use` the suite),
+   !> and `xtb/landscape-help-values` ties it to this list: every declared help
+   !> value has to be accepted by the binary, which accepts exactly these names.
+   character(len=16), parameter :: landscape_conv_level_names(landscape_conv_level_count) = &
+      [character(len=16) :: "superloose", "loose", "normal", "tight", "vtight"]
 
    !> Restart policy of the landscape engine (see `landscape_engine_control`)
    integer, parameter :: p_landscape_restart_off = 0
@@ -1214,48 +1235,37 @@ subroutine landscape_settings_set_conv_level(self, level)
    !> Level name
    character(len=*), intent(in) :: level
 
-   select case (landscape_lowercase(level))
-   case ('superloose')
-      self%g_max = 4.6e-3_wp
-      self%g_rms = 3.0e-3_wp
-      self%d_max = 7.9e-3_wp
-      self%d_rms = 5.2e-3_wp
-      self%e_tol = 5.0e-4_wp
-      self%engine%acc = 3.0_wp
-      self%max_steps_multiplier = 1
-   case ('loose')
-      self%g_max = 2.0e-3_wp
-      self%g_rms = 5.0e-4_wp
-      self%d_max = 1.0e-2_wp
-      self%d_rms = 7.0e-3_wp
-      self%e_tol = 5.0e-5_wp
-      self%engine%acc = 2.0_wp
-      self%max_steps_multiplier = 2
-   case ('normal')
-      self%g_max = 3.0e-4_wp
-      self%g_rms = 1.0e-4_wp
-      self%d_max = 4.0e-3_wp
-      self%d_rms = 2.0e-3_wp
-      self%e_tol = 5.0e-6_wp
-      self%engine%acc = 1.0_wp
-      self%max_steps_multiplier = 3
-   case ('tight')
-      self%g_max = 1.0e-4_wp
-      self%g_rms = 3.0e-5_wp
-      self%d_max = 1.0e-3_wp
-      self%d_rms = 6.0e-4_wp
-      self%e_tol = 1.0e-6_wp
-      self%engine%acc = 0.2_wp
-      self%max_steps_multiplier = 5
-   case ('vtight')
-      self%g_max = 3.0e-5_wp
-      self%g_rms = 8.0e-6_wp
-      self%d_max = 2.0e-4_wp
-      self%d_rms = 1.0e-4_wp
-      self%e_tol = 1.0e-7_wp
-      self%engine%acc = 0.05_wp
-      self%max_steps_multiplier = 20
-   end select
+   !> `g_max`, `g_rms`, `d_max`, `d_rms`, `e_tol` (hartree/bohr, hartree),
+   !> the SCC accuracy and the step-budget multiplier of one level, indexed
+   !> like `landscape_conv_level_names`
+   real(wp), parameter :: g_max(landscape_conv_level_count) = &
+      [4.6e-3_wp, 2.0e-3_wp, 3.0e-4_wp, 1.0e-4_wp, 3.0e-5_wp]
+   real(wp), parameter :: g_rms(landscape_conv_level_count) = &
+      [3.0e-3_wp, 5.0e-4_wp, 1.0e-4_wp, 3.0e-5_wp, 8.0e-6_wp]
+   real(wp), parameter :: d_max(landscape_conv_level_count) = &
+      [7.9e-3_wp, 1.0e-2_wp, 4.0e-3_wp, 1.0e-3_wp, 2.0e-4_wp]
+   real(wp), parameter :: d_rms(landscape_conv_level_count) = &
+      [5.2e-3_wp, 7.0e-3_wp, 2.0e-3_wp, 6.0e-4_wp, 1.0e-4_wp]
+   real(wp), parameter :: e_tol(landscape_conv_level_count) = &
+      [5.0e-4_wp, 5.0e-5_wp, 5.0e-6_wp, 1.0e-6_wp, 1.0e-7_wp]
+   real(wp), parameter :: acc(landscape_conv_level_count) = &
+      [3.0_wp, 2.0_wp, 1.0_wp, 0.2_wp, 0.05_wp]
+   integer, parameter :: multiplier(landscape_conv_level_count) = &
+      [1, 2, 3, 5, 20]
+
+   !> Index of the level in `landscape_conv_level_names`, 0 for a name that is
+   !> not a level (the settings stay untouched, the caller reports the error)
+   integer :: index
+
+   index = landscape_conv_level_index(level)
+   if (index == 0) return
+   self%g_max = g_max(index)
+   self%g_rms = g_rms(index)
+   self%d_max = d_max(index)
+   self%d_rms = d_rms(index)
+   self%e_tol = e_tol(index)
+   self%engine%acc = acc(index)
+   self%max_steps_multiplier = multiplier(index)
 
 end subroutine landscape_settings_set_conv_level
 
@@ -1336,6 +1346,64 @@ pure function landscape_lowercase(name) result(lower)
    end do
 
 end function landscape_lowercase
+
+!> Decimal representation of an integer for an error or warning message.
+!>
+!> One implementation for the suite: this replaced six private copies in
+!> `path/gsm.f90`, `tasks/{irc,scan,ts,vib}.f90` and `types/hessian.f90`.
+pure function landscape_int_to_string(value) result(string)
+   !> Value to convert
+   integer, intent(in) :: value
+   !> Decimal string
+   character(len=:), allocatable :: string
+
+   character(len=16) :: buffer
+
+   write(buffer, '(i0)') value
+   string = trim(buffer)
+
+end function landscape_int_to_string
+
+!> Decimal representation of a real number for a message.
+!>
+!> The **format is an argument**, not a constant: the five copies this replaces
+!> used three different ones (`es15.6` in `scan/relax_scan.f90`,
+!> `scan/scan1d.f90` and `scan/scan2d.f90`, `es16.8` in
+!> `types/hessian.f90`, `f0.4` in `saddle/eigenfollow.f90`), and every call site
+!> passes the format it had, so no printed message changes.  A single default
+!> would have silently rewritten four of the five.
+pure function landscape_real_to_string(value, fmt) result(string)
+   !> Value to convert
+   real(wp), intent(in) :: value
+   !> Edit descriptor of the conversion, e.g. `'(es15.6)'`
+   character(len=*), intent(in) :: fmt
+   !> Formatted string, trailing blanks removed
+   character(len=:), allocatable :: string
+
+   character(len=32) :: buffer
+
+   write(buffer, fmt) value
+   string = trim(buffer)
+
+end function landscape_real_to_string
+
+!> True if the value is finite, i.e. neither NaN nor +/-Inf.
+!>
+!> `ieee_is_finite` reads the representation, so, unlike `abs(x) <= huge`, it
+!> does not raise the invalid exception when `x` is a NaN - a checked build
+!> (`-ffpe-trap=invalid`) aborts on that comparison, and this predicate exists
+!> to guard exactly that case.  Elemental, so it accepts a scalar or a whole
+!> array; this replaced the two private copies in `optimize/driver.f90` and
+!> `saddle/prfo.f90`.
+elemental function landscape_real_is_finite(value) result(finite)
+   !> Value to test
+   real(wp), intent(in) :: value
+   !> True if the value is finite
+   logical :: finite
+
+   finite = ieee_is_finite(value)
+
+end function landscape_real_is_finite
 
 !> Reverse lookup of a minimisation algorithm identifier from its name.
 !>
@@ -1728,14 +1796,31 @@ function landscape_conv_level_known(level) result(known)
    !> True if the name sets at least one threshold
    logical :: known
 
-   select case (landscape_lowercase(level))
-   case ('superloose', 'loose', 'normal', 'tight', 'vtight')
-      known = .true.
-   case default
-      known = .false.
-   end select
+   known = landscape_conv_level_index(level) > 0
 
 end function landscape_conv_level_known
+
+!> Index of a convergence level name in `landscape_conv_level_names`.
+!>
+!> The index is 1-based and starts at `superloose`; 0 means the name is not a
+!> convergence level.  Every consumer of the level *set* reads this lookup, so
+!> the accepted names exist in exactly one place.
+pure function landscape_conv_level_index(level) result(index)
+   !> Level name
+   character(len=*), intent(in) :: level
+   !> 1-based position in `landscape_conv_level_names`, 0 for an unknown name
+   integer :: index
+   integer :: i
+
+   index = 0
+   do i = 1, landscape_conv_level_count
+      if (landscape_lowercase(level) == trim(landscape_conv_level_names(i))) then
+         index = i
+         return
+      end if
+   end do
+
+end function landscape_conv_level_index
 
 !> Human readable name of an engine restart policy identifier
 pure function landscape_restart_name(mode) result(name)
