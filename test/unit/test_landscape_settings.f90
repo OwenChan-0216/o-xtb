@@ -21,6 +21,7 @@ module test_landscape_settings
       & ieee_positive_inf
    use testdrive, only : new_unittest, unittest_type, error_type, check
    use xtb_mctc_accuracy, only : wp
+   use xtb_mctc_convert, only : aatoau
    use xtb_landscape_settings
    implicit none
    private
@@ -112,9 +113,9 @@ subroutine test_defaults_opt(error)
    if (allocated(error)) return
    call check(error, set%trust_radius, 3.7795e-1_wp)
    if (allocated(error)) return
-   call check(error, set%trust_min, 1.8897e-3_wp)
+   call check(error, set%trust_min, 1.0e-3_wp*aatoau)
    if (allocated(error)) return
-   call check(error, set%trust_max, 1.8897_wp)
+   call check(error, set%trust_max, 1.0_wp*aatoau)
    if (allocated(error)) return
    call check(error, set%curvature, 70.0_wp)
    if (allocated(error)) return

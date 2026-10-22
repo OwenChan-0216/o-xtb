@@ -36,6 +36,7 @@ module xtb_landscape_settings
    use, intrinsic :: ieee_arithmetic, only : ieee_value, ieee_quiet_nan, &
       & ieee_is_finite, ieee_is_nan
    use xtb_mctc_accuracy, only : wp
+   use xtb_mctc_convert, only : aatoau
    use xtb_type_environment, only : TEnvironment
    implicit none(type, external)
    private
@@ -528,12 +529,12 @@ module xtb_landscape_settings
       real(wp) :: hlow = 1.0e-2_wp
       !> Use an Armijo backtracking line search
       logical :: line_search = .true.
-      !> Lower trust radius bound (bohr)
-      real(wp) :: trust_min = 1.8897e-3_wp
-      !> Upper trust radius bound of the RFO step (bohr); the effective upper
-      !> bound is `min(trust_max, max_displ)` so that the documented
-      !> single-step limit holds for every algorithm.
-      real(wp) :: trust_max = 1.8897_wp
+      !> Lower trust radius bound (bohr), the 1e-3 Angstrom of MAPLE
+      real(wp) :: trust_min = 1.0e-3_wp*aatoau
+      !> Upper trust radius bound of the RFO step (bohr), the 1 Angstrom of
+      !> MAPLE; the effective upper bound is `min(trust_max, max_displ)` so
+      !> that the documented single-step limit holds for every algorithm.
+      real(wp) :: trust_max = 1.0_wp*aatoau
       !> Denominator guard of the RFO secular equation
       real(wp) :: evals_eps = 1.0e-10_wp
       !> Margin between the RFO shift bracket and the smallest eigenvalue
@@ -760,10 +761,10 @@ module xtb_landscape_settings
       !> Initial trust radius of the P-RFO step (bohr), the `--lts trust=0.1`
       !> shortcut of PLAN section 6.3
       real(wp) :: trust = 3.7795e-1_wp
-      !> Lower bound of the trust radius (bohr)
-      real(wp) :: trust_min = 1.8897e-3_wp
-      !> Upper bound of the trust radius (bohr)
-      real(wp) :: trust_max = 1.8897_wp
+      !> Lower bound of the trust radius (bohr), the 1e-3 Angstrom of MAPLE
+      real(wp) :: trust_min = 1.0e-3_wp*aatoau
+      !> Upper bound of the trust radius (bohr), the 1 Angstrom of MAPLE
+      real(wp) :: trust_max = 1.0_wp*aatoau
       !> Trust radius shrink factor after a rejected or poorly predicted step
       real(wp) :: eta_shrink = 0.75_wp
       !> Trust radius expansion factor after a well predicted step
@@ -837,16 +838,16 @@ module xtb_landscape_settings
       logical :: escape_step_was_set = .false.
       !> Half separation of the two dimer images (bohr), i.e. the distance of
       !> each image from the common midpoint.  This is the pysisyphus
-      !> convention of PLAN section 5.3.6 (`1.8897e-2` bohr = 1e-2 Angstrom),
-      !> not the VASP one where `DdR` denotes twice that value.  The
-      !> `[to be calibrated]` marker is retired: report 28 section 6.4 measured that
-      !> `delta x 8` changes the dimer curvature by 0.0013 % and the analytic
-      !> Mueller-Brown check pins the value to 0.07 %, so the convention only
-      !> has to be the documented one.
-      real(wp) :: delta = 1.8897e-2_wp
+      !> convention of PLAN section 5.3.6 (`delta` = 1e-2 Angstrom =
+      !> `1.0e-2_wp*aatoau` bohr), not the VASP one where `DdR` denotes twice
+      !> that value.  The `[to be calibrated]` marker is retired: report 28
+      !> section 6.4 measured that `delta x 8` changes the dimer curvature by
+      !> 0.0013 % and the analytic Mueller-Brown check pins the value to
+      !> 0.07 %, so the convention only has to be the documented one.
+      real(wp) :: delta = 1.0e-2_wp*aatoau
       !> Finite difference step of the force along the translation direction
       !> (bohr), the `dR = 1e-3` Angstrom of Henkelman & Jonsson
-      real(wp) :: dR = 1.8897e-3_wp
+      real(wp) :: dR = 1.0e-3_wp*aatoau
       !> Finite difference angle of the dimer rotation (rad), the
       !> `delta theta = 1e-4` rad of Henkelman & Jonsson
       real(wp) :: rot_dtheta = 1.0e-4_wp
@@ -1106,13 +1107,14 @@ module xtb_landscape_settings
       logical :: endpoint_relax = .true.
       !> Kabsch aligned RMSD between the endpoint and its relaxed minimum
       !> below which the endpoint counts as having reached a minimum (bohr).
-      !> MAPLE `rmsd_end` is 1.8897e-1 bohr = 0.1 angstrom.  The criterion is
-      !> part of `endpoint_reached` and therefore of `result%reached_min_*`;
+      !> MAPLE `rmsd_end` is 0.1 angstrom = `1.0e-1_wp*aatoau` bohr.  The
+      !> criterion is part of `endpoint_reached` and therefore of
+      !> `result%reached_min_*`;
       !> it needs a relaxed endpoint and is **not applied** when
       !> `endpoint_relax = .false.` (there is no relaxed minimum to compare
       !> with, the endpoint is then assigned by the termination signal alone;
       !> `irc.log` reports the criterion and states when it was skipped)
-      real(wp) :: rmsd_end = 1.8897e-1_wp
+      real(wp) :: rmsd_end = 1.0e-1_wp*aatoau
       !> Electronic temperature frozen for the whole run (kelvin); copied
       !> into the engine control and pushed into the calculator (M4 hard
       !> constraint 1)
