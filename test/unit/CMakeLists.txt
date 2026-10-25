@@ -3647,6 +3647,51 @@ set_tests_properties(
 # `cmake -P` script.
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
+# The precision oracle of the performance campaign
+# (`docs/_simplify-recon/221-step0-benchmark-and-s2.md`): the delivered numbers,
+# asserted at the delivered precision instead of at a regression tripwire.
+#
+# The four water single points of `AGENTS.md` section 6 are pinned at 1e-12 Eh
+# (the 12 decimals the program prints; ~1120 ulp at 5.8 Eh) - GFN1 and GFNff had
+# no test at all before, GFN0 was a 10-digit prefix match and GFN2 a 1e-6 check
+# inside `install.sh`.  `--hess` on the same water pins the raw finite difference
+# matrix: the file shape, byte identity over two runs, and every one of its 81
+# entries against the delivered 9x9 matrix to 1e-9 Eh/bohr^2 (10x the file's own
+# print resolution).  The reference water is the geometry of the GFN0 test
+# above, so the two files cannot drift apart.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_precision_py.cmake" [=[
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}")
+execute_process(
+  COMMAND "${PYTHON}" "${SCRIPT}" "${EXE}" "${RUNDIR}" "${INPUT}"
+  WORKING_DIRECTORY "${RUNDIR}"
+  RESULT_VARIABLE status
+  OUTPUT_VARIABLE output
+  ERROR_VARIABLE output
+)
+if(NOT status EQUAL 0)
+  message(FATAL_ERROR "landscape_precision_check.py failed with status ${status}\n${output}")
+endif()
+]=])
+add_test("xtb/landscape-precision"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/landscape_precision_check.py
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-GFN0-WATER}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-precision
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_precision_py.cmake")
+# The oracle is only meaningful at a pinned thread count: with OpenMP the SCC
+# reductions are summed in thread order, so two runs of one binary differ by a
+# few ulp and neither the four energies (1e-12 Eh) nor the byte identity of the
+# hessian file holds any more.  Measured: without this property the check fails
+# on the byte comparison of the two `--hess` runs.
+set_tests_properties(
+  "xtb/landscape-precision"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
 set(LANDSCAPE-E2E-PY "${CMAKE_CURRENT_SOURCE_DIR}/landscape_e2e_check.py")
 set(LANDSCAPE-E2E-XTB "${XTB-EXE}")
 # the tester executable of this directory (a generator expression would not

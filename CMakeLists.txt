@@ -584,6 +584,24 @@ if(WITH_TESTS)
    add_subdirectory("test")
 endif()
 
+# Wall-time benchmark of the PES tasks (bench/README.md).
+#
+# A developer target, **not** a test: it prints timings, which depend on the
+# machine, the load and the BLAS, so nothing may pass or fail on them.  It is
+# therefore an on-demand custom target (never part of `all`, never in ctest)
+# and it is only defined when a Python 3 interpreter is available.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+   add_custom_target(benchmark
+      COMMAND "${Python3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/bench/tools/bench_landscape.py"
+              "$<TARGET_FILE:${XTB_EXE_NAME}>"
+              --work-dir "${PROJECT_BINARY_DIR}/bench"
+      WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
+      USES_TERMINAL
+      COMMENT "Timing the PES tasks (prints numbers, not verdicts)")
+endif()
+
 #################################
 # Optional command registration #
 #################################

@@ -949,7 +949,13 @@ subroutine test_mb_bprfo(error)
 
 end subroutine test_mb_bprfo
 
-!> P-RFO and B-P-RFO agree to better than 1e-3 bohr on Mueller-Brown.
+!> P-RFO and B-P-RFO agree to better than 2e-5 bohr on Mueller-Brown.
+!>
+!> The delivered RMSD is 6.3022e-06 bohr (the M4 acceptance number of
+!> `AGENTS.md` section 2), so the gate is 2e-5 bohr: 3x above the delivered
+!> value and 50x tighter than the 1e-3 tripwire it replaces.  A change that
+!> moves the two searches apart by more than 1e-5 bohr is a change of the
+!> saddle machinery and is re-baselined in a report, not absorbed here.
 subroutine test_mb_agree(error)
    type(error_type), allocatable, intent(out) :: error
    type(TEnvironment) :: env
@@ -966,7 +972,7 @@ subroutine test_mb_agree(error)
    if (allocated(error)) return
    rmsd = sqrt(sum((x_prfo - x_bprfo)**2)/real(size(x_prfo), wp))
    write(stdout, '(1x,a,es12.4)') "  prfo vs bprfo RMSD (bohr): ", rmsd
-   call check(error, rmsd < 1.0e-3_wp,&
+   call check(error, rmsd < 2.0e-5_wp,&
       & "the two methods did not reach the same saddle point")
 
 end subroutine test_mb_agree
@@ -2010,7 +2016,9 @@ subroutine test_dimer_mb(error)
    call check(error, maxval(abs(x_dimer - mb_saddle)) < 1.0e-3_wp, &
       & "the dimer did not reach the Mueller-Brown saddle point")
    if (allocated(error)) return
-   call check(error, rmsd < 1.0e-3_wp, &
+   ! delivered 7.7397e-05 bohr (AGENTS.md section 2); 2e-4 is 2.6x above it
+   ! and 5x tighter than the 1e-3 tripwire of the other searches
+   call check(error, rmsd < 2.0e-4_wp, &
       & "the dimer and P-RFO results differ")
 
 end subroutine test_dimer_mb

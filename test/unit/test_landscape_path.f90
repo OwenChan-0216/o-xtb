@@ -100,6 +100,14 @@ module test_landscape_path
    real(wp), parameter :: leps_e_reactant = -0.154978647146_wp
    !> Closed form barrier of the default LEPS parameters (kcal/mol)
    real(wp), parameter :: leps_barrier = 8.9985_wp
+   !> Tolerance of the LEPS barrier comparison of the four band methods
+   !> (kcal/mol).  The delivered deviations from the closed form value are
+   !> +0.0000 (NEB), +0.0000 (CI-NEB), -0.0004 (AutoNEB) and +0.0003 (String),
+   !> i.e. a few 1e-4 kcal/mol, so this gate **pins** them: it is 500x tighter
+   !> than the 0.5 kcal/mol tripwire it replaces and still 2.5x above the worst
+   !> delivered deviation.  Anything larger is a real change of the band
+   !> machinery and has to be re-baselined in a report, not absorbed here.
+   real(wp), parameter :: leps_barrier_tol = 1.0e-3_wp
    !> Analytic Mueller-Brown saddle point (dimensionless surface coordinates)
    real(wp), parameter :: mb_saddle(2) = [-0.82200156_wp, 0.62431280_wp]
    !> Analytic barrier of the Mueller-Brown surface (kcal/mol): the closed
@@ -1157,13 +1165,13 @@ subroutine test_leps_neb_barrier(error)
    k = band%highest_image
    barrier_kcal = (band%ts_energy - energies(1))*autokcal
    err_kcal = barrier_kcal - leps_barrier
-   call check(error, abs(err_kcal) < 0.5_wp,&
-      & "the NEB barrier deviates from the analytic value by more than 0.5 kcal/mol")
+   call check(error, abs(err_kcal) < leps_barrier_tol,&
+      & "the NEB barrier deviates from the analytic value by more than 1e-3 kcal/mol")
    if (allocated(error)) return
 
    r1 = abs(images(1, 2, k) - images(1, 1, k))
    r2 = abs(images(1, 3, k) - images(1, 2, k))
-   write(stdout, '(1x,a,i0,a,f20.12,a,f12.4,sp,f10.4)') "  NEB highest image ", k, &
+   write(stdout, '(1x,a,i0,a,f20.12,a,f16.10,sp,f12.7)') "  NEB highest image ", k, &
       & " E ", band%ts_energy, " barrier ", barrier_kcal, err_kcal
    write(stdout, '(1x,a,f10.5,a,f10.5,a,f10.5)') "  geometry r12 ", r1, " r23 ", r2, &
       & " r* ", leps_r_star
@@ -1209,11 +1217,11 @@ subroutine test_leps_cineb_barrier(error)
    k = band%climbing_image
    barrier_kcal = (band%ts_energy - energies(1))*autokcal
    err_kcal = barrier_kcal - leps_barrier
-   write(stdout, '(1x,a,i0,a,i0,a,f20.12,a,f12.4,sp,f10.4)') "  CI-NEB image ", k, &
+   write(stdout, '(1x,a,i0,a,i0,a,f20.12,a,f16.10,sp,f12.7)') "  CI-NEB image ", k, &
       & " ignited at ", band%ignition_iteration, " E ", band%ts_energy, &
       & " barrier ", barrier_kcal, err_kcal
-   call check(error, abs(err_kcal) < 0.5_wp,&
-      & "the CI-NEB barrier deviates from the analytic value by more than 0.5 kcal/mol")
+   call check(error, abs(err_kcal) < leps_barrier_tol,&
+      & "the CI-NEB barrier deviates from the analytic value by more than 1e-3 kcal/mol")
    if (allocated(error)) return
    ! the climbing image force criterion has to be met as well
    call check(error, band%ci_f_rms <= set%f_rms_max_tol,&
@@ -2585,11 +2593,11 @@ subroutine test_leps_autoneb(error)
    err_kcal = barrier_kcal - leps_barrier
    r1 = abs(images(1, 2, k) - images(1, 1, k))
    r2 = abs(images(1, 3, k) - images(1, 2, k))
-   write(stdout, '(1x,a,i0,a,i0,a,f16.10,a,f12.4,sp,f10.4,a,2f10.6)') "  AutoNEB stages ", &
+   write(stdout, '(1x,a,i0,a,i0,a,f16.10,a,f16.10,sp,f12.7,a,2f10.6)') "  AutoNEB stages ", &
       & auto%n_stages, ", images ", auto%n_images, ", E ", auto%ts_energy, &
       & "  barrier ", barrier_kcal, err_kcal, "  r12/r23 ", r1, r2
-   call check(error, abs(err_kcal) < 0.5_wp,&
-      & "the AutoNEB barrier deviates from the analytic value by more than 0.5 kcal/mol")
+   call check(error, abs(err_kcal) < leps_barrier_tol,&
+      & "the AutoNEB barrier deviates from the analytic value by more than 1e-3 kcal/mol")
    if (allocated(error)) return
    call check(error, abs(r1 - leps_r_star) < 5.0e-2_wp,&
       & "the AutoNEB saddle candidate is not at the closed form geometry")
@@ -2730,14 +2738,14 @@ subroutine test_leps_string(error)
    r2 = abs(nodes(1, 3, k) - nodes(1, 2, k))
    r13 = abs(nodes(1, 3, k) - nodes(1, 1, k))
    err_kcal = string%barrier*autokcal - barrier_ref
-   write(stdout, '(1x,a,i4,a,i4,a,f16.10,a,f12.4,sp,f10.4)') "  string nodes ", &
+   write(stdout, '(1x,a,i4,a,i4,a,f16.10,a,f16.10,sp,f12.7)') "  string nodes ", &
       & string%n_nodes, " grow ", string%n_grow, " E ", string%ts_energy, &
       & "  barrier ", string%barrier*autokcal, err_kcal
    write(stdout, '(1x,a,3f12.6,a,l1,a,es12.5,a,es12.5)') "  string r12/r23/r13 ", &
       & r1, r2, r13, "  converged ", string%converged, "  f_avg ", string%f_rms_avg, &
       & "  f_max ", string%f_rms_max
-   call check(error, abs(err_kcal) < 0.5_wp,&
-      & "the string barrier deviates from the analytic value by more than 0.5 kcal/mol")
+   call check(error, abs(err_kcal) < leps_barrier_tol,&
+      & "the string barrier deviates from the analytic value by more than 1e-3 kcal/mol")
    if (allocated(error)) return
    call check(error, abs(r1 - leps_r_star) < 1.0e-2_wp,&
       & "the climbing node is not at the closed form saddle point")
