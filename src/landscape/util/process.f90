@@ -56,6 +56,7 @@ module xtb_landscape_process
    public :: landscape_process_read_int, landscape_process_write_int
    public :: landscape_process_read_real, landscape_process_write_real
    public :: landscape_process_wait
+   public :: landscape_process_status_text
    public :: landscape_process_worker_exit
 
    interface
@@ -171,5 +172,37 @@ module xtb_landscape_process
          integer(c_int), value :: status
       end subroutine landscape_process_worker_exit
    end interface
+
+contains
+
+!> Describe a raw worker wait status in words.
+!>
+!> `landscape_process_wait` stores the status exactly as `waitpid(2)` returns
+!> it, i.e. as a packed word: the low seven bits are the terminating signal and
+!> the next byte the exit status of a normal exit (`WIFSIGNALED`,
+!> `WIFEXITED`/`WEXITSTATUS`).  Printed raw, a worker that left with `exit(1)`
+!> claims "status 256" and one killed by `SIGSEGV` claims "status 11" - numbers
+!> that read like corruption.  The two cases are decoded here so that a report
+!> can name what happened; the decoding is POSIX specific, which is where
+!> workers exist at all (elsewhere `landscape_process_available` is 0 and no
+!> status is ever produced).
+function landscape_process_status_text(status) result(text)
+   !> Raw wait status of a reaped worker
+   integer(c_int), intent(in) :: status
+   !> One line, e.g. "exit status 1" or "terminated by signal 11"
+   character(len=:), allocatable :: text
+
+   character(len=64) :: buffer
+   integer :: raw
+
+   raw = int(status)
+   if (iand(raw, 127) == 0) then
+      write(buffer, '(a,i0)') "exit status ", ishft(raw, -8)
+   else
+      write(buffer, '(a,i0)') "terminated by signal ", iand(raw, 127)
+   end if
+   text = trim(buffer)
+
+end function landscape_process_status_text
 
 end module xtb_landscape_process

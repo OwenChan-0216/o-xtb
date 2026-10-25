@@ -478,9 +478,11 @@ subroutine help(iunit, topic, status, values_only)
       "    calculator, the geometry and the reference wavefunction; the parent", &
       "    combines the gradient columns, so the worker count changes the wall time", &
       "    only and the hessian file is byte for byte the same at every count.", &
-      "    One OpenMP thread per worker is required (OMP_NUM_THREADS=1 or -P 1):", &
-      "    a threaded run is refused instead of nested, a value above the processor", &
-      "    count is reported, and a value below 1 runs serially with a warning.", &
+      "    A single-threaded run is required, because a worker inherits the team", &
+      "    of the parent: OMP_NUM_THREADS=1 is the way to say that (and -P 1 if", &
+      "    -P/--parallel is given).  A threaded run is refused instead of nested,", &
+      "    a value above the processor count is reported, and a value below 1", &
+      "    runs serially with a warning.", &
       "    Ignored by the model and file Hessian sources."])
    call add("--lopt-restart MODE", "minimisation", &
       "wavefunction restart policy: off, pin or warm", &
@@ -580,9 +582,11 @@ subroutine help(iunit, topic, status, values_only)
       "    calculator, the geometry and the reference wavefunction; the parent", &
       "    combines the gradient columns, so the worker count changes the wall time", &
       "    only and the hessian file is byte for byte the same at every count.", &
-      "    One OpenMP thread per worker is required (OMP_NUM_THREADS=1 or -P 1):", &
-      "    a threaded run is refused instead of nested, a value above the processor", &
-      "    count is reported, and a value below 1 runs serially with a warning.", &
+      "    A single-threaded run is required, because a worker inherits the team", &
+      "    of the parent: OMP_NUM_THREADS=1 is the way to say that (and -P 1 if", &
+      "    -P/--parallel is given).  A threaded run is refused instead of nested,", &
+      "    a value above the processor count is reported, and a value below 1", &
+      "    runs serially with a warning.", &
       "    Ignored by the model and file Hessian sources."])
    call add("--lscan-hessian SOURCE", "scan", &
       "Hessian backend of the scan points", &
@@ -721,9 +725,11 @@ subroutine help(iunit, topic, status, values_only)
       "    calculator, the geometry and the reference wavefunction; the parent", &
       "    combines the gradient columns, so the worker count changes the wall time", &
       "    only and the hessian file is byte for byte the same at every count.", &
-      "    One OpenMP thread per worker is required (OMP_NUM_THREADS=1 or -P 1):", &
-      "    a threaded run is refused instead of nested, a value above the processor", &
-      "    count is reported, and a value below 1 runs serially with a warning.", &
+      "    A single-threaded run is required, because a worker inherits the team", &
+      "    of the parent: OMP_NUM_THREADS=1 is the way to say that (and -P 1 if", &
+      "    -P/--parallel is given).  A threaded run is refused instead of nested,", &
+      "    a value above the processor count is reported, and a value below 1", &
+      "    runs serially with a warning.", &
       "    Ignored by the model and file Hessian sources."])
    call add("--lts-product NAME", "band", &
       "product endpoint of a chain-of-states search", &
@@ -974,9 +980,11 @@ subroutine help(iunit, topic, status, values_only)
       "    calculator, the geometry and the reference wavefunction; the parent", &
       "    combines the gradient columns, so the worker count changes the wall time", &
       "    only and the hessian file is byte for byte the same at every count.", &
-      "    One OpenMP thread per worker is required (OMP_NUM_THREADS=1 or -P 1):", &
-      "    a threaded run is refused instead of nested, a value above the processor", &
-      "    count is reported, and a value below 1 runs serially with a warning.", &
+      "    A single-threaded run is required, because a worker inherits the team", &
+      "    of the parent: OMP_NUM_THREADS=1 is the way to say that (and -P 1 if", &
+      "    -P/--parallel is given).  A threaded run is refused instead of nested,", &
+      "    a value above the processor count is reported, and a value below 1", &
+      "    runs serially with a warning.", &
       "    Ignored by the model and file Hessian sources."])
    call add("--lirc-restart MODE", "irc", &
       "wavefunction restart policy: off, pin or warm", &
@@ -1013,9 +1021,11 @@ subroutine help(iunit, topic, status, values_only)
       "    calculator, the geometry and the reference wavefunction; the parent", &
       "    combines the gradient columns, so the worker count changes the wall time", &
       "    only and the hessian file is byte for byte the same at every count.", &
-      "    One OpenMP thread per worker is required (OMP_NUM_THREADS=1 or -P 1):", &
-      "    a threaded run is refused instead of nested, a value above the processor", &
-      "    count is reported, and a value below 1 runs serially with a warning.", &
+      "    A single-threaded run is required, because a worker inherits the team", &
+      "    of the parent: OMP_NUM_THREADS=1 is the way to say that (and -P 1 if", &
+      "    -P/--parallel is given).  A threaded run is refused instead of nested,", &
+      "    a value above the processor count is reported, and a value below 1", &
+      "    runs serially with a warning.", &
       "    Ignored by the model and file Hessian sources."])
    call add("--lvib-restart MODE", "frequencies", &
       "wavefunction restart policy: off, pin or warm", &

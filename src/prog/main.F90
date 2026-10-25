@@ -4891,7 +4891,7 @@ contains
          else
 !$          nproc = omp_get_num_procs()
             if (nproc > 0 .and. landscape_hess_jobs_value > nproc) then
-               write(jobs_note, '(a,i0,a,i0,a)') trim(landscape_hess_jobs_flag), &
+               write(jobs_note, '(a,1x,i0,a,i0,a)') trim(landscape_hess_jobs_flag), &
                   & landscape_hess_jobs_value, " exceeds the ", nproc, &
                   & " processors of this machine"
                call env%warning(trim(jobs_note), source)

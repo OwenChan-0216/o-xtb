@@ -91,7 +91,8 @@ module xtb_landscape_hessian
       & landscape_process_pipe, landscape_process_fork, landscape_process_close, &
       & landscape_process_read_int, landscape_process_write_int, &
       & landscape_process_read_real, landscape_process_write_real, &
-      & landscape_process_wait, landscape_process_worker_exit
+      & landscape_process_wait, landscape_process_status_text, &
+      & landscape_process_worker_exit
    implicit none(type, external)
    private
 
@@ -312,14 +313,18 @@ subroutine new_landscape_hessian_provider(env, source, provider, sccacc, filenam
          ! count uses the ambient team - a difference at the level of
          ! `AGENTS.md` section 6.1 that costs the byte identity this option is
          ! required to keep.  The combination is therefore refused and not
-         ! silently serialised or silently re-threaded.
+         ! silently serialised or silently re-threaded: `jobs > 1` needs a
+         ! **single-threaded run**, and `OMP_NUM_THREADS=1` is how that is said
+         ! (a `-P`/`--parallel` value is checked here as well, because it sets
+         ! the same team size).
          n_threads = 1
 !$       n_threads = omp_get_max_threads()
          if (n_threads > 1) then
             write(buffer, '(a,i0,a,i0,a)') "--l*-hess-jobs ", n_jobs, &
-               & " needs one OpenMP thread per worker, but this run uses ", &
-               & n_threads, " (OMP_NUM_THREADS, -P/--parallel); set "//&
-               & "OMP_NUM_THREADS=1 or use --l*-hess-jobs 1"
+               & " needs a single-threaded run (OMP_NUM_THREADS=1, and -P 1 "//&
+               & "if -P/--parallel is given), but this run uses ", &
+               & n_threads, " threads; set OMP_NUM_THREADS=1 or use "//&
+               & "--l*-hess-jobs 1"
             call env%error(trim(buffer), source_name)
             return
          end if
@@ -647,10 +652,16 @@ contains
          end if
 
          ! Collect the oldest worker: a blocking read of its status word, then
-         ! of its two gradients.  The payload of one column is 24N bytes, far
-         ! below the pipe capacity of any supported platform at the molecule
-         ! sizes this provider is used for, and the pipe belongs to this worker
-         ! alone.
+         ! of its two gradients.  One column is `48N + 4` bytes - two `3N`
+         ! gradients of eight bytes each plus the four byte status word - so at
+         ! N = 1366 atoms the payload exceeds the 64 KiB pipe buffer of Linux
+         ! and the worker's write blocks until the parent has drained the pipe.
+         ! That is the documented limit of this collector (N <= 1365 keeps one
+         ! column in one write), not a deadlock: every pipe has exactly one
+         ! writer, the parent closes the write end before it launches the next
+         ! worker, and it always blocks on the pipe of the **oldest** worker and
+         ! loops over short reads - so a blocked writer is never the pipe being
+         ! waited for, and every worker makes progress in launch order.
          icol = q_col(head)
          want = int(storage_size(status_word(1))/8, c_long)
          got = landscape_process_read_int(q_fd(head), status_word, want)
@@ -691,10 +702,12 @@ contains
                   & "available"
                call env%error(trim(buffer), source)
             else
-               write(buffer, '(a,i0,a,i0,a,i0,a,i0,a)') "the worker process of "//&
-                  & "the numerical Hessian failed (atom ", iat, &
-                  & ", Cartesian component ", ic, ", exit status ", &
-                  & wait_status, ", status word ", int(status_word(1)), ")"
+               write(buffer, '(a)') "the worker process of the numerical "//&
+                  & "Hessian failed (atom "//trim(landscape_int_to_string(iat))//&
+                  & ", Cartesian component "//trim(landscape_int_to_string(ic))//&
+                  & ", "//landscape_process_status_text(wait_status)//&
+                  & ", status word "//trim(landscape_int_to_string(&
+                     & int(status_word(1))))//")"
                call env%error(trim(buffer), source)
             end if
          end if
