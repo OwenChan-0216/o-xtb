@@ -66,8 +66,12 @@ Release `-O2`, `gfortran 12.2.0`, one thread, idle 8-core machine, median of the
 `docs/_simplify-recon/221-step0-benchmark-and-s2.md`).  The band row is the one
 number report 221 changed: at `4f1a0ef` a failed search still paid for a
 confirmation Hessian, which the five-step budget case shows as 211 evaluations
-and 1.96 s; after the S2 fix of that report the same command line costs 31
-evaluations and 0.26 s.  Every other row is unchanged.
+and 1.96 s; after the S2 fix (only a converged search is confirmed) the same
+command line costs 31 evaluations and 0.26 s.  The endpoint cache of the next
+commit (`landscape_band_endpoint_cache`, report 223) removes the two fixed
+endpoints from every sweep after the first, which the same case shows as **20
+evaluations and 0.19 s** (measured on the fixed tree of report 225, gfortran
+12.2.0).  Every other row is unchanged.
 
 | case | n | median / s | min / s | max / s | evals |
 |---|---|---|---|---|---|

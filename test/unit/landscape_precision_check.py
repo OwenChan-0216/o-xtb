@@ -29,10 +29,10 @@ gap for two quantities that are cheap to produce and expensive to fake:
 **The four water single points.**  The reference geometry is the one the GFN0
 test uses (``test/unit/CMakeLists.txt``, ``LANDSCAPE-GFN0-WATER``), a staggered
 water at the experimental geometry.  Each of ``--gfn 0/1/2/ff`` is run with
-``--ljson`` and the document's canonical ``energy`` field (16-17 significant
-digits, one more than the 12 decimals of the stdout line) is compared against
-the delivered value.  The tolerance is **1e-12 Eh**, i.e. the 12 decimals the
-program prints:
+``--ljson`` and the document's canonical ``energy`` field (18 decimals) is
+compared against the delivered value, which is that field for the release build
+of commit ``2f91a0d`` - not the 12-decimal ``total energy`` line, whose own
+rounding would spend part of the tolerance.  The tolerance is **1e-12 Eh**:
 
   * at |E| <= 5.8 Eh one unit in the last place is 8.9e-16 Eh, so 1e-12 Eh is
     ~1120 ulp - a budget, not a bit pattern;
@@ -42,9 +42,12 @@ program prints:
   * the measured cross-build spread is also zero - the four energies are
     bit-identical before and after the 2026-10-16 performance PRs
     (``AGENTS.md`` section 2) - so the 1120 ulp are a margin for a *different*
-    BLAS or compiler, not for this build.  A change that moves any of the four
-    by more than 1e-12 Eh is a real numerical change and has to be re-baselined
-    in a report, which is exactly what this check exists to force.
+    BLAS or compiler, not for this build.  Measured cross-compiler: the
+    gfortran 14.4.0 build of the gating CI reproduces GFN0, GFN1 and GFNff
+    exactly and GFN2 to +2.7e-15 Eh, so the whole budget is available to a
+    compiler difference.  A change that moves any of the four by more than
+    1e-12 Eh is a real numerical change and has to be re-baselined in a report,
+    which is exactly what this check exists to force.
 
 **The finite difference Hessian of the same water.**  ``--hess`` writes the raw
 matrix to ``hessian`` (a ``$hessian`` header and 9x9 values with 10 decimals).
@@ -71,13 +74,23 @@ import subprocess
 import sys
 from pathlib import Path
 
-#: The delivered water single points (hartree), in the order of ``METHODS``.
-#: ``AGENTS.md`` section 6: -4.361986999510 / -5.764209595203 /
-#: -5.065772968305 / -0.319465230453 Eh.  GFN0 and GFN2 were gated before (a
-#: 10-digit prefix and a 1e-6 installer check); GFN1 and GFNff were datums only.
-METHODS = [("0", -4.361986999510), ("1", -5.764209595203),
-           ("2", -5.065772968305), ("ff", -0.319465230453)]
-#: Energy tolerance (hartree): the 12 printed decimals, ~1120 ulp at 5.8 Eh.
+#: The delivered water single points (hartree), in the order of ``METHODS``,
+#: taken from the full-precision ``energy`` field of the ``--ljson`` document
+#: (the field carries 18 decimals, not the 12 the ``total energy`` line
+#: prints).  The 12-decimal values of ``AGENTS.md`` section 6 are
+#: -4.361986999510 / -5.764209595203 / -5.065772968305 / -0.319465230453 Eh;
+#: the extra digits below are what those lines round.  Measured on the release
+#: build of commit 2f91a0d with gfortran 12.2.0, they reproduce on the gfortran
+#: 14.4.0 build of the gating CI to 0 (GFN0/1/ff) and +2.7e-15 Eh (GFN2).
+#: GFN0 and GFN2 were gated before (a 10-digit prefix and a 1e-6 installer
+#: check); GFN1 and GFNff were datums only.
+METHODS = [("0", -4.36198699950954), ("1", -5.76420959520329),
+           ("2", -5.065772968305037), ("ff", -0.31946523045327296)]
+#: Energy tolerance (hartree): 1e-12 Eh, ~1120 ulp at 5.8 Eh.  The reference
+#: is the unrounded document value, so the whole budget is cross-build margin
+#: (measured cross-compiler spread above: 2.7e-15 Eh) instead of partly the
+#: rounding of a 12-decimal datum, which alone spent 5.4e-13 of it (report
+#: 224, finding 2).
 ENERGY_TOL = 1.0e-12
 
 #: The raw ``--hess`` matrix of the same water at GFN2 (hartree/bohr^2), rows of
@@ -149,8 +162,9 @@ def check_energies(binary, water, rundir):
         print("  --gfn %-2s total energy %s Eh  delta %+.3e" % (method, printed,
                                                                 delta))
         if abs(delta) > ENERGY_TOL:
-            fail("the --gfn %s single point is %.16f Eh, the delivered value is "
-                 "%.12f Eh: the delta %+.3e exceeds the %.0e Eh tolerance"
+            fail("the --gfn %s single point is %.17g Eh, the delivered "
+                 "value is %.17g Eh: the delta %+.3e exceeds the %.0e Eh "
+                 "tolerance"
                  % (method, energy, reference, delta, ENERGY_TOL), output)
 
 

@@ -95,9 +95,10 @@
 !>    before the band is built.  Because the endpoints never move, their
 !>    energy and gradient are evaluated **once** and reused by every later
 !>    iteration (`landscape_band_endpoint_cache`); re-evaluating them would
-!>    recompute a bitwise identical pair of values, since the engine's `off`
-!>    restart policy restores the recorded wavefunction before every
-!>    evaluation.
+!>    recompute the same pair of values, since the engine's `off` restart
+!>    policy restores the recorded wavefunction before every evaluation.
+!>    That equality is exact for `off` and `pin`; with `--lts-restart warm`
+!>    it is not, see the note on the cache.
 !>  * **Propagation and its measured failure window.**  The band is propagated
 !>    by a truncated L-BFGS step on the band force (steps are scaled down, not
 !>    projected, when the largest component exceeds `max_displ`) and the step
@@ -213,18 +214,30 @@ module xtb_landscape_path_neb
 !> holds them, and `landscape_band_energies` fills it on the first sweep and
 !> reuses it afterwards.
 !>
-!> **The reuse changes no number.**  The engine's default restart policy
-!> `off` records the incoming wavefunction and restores it before every
-!> evaluation (`xtb_landscape_engine`), so a repeated geometry returns a
-!> bitwise identical energy and gradient; the cached values are therefore the
-!> values the re-evaluation would have produced (measured byte for byte, see
-!> report 223).
+!> **The reuse changes no number for the `off` and `pin` restart policies.**
+!> The engine's default restart policy `off` records the incoming
+!> wavefunction and restores it before every evaluation (`xtb_landscape_engine`),
+!> so a repeated geometry returns a bitwise identical energy and gradient; the
+!> cached values are therefore the values the re-evaluation would have
+!> produced (measured byte for byte, see report 223).  With
+!> `--lts-restart warm` the engine keeps the incoming wavefunction instead
+!> (`engine.f90`, `p_landscape_restart_warm`), so the second evaluation of the
+!> same geometry can land on a different SCF solution - `AGENTS.md` section 6
+!> measures a 3.9e-07 Eh/bohr gradient jump for that policy - and the cache
+!> freezes the first sweep's endpoint values where a re-evaluation would have
+!> returned slightly different ones.  A warm-restart band is therefore not
+!> bitwise equal to the pre-cache run; the band kernel cannot ask the model
+!> for its restart mode, so the difference is documented here rather than
+!> avoided (report 224, finding 5).
 !>
 !> The cache belongs to **one** band: fill it from the first evaluation of a
-!> band whose endpoints do not move and do not hand it to another band.  The
-!> two consumers are `landscape_band_optimize` and the string/GSM
-!> optimisation, whose endpoints are fixed as well, and both create it right
-!> before the run.
+!> band whose endpoints do not move.  `landscape_band_energies` enforces that
+!> by keeping copies of the two endpoint geometries it filled the cache from
+!> and dropping the cache when the band hands over different ones (or a band
+!> with a different atom count), so a cache reused by a second band cannot
+!> return the first band's values.  The two consumers are
+!> `landscape_band_optimize` and the string/GSM optimisation, whose endpoints
+!> are fixed as well, and both create it right before the run.
 type :: landscape_band_endpoint_cache
    !> True once both endpoint evaluations are stored
    logical :: valid = .false.
@@ -232,6 +245,9 @@ type :: landscape_band_endpoint_cache
    real(wp) :: energy(2) = 0.0_wp
    !> Endpoint gradients (hartree/bohr), `(3, nat, 2)`
    real(wp), allocatable :: gradient(:, :, :)
+   !> Geometries the cache was filled from (bohr), `(3, nat, 2)`; the cache is
+   !> dropped when the band presents different endpoints
+   real(wp), allocatable :: geometry(:, :, :)
 end type landscape_band_endpoint_cache
 
 contains
@@ -321,9 +337,11 @@ end subroutine landscape_band_align
 !> evaluated only on the first sweep and read from the cache afterwards, which
 !> removes `2/n_images` of the evaluations of a band run (40 % at five images,
 !> 22 % at nine) without changing any value: see the note on
-!> `landscape_band_endpoint_cache`.  `n_evaluated` reports how many images this
-!> call actually sent to the potential, so a caller can keep an honest cost
-!> counter instead of assuming `n_images`.
+!> `landscape_band_endpoint_cache`.  The cache is dropped on entry when it was
+!> filled from other endpoint geometries, so a cache handed to a second band
+!> cannot answer with the first band's values.  `n_evaluated` reports how many
+!> images this call actually sent to the potential, so a caller can keep an
+!> honest cost counter instead of assuming `n_images`.
 subroutine landscape_band_energies(env, model, images, energies, gradients, fail, &
       & endpoints, n_evaluated)
    !> Computational environment
@@ -355,12 +373,31 @@ subroutine landscape_band_energies(env, model, images, energies, gradients, fail
    if (present(n_evaluated)) n_evaluated = 0
    filled = .false.
    if (present(endpoints)) then
-      ! a cache of another band (different atom count) cannot be used
+      ! the cache is only usable for the band it was filled from: a different
+      ! atom count or different endpoint geometries mean the stored values
+      ! belong to another band (report 224, finding 4)
       if (allocated(endpoints%gradient)) then
          if (size(endpoints%gradient, 1) /= 3 .or. &
-               & size(endpoints%gradient, 2) /= nat) then
+               & size(endpoints%gradient, 2) /= nat .or. &
+               & size(endpoints%gradient, 3) /= 2) then
             deallocate(endpoints%gradient)
             endpoints%valid = .false.
+         end if
+      end if
+      if (endpoints%valid) then
+         if (n_images < 2 .or. .not. allocated(endpoints%geometry)) then
+            endpoints%valid = .false.
+         else if (size(endpoints%geometry, 1) /= 3 .or. &
+               & size(endpoints%geometry, 2) /= nat .or. &
+               & size(endpoints%geometry, 3) /= 2) then
+            endpoints%valid = .false.
+         else if (any(endpoints%geometry(:, :, 1) /= images(:, :, 1)) .or. &
+               & any(endpoints%geometry(:, :, 2) /= images(:, :, n_images))) then
+            endpoints%valid = .false.
+         end if
+         if (.not. endpoints%valid) then
+            if (allocated(endpoints%gradient)) deallocate(endpoints%gradient)
+            if (allocated(endpoints%geometry)) deallocate(endpoints%geometry)
          end if
       end if
    end if
@@ -398,8 +435,11 @@ subroutine landscape_band_energies(env, model, images, energies, gradients, fail
       if (endpoint > 0 .and. present(endpoints)) then
          if (.not. allocated(endpoints%gradient)) &
             & allocate(endpoints%gradient(3, nat, 2))
+         if (.not. allocated(endpoints%geometry)) &
+            & allocate(endpoints%geometry(3, nat, 2))
          endpoints%energy(endpoint) = energies(k)
          endpoints%gradient(:, :, endpoint) = gradients(:, :, k)
+         endpoints%geometry(:, :, endpoint) = images(:, :, k)
          filled(endpoint) = .true.
       end if
    end do

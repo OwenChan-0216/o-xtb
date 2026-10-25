@@ -413,13 +413,17 @@ subroutine write_json(env, mol, settings, result, n_scf_fail)
 
    status = landscape_json_status_ok
    if (.not. result%converged) status = landscape_json_status_incomplete
-   ! A converged search that did not end on a first order saddle (or a run
-   ! with an unconverged SCC) has no usable result; the task reports both
-   ! through `env` and exits non-zero.  The `result%converged` guard is part
-   ! of report 221 (H1): the confirmation is skipped for a failed search, so
-   ! `is_saddle` keeps its default and cannot be read as "the search converged
-   ! somewhere that is not a saddle".
-   if (result%converged .and. settings%verify_ts .and. .not. result%is_saddle) then
+   ! A search that did not end on a first order saddle (or a run with an
+   ! unconverged SCC) has no usable result; the task reports both through
+   ! `env` and exits non-zero.  The predicate is "the confirmation ran and
+   ! rejected the point", not "the search converged to a non-saddle":
+   ! `confirm_saddle` itself sets `converged = .false.` for the 0 or >1
+   ! imaginary mode verdict (H2), so a `result%converged` guard cannot see it
+   ! and would downgrade that error to `incomplete` (report 224, finding 1).
+   ! `n_imag` is -1 exactly when the confirmation did not run - a failed
+   ! search, or `--lts-no-verify` - so a search that exhausted its budget
+   ! keeps `incomplete` and its own message.
+   if (settings%verify_ts .and. result%n_imag >= 0 .and. .not. result%is_saddle) then
       status = landscape_json_status_error
    end if
    if (n_scf_fail > 0) status = landscape_json_status_error

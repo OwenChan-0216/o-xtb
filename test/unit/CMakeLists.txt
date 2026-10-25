@@ -1785,6 +1785,15 @@ add_test("xtb/landscape-ts-method-unknown"
 # (`--lts-escape-step 0`, which is what this test pins: `xtb/landscape-ts-escape`
 # is the same input with the default escape, where the walk out of the minimum
 # turns the search into a successful one).
+#
+# The `--ljson` document reports that verdict as `status` -1 (`error`), not 1
+# (`incomplete`): `landscape_json_status_error` is defined as "the task reported
+# an error through `env`", and this path does.  The reported status is a
+# separate fact from `converged`: `confirm_saddle` clears `converged` when the
+# confirmation rejects the point, so a guard written on `converged` cannot see
+# the H2 verdict at all and downgrades it (report 224, finding 1).  The
+# failed-search branch - `status` 1 with the search's own message - is pinned
+# by `xtb/landscape-ts-failure`.
 set(LANDSCAPE-HNC "${CMAKE_CURRENT_BINARY_DIR}/landscape_hnc.xyz")
 file(WRITE "${LANDSCAPE-HNC}"
   "3\nlinear HNC (a minimum)\n"
@@ -1793,14 +1802,14 @@ file(WRITE "${LANDSCAPE-HNC}"
   "H  0.0000000 -1.0500000  0.0000000\n")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_ts_minimum.cmake" [=[
 file(MAKE_DIRECTORY "${RUNDIR}")
-foreach(name "xtbts.xyz" "xtbts.log")
+foreach(name "xtbts.xyz" "xtbts.log" "landscape_ts.json")
   if(EXISTS "${RUNDIR}/${name}")
     file(REMOVE "${RUNDIR}/${name}")
   endif()
 endforeach()
 execute_process(
   COMMAND "${EXE}" "${INPUT}" --gfn 2 --lts --lts-method prfo --norestart
-          --lts-escape-step 0
+          --lts-escape-step 0 --ljson
   WORKING_DIRECTORY "${RUNDIR}"
   RESULT_VARIABLE status
   OUTPUT_VARIABLE output
@@ -1823,6 +1832,26 @@ foreach(name "xtbts.xyz" "xtbts.log")
     message(FATAL_ERROR "${name} was not written despite the failure")
   endif()
 endforeach()
+# the machine-readable verdict of the same run
+if(NOT EXISTS "${RUNDIR}/landscape_ts.json")
+  message(FATAL_ERROR "--ljson wrote no landscape_ts.json\n${output}")
+endif()
+file(READ "${RUNDIR}/landscape_ts.json" document)
+if(NOT document MATCHES "\"status\": -1,")
+  message(FATAL_ERROR "the rejected point is not reported as status -1 (error)\n${document}")
+endif()
+if(NOT document MATCHES "\"status_name\": \"error\"")
+  message(FATAL_ERROR "the rejected point is not named as an error\n${document}")
+endif()
+if(NOT document MATCHES "\"converged\": false")
+  message(FATAL_ERROR "the rejected point still reports converged\n${document}")
+endif()
+if(NOT document MATCHES "the located stationary point is a minimum")
+  message(FATAL_ERROR "the document lost the confirmation's message\n${document}")
+endif()
+if(NOT document MATCHES "\"n_imag\": 0")
+  message(FATAL_ERROR "the document does not carry n_imag 0\n${document}")
+endif()
 ]=])
 add_test("xtb/landscape-ts-minimum"
   ${CMAKE_COMMAND}
@@ -3868,6 +3897,28 @@ add_test("xtb/landscape-ts-failure"
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
 set_tests_properties(
   "xtb/landscape-ts-failure"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
+# The two failure statuses of the `ts` document, side by side (report 224,
+# finding 1): a search that ran out of steps is `incomplete` (1) with its own
+# message and `n_imag` -1, a search that converged onto a *minimum* is `error`
+# (-1) with the confirmation's verdict and `n_imag` 0.  The second branch is the
+# H2 verdict: `confirm_saddle` clears `result%converged` when it rejects the
+# point, so a status predicate written on `converged` never sees it and
+# downgrades the document to 1.  The mode writes the linear HNC fixture it needs
+# (the exhausted branch uses the ammonia input); the CLI half of the same pin is
+# in `xtb/landscape-ts-minimum`.
+add_test("xtb/landscape-ts-status"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=ts-status;${LANDSCAPE-E2E-XTB};${LANDSCAPE-NH3};${CMAKE_CURRENT_BINARY_DIR}/landscape-ts-status"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-ts-status
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+set_tests_properties(
+  "xtb/landscape-ts-status"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

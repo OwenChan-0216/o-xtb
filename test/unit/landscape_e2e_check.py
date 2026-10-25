@@ -98,6 +98,15 @@ Modes (the first four mirror a CMake test of `test/unit/CMakeLists.txt`)
         something that is not a saddle" verdict), never prints the saddle
         confirmation, and costs exactly the same number of evaluations with and
         without `--lts-no-verify` - the search-only cost, pinned per fixture.
+  ts-status <exe> <input> <rundir>
+        The two failure statuses of the `ts` document, side by side (report
+        224, finding 1): a search that ran out of steps reports `status` 1
+        (`incomplete`) with its own message and `n_imag` -1, while a search
+        that converged onto a *minimum* reports `status` -1 (`error`) with the
+        confirmation's message and `n_imag` 0.  The second branch is the H2
+        verdict, whose message the task raises through `env`; the status
+        predicate must not be written on `converged`, which the confirmation
+        clears, or the document is downgraded to `incomplete`.
   layers        <xtb_exe> <tester_exe> <input> <rundir> [<ts_input>]
         Runs L1 (every landscape unit suite that needs no SCF), L2 (the engine
         boundary suites) and L3 (the `opt -> hess -> freq -> thermo` chain,
@@ -758,6 +767,15 @@ NH3_DOWN = ("4\nammonia (N below the H3 plane)\n"
             "H -0.4700000  0.8140000  0.0000000\n"
             "H -0.4700000 -0.8140000  0.0000000\n")
 
+#> A linear HNC, i.e. the molecule's own minimum.  With the escape out of a
+#> minimum switched off, the P-RFO search converges **onto that minimum**,
+#> which is the H2 fixture of `xtb/landscape-ts-minimum`; written here so the
+#> status mode needs no second input file.
+HNC_LINEAR = ("3\nlinear HNC (a minimum)\n"
+              "N  0.0000000  1.1560000  0.0000000\n"
+              "C  0.0000000  0.0000000  0.0000000\n"
+              "H  0.0000000 -1.0500000  0.0000000\n")
+
 
 def check_ts_failure(exe, inp, rundir):
     """A failed `--lts` search keeps its own message and its own cost.
@@ -799,6 +817,14 @@ def check_ts_failure(exe, inp, rundir):
                   "--lts-max-steps", str(steps), "--lts-product", product],
          "band reached the iteration limit without converging", band_cost),
     )
+    # Every run below exits non-zero on purpose and is then judged by its
+    # document, so a directory left by an earlier run would be read as this
+    # run's result when the child died before writing - the stale-state
+    # flakiness AGENTS.md section 6 records for `scan-failed-point`.
+    for label, _args, _message, _cost in cases:
+        for variant in ("confirmed", "unconfirmed"):
+            shutil.rmtree(rundir + "-%s-%s" % (label, variant),
+                          ignore_errors=True)
     for label, args, message, expected in cases:
         counters = {}
         for variant, extra in (("confirmed", []),
@@ -861,6 +887,85 @@ def check_ts_failure(exe, inp, rundir):
     print("ts-failure: a failed single-geometry search and a failed band "
           "keep their own message and cost the search only (%d and %d "
           "evaluations)" % (cases[0][3], cases[1][3]))
+
+
+def check_ts_status(exe, inp, rundir):
+    """The two `--lts` failure statuses of the document, side by side.
+
+    `landscape_json_status_incomplete` (1) means "the result is written but a
+    criterion was not met"; `landscape_json_status_error` (-1) means "an error
+    was reported through `env`" (`src/landscape/types/json.f90`).  The task has
+    exactly two ways to fail a search and both must map onto that contract:
+
+      * a search that ran out of steps keeps its own message and reports 1 -
+        the search found nothing to confirm, so `n_imag` stays at its "not
+        performed" value -1;
+      * a search that **converged onto a minimum** reports -1 with the
+        confirmation's message, because the task raises that verdict through
+        `env` like every other error.  This branch is easy to lose: the
+        confirmation clears `result%converged` when it rejects the point, so a
+        status predicate written on `converged` never sees it and downgrades
+        the document to 1, which is what report 224 (finding 1) found and this
+        check pins.
+    """
+    os.makedirs(rundir, exist_ok=True)
+    for name in ("exhausted", "rejected"):
+        shutil.rmtree(os.path.join(rundir, name), ignore_errors=True)
+    hnc = os.path.join(os.path.abspath(rundir), "hnc-linear.xyz")
+    with open(hnc, "w") as handle:
+        handle.write(HNC_LINEAR)
+
+    def document(path, output):
+        try:
+            with open(path) as handle:
+                return json.load(handle)
+        except (OSError, ValueError) as error:
+            fail("cannot read %s: %s" % (path, error), output)
+
+    # (a) exhausted: the search's own message, status incomplete
+    status, output = run(exe, inp, ["--gfn", "2", "--lts", "--lts-method",
+                                    "prfo", "--lts-max-steps", "1",
+                                    "--norestart", "--ljson"],
+                         os.path.join(rundir, "exhausted"))
+    if status == 0:
+        fail("the exhausted search exited 0", output)
+    doc = document(os.path.join(rundir, "exhausted", "landscape_ts.json"),
+                   output)
+    if doc.get("status") != 1 or doc.get("status_name") != "incomplete":
+        fail("the exhausted search reports %s / %s, expected 1 / incomplete"
+             % (doc.get("status"), doc.get("status_name")), output)
+    if "maximum number of steps reached" not in (doc.get("message") or ""):
+        fail("the exhausted search lost its own message, the document says %r"
+             % doc.get("message"), output)
+    if doc["counters"].get("n_imag") != -1:
+        fail("the exhausted search reports n_imag %s, expected -1"
+             % doc["counters"].get("n_imag"), output)
+
+    # (b) converged onto a minimum: the confirmation's message, status error
+    status, output = run(exe, hnc, ["--gfn", "2", "--lts", "--lts-method",
+                                    "prfo", "--lts-escape-step", "0",
+                                    "--norestart", "--ljson"],
+                         os.path.join(rundir, "rejected"))
+    if status == 0:
+        fail("a minimum was accepted as a transition state", output)
+    doc = document(os.path.join(rundir, "rejected", "landscape_ts.json"),
+                   output)
+    if doc.get("status") != -1 or doc.get("status_name") != "error":
+        fail("the rejected point reports %s / %s, expected -1 / error; 1 is "
+             "the verdict of a search that did not converge"
+             % (doc.get("status"), doc.get("status_name")), output)
+    if doc.get("converged"):
+        fail("the rejected point still reports converged", output)
+    if doc["counters"].get("n_imag") != 0:
+        fail("the rejected point reports n_imag %s, expected 0"
+             % doc["counters"].get("n_imag"), output)
+    if "the located stationary point is a minimum" not in (doc.get("message")
+                                                           or ""):
+        fail("the rejected point lost the confirmation's message, the "
+             "document says %r" % doc.get("message"), output)
+    print("ts-status: an exhausted search is status 1 with its own message, a "
+          "search that converged onto a minimum is status -1 with the "
+          "confirmation's verdict")
 
 
 def check_layers(xtb, tester, inp, rundir, ts_input=None):
@@ -1381,6 +1486,8 @@ def main():
         check_ts_counters(sys.argv[2], sys.argv[3], sys.argv[4])
     elif mode == "ts-failure":
         check_ts_failure(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif mode == "ts-status":
+        check_ts_status(sys.argv[2], sys.argv[3], sys.argv[4])
     elif mode == "scan-counters":
         check_scan_counters(sys.argv[2], sys.argv[3], sys.argv[4])
     elif mode == "layers":

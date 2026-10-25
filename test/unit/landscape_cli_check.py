@@ -2099,15 +2099,21 @@ def check_ts_minimum(exe, inp, rundir):
     non-zero status, print the diagnosis, and still write `xtbts.xyz`/
     `xtbts.log` for debugging.  With the default escape the same input finds
     the saddle point (`check_ts_escape`).
+
+    The `--ljson` document of the same run must report `status` -1 (`error`),
+    because it reports the confirmation's rejection of the point with a message
+    that the task also raises through `env`; `1` (`incomplete`) is the verdict
+    of a search that ran out of steps, which this fixture is not (report 224,
+    finding 1).
     """
-    for name in ("xtbts.xyz", "xtbts.log"):
+    for name in ("xtbts.xyz", "xtbts.log", "landscape_ts.json"):
         path = os.path.join(rundir, name)
         if os.path.exists(path):
             os.remove(path)
     status, output = run(
         exe, inp,
         ["--gfn", "2", "--lts", "--lts-method", "prfo", "--norestart",
-         "--lts-escape-step", "0"],
+         "--lts-escape-step", "0", "--ljson"],
         rundir,
     )
     if status == 0:
@@ -2121,6 +2127,25 @@ def check_ts_minimum(exe, inp, rundir):
     for name in ("xtbts.xyz", "xtbts.log"):
         if not os.path.exists(os.path.join(rundir, name)):
             fail("%s was not written despite the failure" % name)
+    path = os.path.join(rundir, "landscape_ts.json")
+    try:
+        with open(path) as handle:
+            doc = json.load(handle)
+    except (OSError, ValueError) as error:
+        fail("cannot read the document of the rejected point: %s" % error,
+             output)
+    if doc.get("status") != -1 or doc.get("status_name") != "error":
+        fail("the rejected point reports status %s / %s, expected -1 / error"
+             % (doc.get("status"), doc.get("status_name")), output)
+    if doc.get("converged"):
+        fail("the rejected point still reports converged", output)
+    if doc["counters"].get("n_imag") != 0:
+        fail("the document reports n_imag %s, expected 0"
+             % doc["counters"].get("n_imag"), output)
+    if "the located stationary point is a minimum" not in (
+            doc.get("message") or ""):
+        fail("the document lost the confirmation's message, it says %r"
+             % doc.get("message"), output)
 
 
 def check_ts_escape(exe, inp, rundir):
