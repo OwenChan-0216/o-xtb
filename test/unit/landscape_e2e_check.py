@@ -770,7 +770,7 @@ def check_ts_failure(exe, inp, rundir):
     evaluations, because a failed search has nothing left to confirm.
 
     Every assertion below is red on the pre-221 task: the confirmation cost
-    one 6N Hessian in both cases (50 -> 26 and 61 -> 37 evaluations for the
+    one 6N Hessian in both cases (50 -> 26 and 61 -> 31 evaluations for the
     four-atom fixture), the run printed the confirmation's verdict, and the
     document carried `n_imag` = 0 with `status` = error instead of the
     search's own message with `status` = incomplete.
@@ -786,10 +786,12 @@ def check_ts_failure(exe, inp, rundir):
     # The search-only cost of the two fixtures, derived rather than recorded:
     # the single geometry search spends one point on the initial gradient, the
     # 6N initial P-RFO Hessian and one step; the band spends one evaluation per
-    # image on the initial band, `steps` sweeps over the images and one on the
-    # candidate.  The 6N confirmation Hessian is not in either number.
+    # image on the initial band, `steps` sweeps over the **internal** images
+    # (the two fixed endpoints are evaluated once, on the initial band, and
+    # cached, report 223) and one on the candidate.  The 6N confirmation
+    # Hessian is not in either number.
     single_cost = 1 + 6 * atoms + 1
-    band_cost = 1 + images * (1 + steps)
+    band_cost = 1 + images + steps * (images - 2)
     cases = (
         ("single", ["--lts", "--lts-method", "prfo", "--lts-max-steps", "1"],
          "maximum number of steps reached", single_cost),

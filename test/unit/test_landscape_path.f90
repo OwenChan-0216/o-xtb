@@ -147,7 +147,58 @@ module test_landscape_path
       procedure :: hessian => mb_embedding_hessian
    end type mb_embedding_model
 
+   !> LEPS surface that counts how often its potential was evaluated.
+   !>
+   !> The band kernel reports `band%n_eval`, its own count of the evaluations it
+   !> performed; this wrapper makes that number falsifiable, because the count
+   !> of the potential itself is the one number a caller cannot get wrong.  It
+   !> exists for `band-endpoint-cache` (report 223).
+   type, extends(landscape_energy_model) :: counting_leps_model
+      !> Wrapped surface
+      type(landscape_leps_model) :: surface
+      !> Number of `evaluate` calls so far
+      integer :: n_eval = 0
+   contains
+      !> Energy and gradient, counted
+      procedure :: evaluate => counting_leps_evaluate
+      !> Hessian (delegated, not counted)
+      procedure :: hessian => counting_leps_hessian
+   end type counting_leps_model
+
 contains
+
+!> Energy and gradient of the counting LEPS wrapper, one call counted.
+subroutine counting_leps_evaluate(self, x, energy, gradient, fail)
+   !> Model
+   class(counting_leps_model), intent(inout) :: self
+   !> Flattened coordinates (bohr)
+   real(wp), intent(in) :: x(:)
+   !> Energy (hartree)
+   real(wp), intent(out) :: energy
+   !> Flattened gradient (hartree/bohr)
+   real(wp), intent(out) :: gradient(:)
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   self%n_eval = self%n_eval + 1
+   call self%surface%evaluate(x, energy, gradient, fail)
+
+end subroutine counting_leps_evaluate
+
+!> Hessian of the counting LEPS wrapper (delegated, not counted).
+subroutine counting_leps_hessian(self, x, hess, fail)
+   !> Model
+   class(counting_leps_model), intent(inout) :: self
+   !> Flattened coordinates (bohr)
+   real(wp), intent(in) :: x(:)
+   !> Dense Hessian (hartree/bohr^2)
+   real(wp), intent(out) :: hess(:, :)
+   !> Failure flag
+   logical, intent(out) :: fail
+
+   call self%surface%hessian(x, hess, fail)
+
+end subroutine counting_leps_hessian
 
 !> Energy and gradient of the embedded Mueller-Brown surface.
 subroutine mb_embedding_evaluate(self, x, energy, gradient, fail)
@@ -227,6 +278,7 @@ subroutine collect_landscape_path(testsuite)
       new_unittest("align-rotation", test_align_rotation), &
       new_unittest("band-align-effect", test_band_align_effect), &
       new_unittest("band-fixed-endpoints", test_band_fixed_endpoints), &
+      new_unittest("band-endpoint-cache", test_band_endpoint_cache), &
       new_unittest("leps-neb-barrier", test_leps_neb_barrier), &
       new_unittest("leps-cineb-barrier", test_leps_cineb_barrier), &
       new_unittest("cineb-switch-threshold", test_cineb_switch), &
@@ -1136,6 +1188,78 @@ subroutine test_band_fixed_endpoints(error)
       & > 1.0e-6_wp, "no internal image was moved")
 
 end subroutine test_band_fixed_endpoints
+
+!> The two fixed endpoints of a band are evaluated once, not once per iteration.
+!>
+!> The band packs and unpacks only the internal images, so the endpoints keep
+!> their geometry for the whole run; evaluating them again in every iteration
+!> recomputes the same values.  The pinned closed form is
+!>
+!>     `n_eval = n_images + n_iter * (n_images - 2)`
+!>
+!> - the initial band evaluates every image once, every iteration re-evaluates
+!> the internal images only.  The assertion is made twice: against the band's
+!> own counter and against the number of calls the potential actually counted,
+!> so a counter that merely agrees with itself cannot satisfy it, and the old
+!> `n_images + n_iter * n_images` is red by `2 n_iter` (measured at the command
+!> line on the ammonia band: 108 -> 86 for 11 iterations, report 223).
+!>
+!> The second half pins the *values*: the cached endpoint energy is compared
+!> with a fresh evaluation of the same geometry, bit for bit.  That is the
+!> claim the whole change rests on - the engine's `off` restart policy makes a
+!> repeated geometry return an identical pair of values, so the cache cannot
+!> move a number.
+subroutine test_band_endpoint_cache(error)
+   type(error_type), allocatable, intent(out) :: error
+   type(TEnvironment) :: env
+   type(counting_leps_model) :: model
+   type(landscape_path_settings) :: set
+   type(landscape_band_type) :: band
+   real(wp), allocatable :: images(:, :, :), energies(:), forces(:, :, :)
+   real(wp) :: g(9), energy
+   integer :: expected
+   logical :: fail
+
+   call init(env)
+   set%n_images = 7
+   set%printlevel = 0
+   set%max_steps = 5
+   set%climb = .false.
+   set%align = .false.
+
+   call landscape_band_optimize(env, model, set, leps_reactant(), leps_product(), &
+      & images, energies, forces, band)
+   call check(error, allocated(images), "the band returned no images")
+   if (allocated(error)) return
+   call check(error, band%n_iter >= 1,&
+      & "the band took no step, so the iteration count is not exercised")
+   if (allocated(error)) return
+
+   expected = set%n_images + band%n_iter*(set%n_images - 2)
+   write(stdout, '(1x,a,i0,a,i0,a,i0,a,i0)') "  n_images ", set%n_images, &
+      & " n_iter ", band%n_iter, " n_eval ", band%n_eval, &
+      & " potential calls ", model%n_eval
+   call check(error, band%n_eval == expected,&
+      & "band%n_eval is not n_images + n_iter*(n_images-2)")
+   if (allocated(error)) return
+   call check(error, model%n_eval == expected,&
+      & "the potential was called a different number of times than the band "//&
+      & "reports")
+   if (allocated(error)) return
+
+   call model%evaluate(geometry_pack(leps_reactant()), energy, g, fail)
+   call check(error, .not. fail, "the reactant re-evaluation failed")
+   if (allocated(error)) return
+   call check(error, band%energies(1) == energy,&
+      & "the cached reactant energy is not the value a re-evaluation returns")
+   if (allocated(error)) return
+   call model%evaluate(geometry_pack(leps_product()), energy, g, fail)
+   call check(error, .not. fail, "the product re-evaluation failed")
+   if (allocated(error)) return
+   call check(error, band%energies(size(band%energies)) == energy,&
+      & "the cached product energy is not the value a re-evaluation returns")
+
+end subroutine test_band_endpoint_cache
 
 !> Plain NEB on the LEPS surface reproduces the closed form barrier.
 subroutine test_leps_neb_barrier(error)
