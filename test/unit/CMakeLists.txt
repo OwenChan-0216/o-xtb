@@ -3851,6 +3851,27 @@ add_test("xtb/landscape-e2e-ts-counters"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-e2e-ts-counters
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
 
+# A transition state search that runs out of steps (report 221, S2 and H1):
+# the confirmation Hessian is only built for a converged search, so a failed
+# run must not pay its 6N finite difference points and must keep its own
+# failure message instead of the confirmation's verdict.  Both branches of the
+# task are covered - a single geometry P-RFO search and a 9-image NEB band -
+# and each is run with and without `--lts-no-verify`: the two runs have to cost
+# the same number of evaluations.  The band needs the ammonia inversion
+# product, which the mode writes itself, so one input file is enough.
+add_test("xtb/landscape-ts-failure"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-E2E-PY}
+  "-DARGS=ts-failure;${LANDSCAPE-E2E-XTB};${LANDSCAPE-NH3};${CMAKE_CURRENT_BINARY_DIR}/landscape-ts-failure"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-ts-failure
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_e2e_py.cmake")
+set_tests_properties(
+  "xtb/landscape-ts-failure"
+  PROPERTIES
+  ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
+)
+
 # The point bookkeeping of a scan (`n_points`/`n_valid`/`n_fail`/
 # `n_unconverged`) against the frames the task writes, converged and not.
 add_test("xtb/landscape-e2e-scan-counters"

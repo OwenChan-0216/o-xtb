@@ -327,7 +327,18 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    ! the configured provider at the converged geometry; the analysis is the M3
    ! implementation, so the mode count and the 3N-6 / 3N-5 handling are
    ! identical to `--lvib`.
-   if (settings%verify_ts) then
+   !
+   ! Only a **converged** search is confirmed (report 221, findings S2 and H1).
+   ! The confirmation cannot change the verdict of a search that exhausted its
+   ! budget - `result%converged` is already false - while it *did* overwrite
+   ! the search's own message with its own, so a failed run reported "the
+   ! located stationary point is a minimum" where the truth was "maximum
+   ! number of steps reached".  It is also the larger half of such a run's
+   ! cost: one 6N finite difference Hessian, measured 24 of 61 energy
+   ! evaluations on a 4-atom band that stopped after 3 iterations.  The mode
+   ! count stays at its "not performed" default (-1), which the log and
+   ! `--ljson` both report as unknown.
+   if (settings%verify_ts .and. result%converged) then
       call confirm_saddle(env, mol, chk, engine, settings, result)
    end if
 
@@ -339,7 +350,9 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    ! difference evaluations of the confirmation Hessian, and the JSON
    ! counter was the search-only number).  `--lts-no-verify` therefore
    ! lowers the counter by exactly one 6N Hessian; the CLI check
-   ! `landscape_e2e_check.py ts-counters` asserts that difference.
+   ! `landscape_e2e_check.py ts-counters` asserts that difference.  A failed
+   ! search no longer pays that Hessian either, so its counter is the
+   ! search-only number as well.
    result%n_cache_miss = engine%n_eval
 
    if (settings%printlevel > 0) then
@@ -402,8 +415,11 @@ subroutine write_json(env, mol, settings, result, n_scf_fail)
    if (.not. result%converged) status = landscape_json_status_incomplete
    ! A converged search that did not end on a first order saddle (or a run
    ! with an unconverged SCC) has no usable result; the task reports both
-   ! through `env` and exits non-zero.
-   if (settings%verify_ts .and. .not. result%is_saddle) then
+   ! through `env` and exits non-zero.  The `result%converged` guard is part
+   ! of report 221 (H1): the confirmation is skipped for a failed search, so
+   ! `is_saddle` keeps its default and cannot be read as "the search converged
+   ! somewhere that is not a saddle".
+   if (result%converged .and. settings%verify_ts .and. .not. result%is_saddle) then
       status = landscape_json_status_error
    end if
    if (n_scf_fail > 0) status = landscape_json_status_error
@@ -1000,7 +1016,12 @@ subroutine landscape_ts_finish(env, model, mol, chk, engine, settings, images, k
          & cand_energies, trim(landscape_ts_method_name(settings%method)))
    end if
 
-   if (settings%verify_ts) then
+   ! Only a converged band search is confirmed, for the two reasons the
+   ! single-geometry path above states (report 221, S2 and H1): the verdict of
+   ! a search that stopped at its budget cannot change, its own message must
+   ! not be overwritten by the confirmation's, and the 6N confirmation Hessian
+   ! is the larger half of the cost of such a run.
+   if (settings%verify_ts .and. result%converged) then
       call confirm_saddle(env, mol, chk, engine, settings, result)
    end if
 

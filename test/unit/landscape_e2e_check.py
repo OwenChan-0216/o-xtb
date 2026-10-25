@@ -87,6 +87,17 @@ Modes (the first four mirror a CMake test of `test/unit/CMakeLists.txt`)
         run is more expensive by exactly whole 6N finite difference Hessians
         (one 6N confirmation Hessian for N atoms).  A counter sampled before
         the confirmation makes (a) and (b) fail.
+  ts-failure <exe> <input> <rundir>
+        A transition state search that runs out of steps (report 221, findings
+        S2 and H1): neither the single geometry P-RFO nor the 9-image band may
+        pay for the confirmation Hessian, and neither may lose its own failure
+        message to the confirmation's verdict.  Asserts, for both, that the
+        run exits non-zero, keeps its own message ("maximum number of steps
+        reached" / "band reached the iteration limit"), reports `n_imag` = -1
+        and `status` incomplete (not error, which is the "converged on
+        something that is not a saddle" verdict), never prints the saddle
+        confirmation, and costs exactly the same number of evaluations with and
+        without `--lts-no-verify` - the search-only cost, pinned per fixture.
   layers        <xtb_exe> <tester_exe> <input> <rundir> [<ts_input>]
         Runs L1 (every landscape unit suite that needs no SCF), L2 (the engine
         boundary suites) and L3 (the `opt -> hess -> freq -> thermo` chain,
@@ -739,6 +750,117 @@ def check_scan_counters(exe, inp, rundir):
              counters["n_unconverged"], counters["n_points"]))
 
 
+#> The product of the ammonia inversion fixture: the same four atoms with the
+#> nitrogen below the H3 plane.  Written here so the mode needs one input file.
+NH3_DOWN = ("4\nammonia (N below the H3 plane)\n"
+            "N  0.0000000  0.0000000 -0.3800000\n"
+            "H  0.9400000  0.0000000  0.0000000\n"
+            "H -0.4700000  0.8140000  0.0000000\n"
+            "H -0.4700000 -0.8140000  0.0000000\n")
+
+
+def check_ts_failure(exe, inp, rundir):
+    """A failed `--lts` search keeps its own message and its own cost.
+
+    The confirmation Hessian is only built for a **converged** search (report
+    221, findings S2 and H1).  Two fixtures exercise both branches of the task:
+    a single geometry P-RFO search stopped after one step, and a 9-image NEB
+    band stopped after three iterations.  Each is run with and without
+    `--lts-no-verify`; the two runs must cost exactly the same number of
+    evaluations, because a failed search has nothing left to confirm.
+
+    Every assertion below is red on the pre-221 task: the confirmation cost
+    one 6N Hessian in both cases (50 -> 26 and 61 -> 37 evaluations for the
+    four-atom fixture), the run printed the confirmation's verdict, and the
+    document carried `n_imag` = 0 with `status` = error instead of the
+    search's own message with `status` = incomplete.
+    """
+    os.makedirs(rundir, exist_ok=True)
+    product = os.path.join(os.path.abspath(rundir), "product-nh3-down.xyz")
+    with open(product, "w") as handle:
+        handle.write(NH3_DOWN)
+
+    atoms = int(open(os.path.abspath(inp)).readline().split()[0])
+    images = 9
+    steps = 3
+    # The search-only cost of the two fixtures, derived rather than recorded:
+    # the single geometry search spends one point on the initial gradient, the
+    # 6N initial P-RFO Hessian and one step; the band spends one evaluation per
+    # image on the initial band, `steps` sweeps over the images and one on the
+    # candidate.  The 6N confirmation Hessian is not in either number.
+    single_cost = 1 + 6 * atoms + 1
+    band_cost = 1 + images * (1 + steps)
+    cases = (
+        ("single", ["--lts", "--lts-method", "prfo", "--lts-max-steps", "1"],
+         "maximum number of steps reached", single_cost),
+        ("band", ["--lts", "--lts-method", "neb", "--lts-images", str(images),
+                  "--lts-max-steps", str(steps), "--lts-product", product],
+         "band reached the iteration limit without converging", band_cost),
+    )
+    for label, args, message, expected in cases:
+        counters = {}
+        for variant, extra in (("confirmed", []),
+                               ("unconfirmed", ["--lts-no-verify"])):
+            status, output = run(exe, inp, ["--gfn", "2"] + args +
+                                 ["--norestart", "--ljson"] + extra,
+                                 "%s-%s-%s" % (rundir, label, variant))
+            if status == 0:
+                fail("the %s %s search exited 0" % (label, variant), output)
+            printed = parse_int(r"cache misses:\s+(\d+)", output,
+                                "the printed cache misses", output)
+            calls = parse_int(r"landscape engine: energy evaluations\s+(\d+)",
+                              output, "the engine evaluation count", output)
+            if printed != calls:
+                fail("%s %s: stdout prints 'cache misses: %d' and the engine "
+                     "reports %d energy evaluations"
+                     % (label, variant, printed, calls), output)
+            path = os.path.join(rundir + "-%s-%s" % (label, variant),
+                                "landscape_ts.json")
+            try:
+                with open(path) as handle:
+                    doc = json.load(handle)
+            except (OSError, ValueError) as error:
+                fail("cannot read the %s %s document: %s"
+                     % (label, variant, error), output)
+            counters[variant] = printed
+
+            if doc["converged"]:
+                fail("the %s %s search reports converged" % (label, variant),
+                     output)
+            if doc["status"] != 1:
+                fail("%s %s: status is %s, expected 1 (incomplete); -1 is the "
+                     "'converged on something that is not a saddle' verdict"
+                     % (label, variant, doc["status"]), output)
+            if doc["counters"].get("n_imag") != -1:
+                fail("%s %s: n_imag is %s, expected -1 (the confirmation was "
+                     "not performed)"
+                     % (label, variant, doc["counters"].get("n_imag")), output)
+            if message not in (doc.get("message") or ""):
+                fail("%s %s: the search lost its own message, the document "
+                     "says %r, expected %r"
+                     % (label, variant, doc.get("message"), message), output)
+            if "saddle confirmation" in output:
+                fail("%s %s: the failed search still built the confirmation "
+                     "Hessian" % (label, variant), output)
+            if doc["counters"].get("n_cache_miss") != printed:
+                fail("%s %s: the JSON counter is %s but stdout prints %d"
+                     % (label, variant, doc["counters"].get("n_cache_miss"),
+                        printed), output)
+
+        if counters["confirmed"] != counters["unconfirmed"]:
+            fail("%s: the failed search costs %d evaluations with the "
+                 "confirmation and %d without it; a failed run has nothing "
+                 "left to confirm"
+                 % (label, counters["confirmed"], counters["unconfirmed"]))
+        if counters["confirmed"] != expected:
+            fail("%s: the failed search costs %d evaluations, the pinned "
+                 "search-only cost is %d"
+                 % (label, counters["confirmed"], expected))
+    print("ts-failure: a failed single-geometry search and a failed band "
+          "keep their own message and cost the search only (%d and %d "
+          "evaluations)" % (cases[0][3], cases[1][3]))
+
+
 def check_layers(xtb, tester, inp, rundir, ts_input=None):
     """Run L1, L2 and L3 and write a structured summary.
 
@@ -1255,6 +1377,8 @@ def main():
         check_ljson_core(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
     elif mode == "ts-counters":
         check_ts_counters(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif mode == "ts-failure":
+        check_ts_failure(sys.argv[2], sys.argv[3], sys.argv[4])
     elif mode == "scan-counters":
         check_scan_counters(sys.argv[2], sys.argv[3], sys.argv[4])
     elif mode == "layers":
