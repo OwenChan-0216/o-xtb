@@ -276,7 +276,7 @@ subroutine landscape_ts(env, mol, chk, calc, settings, result)
    call new_landscape_engine(engine, ctrl)
    call new_landscape_hessian_provider(env, settings%hessian_source, hp, &
       & sccacc=settings%engine%hess_acc, filename=settings%hessian_file, &
-      & printlevel=settings%printlevel)
+      & printlevel=settings%printlevel, jobs=settings%engine%hess_jobs)
    if (.not. allocated(hp)) then
       result%message = "transition state search failed"
       call engine%destroy()

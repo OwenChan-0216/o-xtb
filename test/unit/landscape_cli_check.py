@@ -6503,8 +6503,8 @@ def check_help_topic(exe, inp, rundir, main_src):
 
     with open(main_src) as handle:
         implemented = implemented_flags(handle.read())
-    if len(implemented) != 249:
-        fail("the parser implements %d spellings, expected 249"
+    if len(implemented) != 254:
+        fail("the parser implements %d spellings, expected 254"
              % len(implemented))
     # `--siman` and `--gmd` are parsed but are not registered run types; they
     # are deliberately absent from the help table (see the allowlist in

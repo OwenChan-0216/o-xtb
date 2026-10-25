@@ -1465,6 +1465,132 @@ add_test("xtb/landscape-vib-imag-cutoff-invalid"
   -DRUNDIR=${LANDSCAPE-ERROR-DIR}
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_error.cmake")
 
+# Landscape suite: the concurrent finite difference Hessian (`--l*-hess-jobs`).
+#
+# The 3N Cartesian columns of the numerical Hessian are evaluated in `jobs`
+# worker processes; the differentiation arithmetic stays in the parent.  The
+# matrix therefore has to be independent of the worker count, and this test
+# pins that with the smallest possible case (water, 18 displaced points):
+#
+#  (1) `--lvib` with `--lvib-hess-jobs 2` writes a **byte identical** `hessian`
+#      and `vibspectrum` to the default serial run, and both report 6N+1 = 19
+#      energy evaluations - a lost, duplicated or reordered point changes the
+#      matrix or the counter.
+#  (2) The concurrent run names its worker count in the transcription, the
+#      serial one does not, so the setting cannot be silently dropped.
+#  (3) A value below 1 is not applied (warning, the run is serial and still
+#      reports 19 evaluations) and is fatal under `--strict`.
+#  (4) A worker pool inside a thread-parallel run is refused: a `fork` inherits
+#      the OpenMP runtime, so nesting the pool in a team is not attempted.
+#      This is the case that hung at `OMP_NUM_THREADS=8` before the refusal.
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_hess_jobs.cmake" [=[
+file(REMOVE_RECURSE "${RUNDIR}")
+file(MAKE_DIRECTORY "${RUNDIR}/serial" "${RUNDIR}/concurrent" "${RUNDIR}/zero"
+     "${RUNDIR}/strict" "${RUNDIR}/threaded")
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart
+  WORKING_DIRECTORY "${RUNDIR}/serial"
+  RESULT_VARIABLE serial_status
+  OUTPUT_VARIABLE serial
+  ERROR_VARIABLE serial
+)
+if(NOT serial_status EQUAL 0)
+  message(FATAL_ERROR "the serial --lvib run terminated with status ${serial_status}\n${serial}")
+endif()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart --lvib-hess-jobs 2
+  WORKING_DIRECTORY "${RUNDIR}/concurrent"
+  RESULT_VARIABLE concurrent_status
+  OUTPUT_VARIABLE concurrent
+  ERROR_VARIABLE concurrent
+)
+if(NOT concurrent_status EQUAL 0)
+  message(FATAL_ERROR "the concurrent --lvib run terminated with status ${concurrent_status}\n${concurrent}")
+endif()
+
+# (1) byte identity of the matrix and of the frequencies, plus the counter
+foreach(name "hessian" "vibspectrum")
+  file(SHA256 "${RUNDIR}/serial/${name}" serial_hash)
+  file(SHA256 "${RUNDIR}/concurrent/${name}" concurrent_hash)
+  if(NOT serial_hash STREQUAL concurrent_hash)
+    message(FATAL_ERROR
+      "the ${name} file depends on the worker count (${serial_hash} vs ${concurrent_hash})")
+  endif()
+endforeach()
+foreach(run_name "serial" "concurrent")
+  set(text "${${run_name}}")
+  if(NOT text MATCHES "landscape engine: energy evaluations +([0-9]+)")
+    message(FATAL_ERROR "the ${run_name} run reports no evaluation counter\n${text}")
+  endif()
+  if(NOT CMAKE_MATCH_1 EQUAL 19)
+    message(FATAL_ERROR
+      "the ${run_name} run used ${CMAKE_MATCH_1} evaluations, expected 6N+1 = 19")
+  endif()
+endforeach()
+
+# (2) the worker count is visible in the transcript - and only when it applies
+if(serial MATCHES "worker processes")
+  message(FATAL_ERROR "the serial run announced a worker count\n${serial}")
+endif()
+if(NOT concurrent MATCHES "18 displaced single points .*2 worker processes")
+  message(FATAL_ERROR "the concurrent run did not announce its worker count\n${concurrent}")
+endif()
+
+# (3) a value below 1 is reported and not applied
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart --lvib-hess-jobs 0
+  WORKING_DIRECTORY "${RUNDIR}/zero"
+  RESULT_VARIABLE zero_status
+  OUTPUT_VARIABLE zero
+  ERROR_VARIABLE zero
+)
+if(NOT zero_status EQUAL 0)
+  message(FATAL_ERROR "--lvib-hess-jobs 0 was fatal in a lax run (status ${zero_status})\n${zero}")
+endif()
+if(NOT zero MATCHES "--lvib-hess-jobs needs a number of worker processes of at least 1")
+  message(FATAL_ERROR "the unusable worker count was not reported\n${zero}")
+endif()
+if(NOT zero MATCHES "landscape engine: energy evaluations +19")
+  message(FATAL_ERROR "the run with --lvib-hess-jobs 0 did not stay serial\n${zero}")
+endif()
+execute_process(
+  COMMAND "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart --lvib-hess-jobs 0 --strict
+  WORKING_DIRECTORY "${RUNDIR}/strict"
+  RESULT_VARIABLE strict_status
+  OUTPUT_VARIABLE strict
+  ERROR_VARIABLE strict
+)
+if(strict_status EQUAL 0)
+  message(FATAL_ERROR "--strict did not make the unusable worker count fatal\n${strict}")
+endif()
+if(NOT strict MATCHES "needs a number of worker processes of at least 1")
+  message(FATAL_ERROR "the strict run did not name the flag\n${strict}")
+endif()
+
+# (4) a worker pool inside a threaded run is refused, not nested
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" -E env "OMP_NUM_THREADS=2"
+          "${EXE}" "${INPUT}" --gfn 2 --lvib --norestart --lvib-hess-jobs 2
+  WORKING_DIRECTORY "${RUNDIR}/threaded"
+  RESULT_VARIABLE threaded_status
+  OUTPUT_VARIABLE threaded
+  ERROR_VARIABLE threaded
+)
+if(threaded_status EQUAL 0)
+  message(FATAL_ERROR
+    "a worker pool inside a two-thread run was accepted\n${threaded}")
+endif()
+if(NOT threaded MATCHES "needs one OpenMP thread per worker")
+  message(FATAL_ERROR "the threaded refusal did not explain itself\n${threaded}")
+endif()
+]=])
+add_test("xtb/landscape-hess-jobs"
+  ${CMAKE_COMMAND}
+  -DEXE=${XTB-EXE}
+  -DINPUT=${LANDSCAPE-H2O}
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-hess-jobs
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_hess_jobs.cmake")
+
 # Landscape suite: `--lscan-max-steps` reaches the inner relaxation, and a scan
 # in which no point converges reports a missing minimum instead of a number
 # (M2 leftover M-1/M-2).
@@ -3628,6 +3754,7 @@ set_tests_properties(
   "xtb/landscape-opt-hessian"
   "xtb/landscape-scan-cli"
   "xtb/landscape-vib-cli"
+  "xtb/landscape-hess-jobs"
   "xtb/landscape-vib-etemp"
   "xtb/landscape-vib-namespace"
   "xtb/landscape-scan-max-steps"
