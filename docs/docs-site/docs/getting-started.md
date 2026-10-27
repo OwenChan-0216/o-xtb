@@ -101,6 +101,57 @@ It installs a fully static binary (no dynamic libraries, `ldd` reports
 `not a dynamic executable`) into `~/programs/o-xtb`, with the executable at
 `~/programs/o-xtb/bin/oxtb`, and registers `~/.local/bin/oxtb`.
 
+## Reproducible builds
+
+Two builds of the same tree, at the same absolute path, with the same toolchain
+and the inputs pinned below, produce a **byte-identical** `oxtb`.  The tree's
+route to that path does not matter either: a `cp -a` copy and a fresh `tar`
+re-extract of the same tree give the same bytes, and so does a different
+build-directory name.  What the hash depends on is this:
+
+* the **absolute source path** - it is compiled into the executable,
+* the **absolute dependency paths**: `-DFETCHCONTENT_SOURCE_DIR_MCTC-LIB` (and
+  `-DFETCHCONTENT_SOURCE_DIR_TEST-DRIVE` when `WITH_TESTS=ON`) together with
+  `-DFETCHCONTENT_FULLY_DISCONNECTED=ON`, so that no dependency is fetched into
+  the build directory, whose own path would then be compiled in as well,
+* the **toolchain versions**: the pair measured here is gfortran 12.2.0 with
+  CMake 4.3.2,
+* `SOURCE_DATE_EPOCH`, pinned to the commit's own timestamp, which dates the
+  version header; it is honoured in UTC.
+
+```bash
+export SRC=/path/to/source BUILD=/path/to/build
+export MCTC=/path/to/mctc-lib-src TEST_DRIVE=/path/to/test-drive-src
+cd "$SRC"
+export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) OMP_NUM_THREADS=1
+cmake -S "$SRC" -B "$BUILD" \
+  -DWITH_TBLITE=OFF -DWITH_CPCMX=OFF -DWITH_TESTS=OFF -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG" \
+  -DFETCHCONTENT_SOURCE_DIR_MCTC-LIB="$MCTC" \
+  -DFETCHCONTENT_SOURCE_DIR_TEST-DRIVE="$TEST_DRIVE" \
+  -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+cmake --build "$BUILD" -j8
+sha256sum "$BUILD/oxtb"
+```
+
+!!! warning "What this does not claim"
+    A different **compiler** changes the bytes: gfortran 14.4.0 at the same
+    path with the same flags gives a different executable, and gfortran 14.4.0
+    reproduces itself byte for byte on a repeat build, so that is the compiler
+    and not build noise.  A different CMake version is in the same class (not
+    narrowed further).  A different **absolute path** changes the bytes too,
+    and the path cannot be mapped away: the embedded copies are gfortran's
+    per-I/O-statement source-location descriptors (`At line N of file <path>`),
+    emitted for I/O statements written without `IOSTAT=`.  All 2,317 own-source
+    and 126 `mctc-lib` occurrences sit in `.rodata`, and `-ffile-prefix-map`,
+    `-fdebug-prefix-map` and `-fmacro-prefix-map` were each measured to change
+    not one byte.  Cross-machine and cross-platform reproducibility is not
+    claimed: only the Linux executable was compared, on one machine.
+
+A rebuild and a download are different guarantees.  A released archive is
+identified by its `SHA256SUMS` asset, while a rebuild reproduces the bytes only
+under the conditions above.
+
 ## A first run: water
 
 Create a water geometry in XYZ format:

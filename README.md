@@ -149,6 +149,65 @@ What a Windows build does differently:
   a cross-built `oxtb.exe` was smoke-tested on a real Windows machine (the four
   `--gfn` methods, `--hess` and `--lopt`).  Nothing beyond that is claimed.
 
+### Reproducible builds
+
+Two builds of the same tree, at the same absolute path, with the same toolchain
+and the inputs pinned below, produce a **byte-identical** `oxtb`.  That holds
+too when the tree reached that path by a different route: a `cp -a` copy and a
+fresh `tar` re-extract of the same tree give the same bytes, and so does a
+different build-directory name.  The inputs below are what the hash depends on.
+
+- The **absolute source path**.  It is compiled into the executable - see the
+  last bullet of "what this does not claim".
+- The **absolute dependency paths**: pass `-DFETCHCONTENT_SOURCE_DIR_MCTC-LIB`
+  (and `-DFETCHCONTENT_SOURCE_DIR_TEST-DRIVE` when `WITH_TESTS=ON`) together
+  with `-DFETCHCONTENT_FULLY_DISCONNECTED=ON`, so that no dependency is fetched
+  into the build directory, whose own path would then be compiled in as well.
+- The **toolchain versions**.  The pair measured here is gfortran 12.2.0 with
+  CMake 4.3.2.
+- `SOURCE_DATE_EPOCH`, pinned to the commit's own timestamp, which dates the
+  version header (`git log -1 --format=%ct`).  It is honoured in UTC.
+
+The recipe, with every path fixed and reused by later rebuilds:
+
+```bash
+export SRC=/path/to/source BUILD=/path/to/build
+export MCTC=/path/to/mctc-lib-src TEST_DRIVE=/path/to/test-drive-src
+cd "$SRC"
+export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) OMP_NUM_THREADS=1
+cmake -S "$SRC" -B "$BUILD" \
+  -DWITH_TBLITE=OFF -DWITH_CPCMX=OFF -DWITH_TESTS=OFF -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_Fortran_FLAGS_RELEASE="-O2 -DNDEBUG" \
+  -DFETCHCONTENT_SOURCE_DIR_MCTC-LIB="$MCTC" \
+  -DFETCHCONTENT_SOURCE_DIR_TEST-DRIVE="$TEST_DRIVE" \
+  -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+cmake --build "$BUILD" -j8
+sha256sum "$BUILD/oxtb"
+```
+
+What this does **not** claim:
+
+- **Not a different compiler.**  gfortran 14.4.0 at the same path with the same
+  flags gives a different executable, and gfortran 14.4.0 reproduces *itself*
+  byte for byte on a repeat build, so the difference is the compiler and not
+  build noise.  A different CMake version is in the same class; it was not
+  narrowed further than that.
+- **Not a different absolute path.**  The path cannot be mapped away, because
+  the embedded copies are gfortran's per-I/O-statement source-location
+  descriptors (`At line N of file <path>`), which it emits for I/O statements
+  written without `IOSTAT=`.  All 2,317 own-source and 126 `mctc-lib`
+  occurrences sit in `.rodata`, none in `.text`, `.data` or `.comment`, and
+  `-ffile-prefix-map`, `-fdebug-prefix-map` and `-fmacro-prefix-map` were each
+  measured to change not one byte.  Moving the tree therefore moves the hash;
+  this is a compiler limitation, not a flag this build can pass.
+- **Not cross-machine and not cross-platform.**  Only the Linux executable was
+  compared, and only on one machine.
+
+A rebuild and a download are different guarantees.  A rebuild reproduces the
+bytes under the conditions above; a released archive is identified by its
+`SHA256SUMS` asset, so check a download against `SHA256SUMS` and use this
+recipe to compare two builds of your own.
+
 ## Quick start
 
 All examples use water; save this as `water.xyz`:

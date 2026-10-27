@@ -10,7 +10,8 @@ It times one fixed set of tasks on fixtures that are **in the repository**
 times.  It prints numbers, not verdicts: timings depend on the machine, the
 load, the compiler and the BLAS, so **no gate runs this tool** and it has no
 `--check` mode.  Compare two runs of the same machine and the same binary; never
-compare a run against a stored number.
+compare a run against a stored number.  For a byte-identical rebuild of that
+binary see [Reproducible builds](../README.md#reproducible-builds).
 
 ## Running it
 
