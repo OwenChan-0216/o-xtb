@@ -193,7 +193,13 @@ subroutine bias_path(env, mol, chk, calc, egap, et, maxiter, epot, grd, sigma)
    do i=1,mol%n
       cn(i)=0
       do j=1,mol%n
-         r=sqrt(sum(xyzp(:,i)-xyzp(:,j)))
+         ! `sqrt(sum(xyzp(:,i)-xyzp(:,j)))` was a PGI 19.7 ICE workaround for
+         ! `norm2` and dropped the squares, so the argument is the signed sum of
+         ! the three coordinate differences: half of the pairs give a negative
+         ! sum, hence a NaN distance, `bo` stays 0 and `cn(i)` counts only the
+         ! diagonal.  `mrec` below then looks for fragments in a bond matrix
+         ! that knows no bond.  Restore the distance.
+         r=sqrt(sum((xyzp(:,i)-xyzp(:,j))**2))
          rco=(atomicRad(mol%at(i))+atomicRad(mol%at(j)))*autoaa
          if(r.lt.2.5*rco) then
             bo(j,i)=1
@@ -674,7 +680,16 @@ subroutine guess_tsmode(n,sn,its,xyz,pvec1,pvec2)
    do k=1,n
       do j=1,3
          i = i + 1
-         dum = (xyz(j,k,its+1) - xyz(j,k,its))
+         ! The caller asks for every path point, `its` up to `sn`, so `its+1` is
+         ! one past the end at the last point.  Release read whatever followed
+         ! the array; the checked build stops with a bounds error, so the
+         ! forward mode of the last point falls back to its backward difference
+         ! (report 252).  Every other point is unchanged.
+         if (its.lt.sn) then
+            dum = (xyz(j,k,its+1) - xyz(j,k,its))
+         else
+            dum = (xyz(j,k,its  ) - xyz(j,k,its-1))
+         endif
          if(its+2.le.sn)then
             dum2 = (xyz(j,k,its+2) - xyz(j,k,its+1))
             dum  = third2*dum+third1*dum2
