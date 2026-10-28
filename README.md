@@ -21,14 +21,18 @@ engine.  The suite covers six tasks:
 | Frequencies | `--lvib` | numerical Hessian, normal modes and thermochemistry |
 | IRC | `--lirc` | GS, HPC, LQA, EulerPC |
 
-The suite exists because the optimiser that xTB ships is task-incomplete: it
-only minimises.  Upstream xTB, and therefore the engine in this tree, has no
-transition-state optimiser, no NEB or dimer search and no intrinsic reaction
-coordinate, so nothing above a minimum is reachable with the native engines
-alone (`--method ancopt` is the legacy minimiser, still available).  Every
-suite task is built on the same xTB calculator (`class(TCalculator)`) and
-reuses its energy, gradient and numerical Hessian, so the underlying GFN
-methods and parameters are unchanged.
+**The suite exists because the optimiser that xTB ships is a minimiser.**  The
+engine in this tree, like upstream xTB, has no transition-state optimiser, no
+NEB or dimer search and no intrinsic reaction coordinate.  Upstream does ship
+one reaction-path facility, the metadynamics RMSD push/pull path finder
+(`--path`), which also works here; it returns an *estimated* transition state
+rather than a converged saddle.  What this suite adds is the standard machinery
+— P-RFO/B-PRFO/dimer for saddle searches, NEB/CI-NEB/AutoNEB/string/GSM for
+bands, and GS/HPC/LQA/EulerPC for IRC — each with the same convergence criteria
+and machine-readable output as the rest of the suite.  The native minimiser
+stays available as `--method ancopt`.  Every suite task is built on the same
+xTB calculator (`class(TCalculator)`) and reuses its energy, gradient and
+numerical Hessian, so the underlying GFN methods and parameters are unchanged.
 
 Product version `0.4.0`, engine xTB `6.7.1`.
 
