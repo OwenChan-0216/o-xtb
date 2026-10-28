@@ -7,18 +7,6 @@ parameter files and the original implementation come from that upstream
 project; this repository adds the `sp`, `opt`, `scan`, `ts`, `freq` and `irc`
 tasks on top of the same engine.  The command the build installs is `oxtb`.
 
-## Table of Contents
-- [What it is](#what-it-is)
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [Command line](#command-line)
-- [Machine-readable output](#machine-readable-output)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [Upstream](#upstream)
-- [Citations](#citations)
-- [License](#license)
-
 ## What it is
 
 `o-xtb` adds a complete potential-energy-surface (PES) task suite to the xTB
