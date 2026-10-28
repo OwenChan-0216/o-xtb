@@ -5173,6 +5173,20 @@ add_test("xtb/landscape-ir-fatal-status"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-cli-ir-fatal
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
+# `--path` without a product structure is a fatal diagnostic, not a warning:
+# the native RMSD push/pull path finder logged `xtb_path: No product structure
+# given!` through `env%error` and then returned, so the process printed
+# `normal termination of oxtb` and exited 0.  Report 245 measured it and turned
+# the report into a terminating `env%checkpoint`, so the check asserts both the
+# message and the non-zero status (the message alone was already there).
+add_test("xtb/landscape-path-no-product"
+  ${CMAKE_COMMAND}
+  -DPYTHON=${Python3_EXECUTABLE}
+  -DSCRIPT=${LANDSCAPE-CLI-PY}
+  "-DARGS=pathnoproduct;${LANDSCAPE-E2E-XTB};${LANDSCAPE-H2O};${CMAKE_CURRENT_BINARY_DIR}/landscape-path-no-product"
+  -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-path-no-product
+  -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
+
 # `--help` is a grouped index now (`docs/_simplify-recon/123-help-restructure.md`)
 # and `--help <topic>` prints one option, one category or an error.  Nothing
 # covered the dispatch before: `xtb/Argparser_print_help` only ran `--help` and
@@ -5286,6 +5300,7 @@ set_tests_properties(
   "xtb/landscape-help-colour"
   "xtb/landscape-nonfinite-value"
   "xtb/landscape-ir-fatal-status"
+  "xtb/landscape-path-no-product"
   PROPERTIES
   ENVIRONMENT "XTBPATH=${PROJECT_SOURCE_DIR};OMP_NUM_THREADS=1"
 )

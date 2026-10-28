@@ -80,6 +80,7 @@ mode mirrors one CMake test one-to-one:
   programname <exe> <input> <rundir>  -> xtb/landscape-program-name
   nonfinite <exe> <input> <rundir>    -> xtb/landscape-nonfinite-value
   irfatal <exe> <input> <rundir>      -> xtb/landscape-ir-fatal-status
+  pathnoproduct <exe> <input> <rundir> -> xtb/landscape-path-no-product
   helptopic <exe> <input> <rundir> <main.F90>
                                      -> xtb/landscape-help-topic
   helpcolour <exe> <input> <rundir>
@@ -6840,6 +6841,33 @@ def check_help_colour(exe, inp, rundir):
     print("precedence: CLICOLOR_FORCE > NO_COLOR > terminal, asserted")
 
 
+def check_path_no_product(exe, inp, rundir):
+    """`--path` without a product structure ends with a non-zero status.
+
+    Mirrors `xtb/landscape-path-no-product` (report 245).  The native RMSD
+    push/pull path finder reads its product geometry from `--path FILE` or the
+    `$path/product` key; without either it logs
+    `xtb_path: No product structure given!` and returns.  That diagnostic used
+    to leave the process with `normal termination of oxtb` and exit status 0,
+    which this project's rule forbids: an error that ends a calculation must
+    end it with a non-zero status.
+
+    `--path` itself takes the optional FILE, so the flag is passed **last** and
+    the run has no product geometry either way.  `--norestart` keeps a stale
+    restart file of an earlier run out of the check.
+    """
+    rundir = os.path.abspath(rundir)
+    shutil.rmtree(rundir, ignore_errors=True)
+    status, output = run(exe, inp, ["--gfn", "2", "--norestart", "--path"],
+                         rundir)
+    if "No product structure given!" not in output:
+        fail("--path without a product structure lost its diagnostic",
+             output)
+    if status == 0:
+        fail("--path without a product structure exited 0", output)
+    print("path without product: exit %d, diagnostic present" % status)
+
+
 def main():
     if len(sys.argv) < 5:
         fail("usage: landscape_cli_check.py MODE EXE INPUT RUNDIR [ARGS]")
@@ -7029,6 +7057,8 @@ def main():
         check_banner(exe, inp, rundir)
     elif mode == "programname":
         check_programname(exe, inp, rundir)
+    elif mode == "pathnoproduct":
+        check_path_no_product(exe, inp, rundir)
     elif mode == "nonfinite":
         check_nonfinite(exe, inp, rundir)
     elif mode == "irfatal":

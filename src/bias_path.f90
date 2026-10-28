@@ -14,6 +14,9 @@
 !
 ! You should have received a copy of the GNU Lesser General Public License
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
+
+! Modified by the o-xtb landscape task suite, 2026.
+
 module xtb_biaspath
    use xtb_mctc_accuracy, only : wp
    implicit none
@@ -121,9 +124,13 @@ subroutine bias_path(env, mol, chk, calc, egap, et, maxiter, epot, grd, sigma)
    allocate(xyze(3,mol%n),xyzp(3,mol%n),bo(mol%n,mol%n),atp(mol%n),cn(mol%n))
    allocate(npath(maxpath),mempath(4,maxpath))
 
+   ! The path finder cannot start without a product structure: the diagnostic
+   ! used to be an `env%error` followed by a plain `return`, so the process
+   ! still printed `normal termination of oxtb` and exited 0. The checkpoint
+   ! turns the logged error into a non-zero exit status.
    if (.not.allocated(set%pathset%fname)) then
       call env%error('No product structure given!', source)
-      return
+      call env%checkpoint('The RMSD path finder has no product structure')
    endif
    write(env%unit,*) 'reading reference structures from '//set%pathset%fname//' ...'
    call rdcoord(set%pathset%fname,mol%n,xyzp,atp) ! product
