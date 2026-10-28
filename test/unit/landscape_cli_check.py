@@ -81,7 +81,7 @@ mode mirrors one CMake test one-to-one:
   nonfinite <exe> <input> <rundir>    -> xtb/landscape-nonfinite-value
   irfatal <exe> <input> <rundir>      -> xtb/landscape-ir-fatal-status
   pathnoproduct <exe> <input> <rundir> -> xtb/landscape-path-no-product
-  pathnots <exe> <input> <rundir> <product>
+  pathnots <exe> <input> <rundir> <product> <control>
                                      -> xtb/landscape-path-no-transition-state
   pathclash <exe> <input> <rundir> <product> <control>
                                      -> xtb/landscape-path-alignpath-clash
@@ -6872,7 +6872,7 @@ def check_path_no_product(exe, inp, rundir):
     print("path without product: exit %d, diagnostic present" % status)
 
 
-def check_path_no_transition_state(exe, inp, rundir, product):
+def check_path_no_transition_state(exe, inp, rundir, product, control):
     """`--path` without a located transition state ends with a non-zero status.
 
     Mirrors `xtb/landscape-path-no-transition-state` (report 250).  The RMSD
@@ -6884,11 +6884,25 @@ def check_path_no_transition_state(exe, inp, rundir, product):
     (measured on this 33-atom pair in report 248: the reactant, 0.11 bohr away).
     The suite therefore requires (1) a non-zero status, (2) the diagnostic and
     (3) no `xtbpath_ts.xyz`.
+
+    The run is given the `$path npoint=2` control file, so `screenpath` reduces
+    the refined path to two points and the guard's `its = 0` branch fires - the
+    one report 250 also repaired, which read `xyzpath(:,:,0)` and exited 0.
+    The pair's *default* refinement is the reproducer report 248 measured, but
+    its ending is decided by round-off rather than by the input: the same
+    binary exits 1 at `OMP_NUM_THREADS=1` and 0 at `2,1`, and gfortran 14 does
+    the opposite of gfortran 12 (report 251).  Which interior point's
+    evaluation fails there, and hence whether the guard fires, is a draw, so
+    pinning it gated a lottery; `npoint=2` fails for a reason the input states.
     """
     rundir = os.path.abspath(rundir)
     shutil.rmtree(rundir, ignore_errors=True)
     status, output = run(
-        exe, inp, ["--gfn", "2", "--norestart", "--path", product], rundir
+        exe,
+        inp,
+        ["--gfn", "2", "--norestart", "--path", product,
+         "--input", control],
+        rundir,
     )
     if status == 0:
         fail("--path without a transition state exited 0", output)
@@ -6905,14 +6919,29 @@ def check_path_alignpath_clash(exe, inp, rundir, product, control):
     """`alignpath` collapses a contact and the point is not refined.
 
     Mirrors `xtb/landscape-path-alignpath-clash` (report 250).  `alignpath`
-    re-splines every atom against its own travelled path length, so the forming
-    C...C pair of this pair reaches 0.455 A (0.859 bohr) at path point 24
+    re-splines every atom against its own travelled path length, so a forming
+    C...C or C...O pair of this pair comes closer than any structure allows
     before any optimiser step (report 248 section 4).  The guard warns once per
     point, naming point, pair and distance, and skips that point instead of
     handing it to the interior optimiser - the run itself continues, which the
     `anopt=1` control file of the CMake build makes visible: the measured
     failure of the shipped `anopt=3` default is reported by the transition-state
     guard, not here.
+
+    Two things are deliberately not pinned to one trajectory (report 251).
+
+    *Which* point collapses, by which pair and by how much is a continuous
+    function of the refinement, and it moves with the compiler and with the
+    thread count: the four draws of report 251 report points 24-31, pairs
+    C25...C27/C28 and O26...C27, and distances of 0.861-0.994 bohr.  The check
+    matches the sentence and requires the reported contact to be under the
+    guard's 1.0 bohr threshold instead of one draw's numbers.
+
+    The ending is not pinned either, because whether an interior point kept in
+    the refinement fails (and so whether the *transition-state* guard ends the
+    run) is a round-off draw too.  What is pinned is the property the alignment
+    guard exists for: it never ends the run itself - a non-zero status is
+    accepted only together with the missing-saddle diagnostic of guard 1.
     """
     rundir = os.path.abspath(rundir)
     shutil.rmtree(rundir, ignore_errors=True)
@@ -6922,22 +6951,30 @@ def check_path_alignpath_clash(exe, inp, rundir, product, control):
         ["--gfn", "2", "--norestart", "--path", product, "--input", control],
         rundir,
     )
-    if status != 0:
-        fail("the alignment guard aborted a path finder that refines "
-             "(exit %d)" % status, output)
     broken = re.search(
-        r"path point 24 comes within +0\.455 A \( +0\.859 bohr\) between atoms "
-        r"25 \(C\) and 27 \(C\) after alignpath; that re-spline pulls two atoms "
-        r"to different reaction-progress values, so the point is not handed to "
-        r"the interior optimiser",
+        r"path point \d+ comes within +[0-9.]+ A \( +([0-9.]+) bohr\) between "
+        r"atoms \d+ \([A-Za-z]+\) and \d+ \([A-Za-z]+\) after alignpath; "
+        r"that re-spline pulls two atoms to different reaction-progress values, "
+        r"so the point is not handed to the interior optimiser",
         output,
     )
     if not broken:
-        fail("the collapsed contact of point 24 is not reported with its skip",
-             output)
-    if "estimated TS on file xtbpath_ts.xyz" not in output:
-        fail("the guarded path finder did not finish", output)
-    print("alignpath clash: point 24 at 0.455 A reported and skipped, run finished")
+        fail("no collapsed contact is reported with its skip", output)
+    contact = float(broken.group(1))
+    if contact > 1.0:
+        fail("the reported contact of %.3f bohr is not under the 1.0 bohr guard "
+             "threshold" % contact, output)
+    if status == 0:
+        if "estimated TS on file xtbpath_ts.xyz" not in output:
+            fail("the guarded path finder did not finish", output)
+        print("alignpath clash: a contact of %.3f bohr reported and skipped, "
+              "run finished" % contact)
+        return
+    if "The RMSD path finder did not locate a transition state" not in output:
+        fail("the alignment guard aborted a path finder that refines "
+             "(exit %d)" % status, output)
+    print("alignpath clash: a contact of %.3f bohr reported and skipped; the run "
+          "ended in the transition-state guard (exit %d)" % (contact, status))
 
 
 def main():
@@ -7132,9 +7169,9 @@ def main():
     elif mode == "pathnoproduct":
         check_path_no_product(exe, inp, rundir)
     elif mode == "pathnots":
-        if len(rest) < 1:
-            fail("the pathnots mode needs the product geometry")
-        check_path_no_transition_state(exe, inp, rundir, rest[0])
+        if len(rest) < 2:
+            fail("the pathnots mode needs the product geometry and the control file")
+        check_path_no_transition_state(exe, inp, rundir, rest[0], rest[1])
     elif mode == "pathclash":
         if len(rest) < 2:
             fail("the pathclash mode needs the product geometry and the control file")

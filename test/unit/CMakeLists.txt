@@ -5189,14 +5189,16 @@ add_test("xtb/landscape-path-no-product"
 
 # The two `--path` guards of report 250 use the smallest in-repo reproducer of
 # report 248: `examples/chains/chain-02-band-to-irc/00-endpoints`, 33 atoms
-# (anthracene + maleic anhydride).  `anopt=1` is the one measured setting of
-# that pair at which the refinement finishes, so the alignment guard can be
-# shown to leave a run alive; the shipped `anopt=3` default is the failing
-# combination whose report the transition-state guard now ends.
+# (anthracene + maleic anhydride).  `anopt=1` is the setting of that pair whose
+# refinement runs to its end more often, so the alignment guard can be shown to
+# leave a run alive; both guards' endings move with round-off (report 251), and
+# no assertion below depends on a single draw.
 set(LANDSCAPE-PATH-ENDPOINTS
   "${PROJECT_SOURCE_DIR}/examples/chains/chain-02-band-to-irc/00-endpoints")
 set(LANDSCAPE-PATH-ANOPT1 "${CMAKE_CURRENT_BINARY_DIR}/landscape_path_anopt1.inp")
 file(WRITE "${LANDSCAPE-PATH-ANOPT1}" "$path\n   anopt=1\n$end\n")
+set(LANDSCAPE-PATH-NPOINT2 "${CMAKE_CURRENT_BINARY_DIR}/landscape_path_npoint2.inp")
+file(WRITE "${LANDSCAPE-PATH-NPOINT2}" "$path\n   npoint=2\n$end\n")
 
 # The refinement of the RMSD push/pull path finder ends at `gts < gthr`, and a
 # failed electronic-structure evaluation of an interior point zeroes that
@@ -5205,21 +5207,32 @@ file(WRITE "${LANDSCAPE-PATH-ANOPT1}" "$path\n   anopt=1\n$end\n")
 # <threshold`, wrote `xtbpath_ts.xyz` from an interior point with energy 0.0
 # (the reactant, 0.11 bohr away) and exited 0.  The check requires the new
 # diagnostic, a non-zero status and the absence of the TS file.
+#
+# The run is reduced to a two-point path (`$path npoint=2`), so the guard's
+# `its = 0` branch fires for a reason the input states.  The pair's default
+# refinement - report 248's reproducer - ends differently from run to run: the
+# same binary exits 1 at `OMP_NUM_THREADS=1` and 0 at `2,1`, and gfortran 14
+# does the opposite of gfortran 12 (report 251), so which interior point fails
+# is a round-off draw and pinning it gated a lottery.
 add_test("xtb/landscape-path-no-transition-state"
   ${CMAKE_COMMAND}
   -DPYTHON=${Python3_EXECUTABLE}
   -DSCRIPT=${LANDSCAPE-CLI-PY}
-  "-DARGS=pathnots;${LANDSCAPE-E2E-XTB};${LANDSCAPE-PATH-ENDPOINTS}/reactant.xyz;${CMAKE_CURRENT_BINARY_DIR}/landscape-path-no-transition-state;${LANDSCAPE-PATH-ENDPOINTS}/product.xyz"
+  "-DARGS=pathnots;${LANDSCAPE-E2E-XTB};${LANDSCAPE-PATH-ENDPOINTS}/reactant.xyz;${CMAKE_CURRENT_BINARY_DIR}/landscape-path-no-transition-state;${LANDSCAPE-PATH-ENDPOINTS}/product.xyz;${LANDSCAPE-PATH-NPOINT2}"
   -DRUNDIR=${CMAKE_CURRENT_BINARY_DIR}/landscape-path-no-transition-state
   -P "${CMAKE_CURRENT_BINARY_DIR}/landscape_cli_py.cmake")
 
 # `alignpath` (`src/bias_path.f90`) re-splines every atom against its own
-# travelled path length, so the forming C...C pair of report 248 reaches
-# 0.455 A (0.859 bohr) at path point 24 before any optimiser step, and the
-# interior optimiser then fails on it.  The guard warns once per collapsed
-# point, naming point, pair, distance and cause, and skips that point; the
-# `anopt=1` control run proves the guard does not end the run.  Red before the
-# guard: no warning at all and the same point is fed to the optimiser.
+# travelled path length, so a forming C...C or C...O pair of this pair comes
+# closer than any structure allows at a path point before any optimiser step,
+# and the interior optimiser then fails on it (report 248).  The guard warns
+# once per collapsed point, naming point, pair, distance and cause, and skips
+# that point; the `anopt=1` control run proves the guard does not end the run.
+# Red before the guard: no warning at all and the same point is fed to the
+# optimiser.  Which point collapses, and whether the run ends in the
+# transition-state guard afterwards, is a round-off draw (report 251), so the
+# check matches the warning's sentence and the threshold, not one draw's
+# point/pair/distance.
 add_test("xtb/landscape-path-alignpath-clash"
   ${CMAKE_COMMAND}
   -DPYTHON=${Python3_EXECUTABLE}
