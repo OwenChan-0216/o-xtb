@@ -50,6 +50,8 @@ subroutine bias_path(env, mol, chk, calc, egap, et, maxiter, epot, grd, sigma)
    use xtb_readin
    use xtb_axis, only : axis
    use xtb_param_atomicRad, only : atomicRad
+   use xtb_mctc_symbols, only : toSymbol
+   use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
 
    implicit none
 
@@ -89,10 +91,35 @@ subroutine bias_path(env, mol, chk, calc, egap, et, maxiter, epot, grd, sigma)
    real(wp) fnat,rmsd_prod_thr,alp_change,k_change,edrmsd,ppull
    real(wp) gdum,gts,emax,eback,eforw,eforw_prev,gsum_prev,pthr
    real(wp) de_min,grad_min,e_ed,e_pr,de,ddot,gthr
+   real(wp) dmin
 
    character(len=80) :: atmp,btmp
+   character(len=256) :: text
    logical fail,ex,done,degen
+
+   !> Whether the refinement produced a transition state to report.
+   logical :: ts_found
    type(scc_results) :: res
+
+   !> Interior points whose shortest interatomic contact fell below `clash_thr`
+   !> after `alignpath`; they are not handed to the interior optimiser.
+   logical, allocatable :: collapsed(:)
+
+   !> Points already reported, so a repeated collapse does not repeat a warning.
+   logical, allocatable :: warned(:)
+
+   !> Shortest interatomic contact tolerated after `alignpath`, in bohr.
+   !> Measured on the 33-atom reactant/product pair of report 248: the healthy
+   !> path never comes closer than 1.667 bohr while `alignpath` pulls the forming
+   !> C...C pair to 0.859 bohr, and the electronic structure accepted every
+   !> contact of 0.93 bohr and above in the same run.  1.0 bohr (0.529 A) sits in
+   !> that gap - 16 % above the measured collapse and below every contact a
+   !> bonded or hydrogen-bonded pair can have in the H/C/N/O chemistry of these
+   !> paths (H-H in H2 is 1.40 bohr, C-H is 2.06 bohr).
+   real(wp), parameter :: clash_thr = 1.0_wp
+
+   !> Atoms carrying the shortest contact found by `shortest_contact`.
+   integer :: iat, jat
 
    !! ------------------------------------------------------------------------
    !  some parameters
@@ -198,6 +225,9 @@ subroutine bias_path(env, mol, chk, calc, egap, et, maxiter, epot, grd, sigma)
    factor2= 0.0_wp
    call delete_file('.xtbtmpmode')
    call delete_file('hessian')
+   ! A run that does not locate a transition state must not leave the previous
+   ! run's result behind under the name a script would pick up.
+   call delete_file('xtbpath_ts.xyz')
 
    bias_loop: do ialp=1,nalp ! alp
       factor = 1.0_wp
@@ -382,16 +412,46 @@ subroutine bias_path(env, mol, chk, calc, egap, et, maxiter, epot, grd, sigma)
    maxoptiter=set%pathset%anopt
 
    allocate(xyzdum(3,mol%n,np))
+   allocate(collapsed(np),warned(np))
+   warned = .false.
    call open_file(ilog,'xtbopt.log','w')
    eforw= 1.0d+42
    gts  = 1.0d+42
+   its  = 0
    do iter=1,nrefine
       write(env%unit,'(''refinement cycle'',i4)')iter
       call alignpath(mol%n,np,xyzpath)
 
+      ! `alignpath` re-splines every atom against its own travelled path length
+      ! and re-samples all atoms at equal fractions of that length, so a pair can
+      ! be placed at positions that belong to different reaction-progress values
+      ! and end up closer than any structure allows (report 248: 0.859 bohr for
+      ! the forming C...C pair).  Such a point is not handed to the interior
+      ! optimiser; it keeps the coordinates `alignpath` produced and is still
+      ! evaluated with the path below, so the transcript shows what the
+      ! electronic structure makes of it and the remaining points are refined.
+      collapsed = .false.
+      do i=2,np-1
+         call shortest_contact(mol%n, xyzpath(:,:,i), dmin, iat, jat)
+         if (dmin.lt.clash_thr) then
+            collapsed(i) = .true.
+            if (.not.warned(i)) then
+               warned(i) = .true.
+               write(text,'("path point ",i0," comes within ",f6.3," A (",f6.3, &
+                  & " bohr) between atoms ",i0," (",a,") and ",i0," (",a,") after alignpath")') &
+                  & i, dmin*autoaa, dmin, iat, trim(toSymbol(mol%at(iat))), &
+                  & jat, trim(toSymbol(mol%at(jat)))
+               call env%warning(trim(text)//'; that re-spline pulls two atoms to '// &
+                  & 'different reaction-progress values, so the point is not handed '// &
+                  & 'to the interior optimiser', source)
+            endif
+         endif
+      enddo
+
       xyzdum(:,:,1:np) = xyzpath(:,:,1:np)      ! save coords for path mode projection
       do i=2,np-1                               ! one opt for all points
          if(mod(i,10).eq.0.or.i.eq.2) write(*,*) 'optimizing points ',i,' ...'
+         if (collapsed(i)) cycle                ! `alignpath` broke this structure
          mol%xyz=xyzpath(:,:,i)
          call metadyn_tsmode(mol%n,np,i,xyzdum,mol%xyz,ppull) ! add bias on path (and constrain optionally)
          call ancopt (env,ilog,mol,chk,calc,egap,et,maxiter,maxoptiter,epath(i),grd,sigma,olev,.false.,fail)
@@ -431,13 +491,49 @@ subroutine bias_path(env, mol, chk, calc, egap, et, maxiter, epot, grd, sigma)
       write(env%unit,'(''norm(g) at est. TS, point:'', f8.5,i4)') gts, its
 
       if(gts.lt.gthr) then
-         write(env%unit,'("terminated because grad at TS <threshold")')
+         ! `gts` is exactly zero when the interior evaluation that should have
+         ! produced it failed: this is not a convergence statement, and the
+         ! three numbers above are then computed from a zeroed energy.
+         if (gts.gt.0.0_wp) then
+            write(env%unit,'("terminated because grad at TS <threshold")')
+         else
+            write(env%unit,'("note: the barrier above is not a reaction barrier, ", &
+               & "the electronic-structure evaluation of an interior point failed")')
+         endif
          exit
       endif
 
    end do
    write(env%unit,*)
    if(iter.ge.nrefine)write(env%unit,'("terminated because max. # cycles reached")')
+
+   !! ------------------------------------------------------------------------
+   !  a transition state is only reported when one was located
+   !! ------------------------------------------------------------------------
+
+   ! `gts` is the gradient norm of the highest-energy interior point of the last
+   ! refinement cycle and `its` its index.  A failed `singlepoint` zeroes the
+   ! energy on entry and returns before it writes energy or gradient, so the "TS"
+   ! of a broken refinement has `gts = 0` and `epath(its) = 0`; until report 248
+   ! that read `terminated because grad at TS <threshold` and `xtbpath_ts.xyz`
+   ! was written from an interior point with energy 0.0 (measured: the
+   ! reactant, 0.11 bohr away).  `np < 3` leaves `its = 0`.  The finiteness test
+   ! comes before the comparison because a comparison against a NaN raises
+   ! IEEE_INVALID, which the Debug build traps (report 137).
+   ts_found = its.ge.2 .and. its.le.np-1
+   if (ts_found) ts_found = ieee_is_finite(gts)
+   if (ts_found) ts_found = gts.gt.0.0_wp
+   if (.not.ts_found) then
+      call env%error('The path refinement found no transition state: the highest-energy '// &
+         & 'path point carries a zero gradient, which is what a failed '// &
+         & 'electronic-structure evaluation leaves behind (the energy and the '// &
+         & 'gradient of a failing point are zeroed), so that point is not a saddle.', source)
+      call env%error('Try a larger $path anopt, a smaller $path npoint, or the values the '// &
+         & 'manual recommends (nrun=1 npoint=25 anopt=10 kpush=0.003 kpull=-0.015 '// &
+         & 'ppull=0.05 alp=1.2); xtbpath.xyz keeps the refined path and no '// &
+         & 'xtbpath_ts.xyz is written without a saddle.', source)
+      call env%checkpoint('The RMSD path finder did not locate a transition state')
+   endif
 
    !! ------------------------------------------------------------------------
    !  output
@@ -598,6 +694,45 @@ subroutine guess_tsmode(n,sn,its,xyz,pvec1,pvec2)
    pvec2(:) = pvec2(:) / dsqrt(rms2)
 
 end subroutine
+
+!! ========================================================================
+!  shortest interatomic contact of one path point
+!! ========================================================================
+!> Shortest interatomic distance of a geometry and the pair that carries it.
+!>
+!> `alignpath` re-splines every atom against its own travelled path length and
+!> re-samples all atoms at equal fractions of that length, so an atom pair can
+!> be placed at positions that belong to different reaction-progress values.
+!> Measured on the 33-atom pair of report 248: a healthy path of the same
+!> rearrangement never comes closer than 1.667 bohr, the re-spline pulls the
+!> forming C...C pair to 0.859 bohr, and every contact of 0.93 bohr and above
+!> was still evaluated without an electronic-structure failure.
+subroutine shortest_contact(nat, xyz, dmin, imin, jmin)
+   use xtb_mctc_accuracy, only : wp
+   implicit none
+   integer, intent(in) :: nat
+   real(wp), intent(in) :: xyz(3,nat)
+   real(wp), intent(out) :: dmin
+   integer, intent(out) :: imin, jmin
+
+   integer :: i, j
+   real(wp) :: d
+
+   dmin = huge(dmin)
+   imin = 0
+   jmin = 0
+   do i = 1, nat - 1
+      do j = i + 1, nat
+         d = sqrt(sum((xyz(:,i) - xyz(:,j))**2))
+         if (d.lt.dmin) then
+            dmin = d
+            imin = i
+            jmin = j
+         endif
+      enddo
+   enddo
+
+end subroutine shortest_contact
 
 subroutine alignpath(nat,sn,xyz)
    implicit none
