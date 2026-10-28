@@ -404,17 +404,17 @@ All references are available in [bibtex format](./assets/references.bib).
 
 ## License
 
-`xtb` is free software: you can redistribute it and/or modify it under
+`o-xtb` is free software: you can redistribute it and/or modify it under
 the terms of the GNU Lesser General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-`xtb` is distributed in the hope that it will be useful,
+`o-xtb` is distributed in the hope that it will be useful,
 but without any warranty; without even the implied warranty of
 merchantability or fitness for a particular purpose.  See the
 GNU Lesser General Public License for more details.
 
 Unless you explicitly state otherwise, any contribution intentionally
-submitted for inclusion in `xtb` by you, as defined in the
+submitted for inclusion in `o-xtb` by you, as defined in the
 GNU Lesser General Public license, shall be licensed as above, without any
 additional terms or conditions.
